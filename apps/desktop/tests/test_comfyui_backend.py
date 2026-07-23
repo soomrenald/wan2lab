@@ -164,6 +164,53 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
             frozenset({WanMode.I2V, WanMode.FIRST_LAST}),
         )
 
+    def test_installed_cache_nodes_are_declared_only_for_standard_wan_modes(self) -> None:
+        info = object_info()
+        info.update(
+            {
+                "WanVideoEasyCache": node(
+                    {
+                        "easycache_thresh": ["FLOAT", {"default": 0.015}],
+                        "start_step": ["INT", {"default": 10}],
+                        "end_step": ["INT", {"default": -1}],
+                        "cache_device": [["main_device", "offload_device"]],
+                    }
+                ),
+                "WanVideoMagCache": node(),
+                "WanVideoTeaCache": node(),
+            }
+        )
+        capabilities = inspect_comfyui_wan(
+            info,
+            {"devices": [{"name": "NVIDIA RTX", "type": "cuda"}]},
+            executable_specialized_modes=frozenset({WanMode.ANIMATE, WanMode.REPLACE}),
+        )
+        ti2v = next(
+            model
+            for model in capabilities.model_variants
+            if "TI2V-5B" in model.display_name
+        )
+        animate = next(
+            model
+            for model in capabilities.model_variants
+            if "animate" in model.display_name
+        )
+
+        self.assertEqual(
+            [method.method_id for method in ti2v.acceleration_methods],
+            [
+                "comfy-wan-easycache",
+                "comfy-wan-magcache",
+                "comfy-wan-teacache",
+            ],
+        )
+        self.assertTrue(
+            all(
+                WanMode.ANIMATE not in method.supported_modes
+                for method in animate.acceleration_methods
+            )
+        )
+
     def test_missing_required_wrapper_node_is_rejected_before_queueing(self) -> None:
         incomplete = object_info()
         incomplete.pop("WanVideoDecode")

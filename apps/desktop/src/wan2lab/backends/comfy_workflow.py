@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import re
 from typing import Mapping
 
-from wan2core.backends import BackendCapabilities, WanMode
+from wan2core.backends import BackendCapabilities, ResolvedWanAcceleration, WanMode
 from wan2core.actions import compile_action_prompt
 from wan2core.segments import SegmentRequest
 
@@ -64,6 +64,7 @@ class ComfyWanWorkflowBuilder:
         asset_inputs: Mapping[str, str],
         filename_prefix: str,
         seed: int,
+        acceleration: ResolvedWanAcceleration | None = None,
     ) -> ComfyWorkflowPlan:
         if request.backend_id != self.capabilities.backend_id:
             raise WorkflowBindingError("request targets a different backend")
@@ -106,6 +107,7 @@ class ComfyWanWorkflowBuilder:
                 parameters=parameters,
                 seed=seed,
             )
+            self._apply_acceleration(workflow, acceleration)
             self._validate_nodes(workflow)
             return ComfyWorkflowPlan(
                 workflow=workflow,
@@ -137,6 +139,7 @@ class ComfyWanWorkflowBuilder:
         workflow = _resolve_template(template.workflow, context)
         if not isinstance(workflow, dict):
             raise WorkflowBindingError("workflow template root must be an object")
+        self._apply_acceleration(workflow, acceleration)
         self._validate_nodes(workflow)
         return ComfyWorkflowPlan(
             workflow=workflow,
@@ -146,6 +149,66 @@ class ComfyWanWorkflowBuilder:
             template_version=template.template_version,
             resolved_parameters=parameters,
         )
+
+    def _apply_acceleration(
+        self,
+        workflow: dict[str, object],
+        acceleration: ResolvedWanAcceleration | None,
+    ) -> None:
+        if acceleration is None or not acceleration.active:
+            return
+        cache_nodes = {
+            "comfy-wan-easycache": "WanVideoEasyCache",
+            "comfy-wan-magcache": "WanVideoMagCache",
+            "comfy-wan-teacache": "WanVideoTeaCache",
+        }
+        node_name = cache_nodes.get(acceleration.method_id or "")
+        if node_name is None:
+            raise WorkflowBindingError(
+                f"acceleration method {acceleration.method_id!r} has no ComfyUI binding"
+            )
+        node_info = self.object_info.get(node_name)
+        if not isinstance(node_info, Mapping):
+            raise WorkflowBindingError(
+                f"resolved acceleration node {node_name} is unavailable"
+            )
+        inputs = node_info.get("input")
+        accepted = set()
+        if isinstance(inputs, Mapping):
+            for group_name in ("required", "optional"):
+                group = inputs.get(group_name)
+                if isinstance(group, Mapping):
+                    accepted.update(str(key) for key in group)
+        unsupported = set(acceleration.resolved_parameters) - accepted
+        if unsupported:
+            raise WorkflowBindingError(
+                f"{node_name} does not accept resolved inputs: "
+                f"{', '.join(sorted(unsupported))}"
+            )
+        samplers = [
+            item
+            for item in workflow.values()
+            if isinstance(item, dict) and item.get("class_type") == "WanVideoSampler"
+        ]
+        if len(samplers) != 1:
+            raise WorkflowBindingError(
+                "cache acceleration requires exactly one WanVideoSampler node"
+            )
+        cache_node_id = str(
+            max(
+                (int(key) for key in workflow if str(key).isdigit()),
+                default=0,
+            )
+            + 1
+        )
+        workflow[cache_node_id] = {
+            "class_type": node_name,
+            "inputs": dict(acceleration.resolved_parameters),
+        }
+        sampler_inputs = samplers[0].get("inputs")
+        if not isinstance(sampler_inputs, dict):
+            raise WorkflowBindingError("WanVideoSampler inputs must be an object")
+        sampler_inputs["cache_args"] = [cache_node_id, 0]
 
     def _resolve_parameters(self, request: SegmentRequest) -> dict[str, object]:
         descriptors = {

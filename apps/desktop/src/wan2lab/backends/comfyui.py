@@ -20,6 +20,9 @@ from wan2core.backends import (
     ParameterGroup,
     ParameterType,
     Resolution,
+    WanAccelerationKind,
+    WanAccelerationMethodCapabilities,
+    WanAccelerationQuality,
     WanMode,
 )
 
@@ -162,6 +165,7 @@ def inspect_comfyui_wan(
                 nodes.latent_encoder,
                 nodes.image_scaler,
             }.issubset(available),
+            acceleration_nodes=frozenset(available),
         )
         for name in model_names
         if _modes_for_model(
@@ -207,6 +211,7 @@ def _model_capabilities(
     accelerator: str,
     total_vram_gib: float | None,
     unified_i2v_available: bool,
+    acceleration_nodes: frozenset[str],
 ) -> ModelVariantCapabilities:
     modes = _modes_for_model(
         filename,
@@ -329,6 +334,104 @@ def _model_capabilities(
         ),
         estimated_memory_profiles={"safe_16gb": 16.0, "performance_24gb": 24.0},
         parameter_descriptors=applicable,
+        acceleration_methods=_cache_acceleration_methods(
+            acceleration_nodes,
+            model_id=model_id,
+            modes=frozenset(modes),
+            accelerator=accelerator,
+        ),
+    )
+
+
+def _cache_acceleration_methods(
+    available_nodes: frozenset[str],
+    *,
+    model_id: str,
+    modes: frozenset[WanMode],
+    accelerator: str,
+) -> tuple[WanAccelerationMethodCapabilities, ...]:
+    cache_modes = modes.intersection(
+        {WanMode.PROMPT, WanMode.I2V, WanMode.FIRST_LAST}
+    )
+    if not cache_modes:
+        return ()
+    declarations = (
+        (
+            "WanVideoEasyCache",
+            "comfy-wan-easycache",
+            "EasyCache",
+            300,
+            frozenset(WanAccelerationQuality),
+            {
+                "easycache_thresh": 0.015,
+                "start_step": 10,
+                "end_step": -1,
+                "cache_device": "offload_device",
+            },
+            "Conservative residual caching after the initial denoising steps.",
+        ),
+        (
+            "WanVideoMagCache",
+            "comfy-wan-magcache",
+            "MagCache",
+            250,
+            frozenset(
+                {
+                    WanAccelerationQuality.PREVIEW,
+                    WanAccelerationQuality.BALANCED,
+                }
+            ),
+            {
+                "magcache_thresh": 0.02,
+                "magcache_K": 4,
+                "start_step": 1,
+                "end_step": -1,
+                "cache_device": "offload_device",
+            },
+            "More aggressive step skipping for preview and balanced renders.",
+        ),
+        (
+            "WanVideoTeaCache",
+            "comfy-wan-teacache",
+            "TeaCache",
+            200,
+            frozenset(WanAccelerationQuality),
+            {
+                "rel_l1_thresh": 0.3,
+                "start_step": 1,
+                "end_step": -1,
+                "cache_device": "offload_device",
+                "use_coefficients": True,
+                "mode": "e",
+            },
+            "Time-embedding cache with wrapper-provided Wan coefficients.",
+        ),
+    )
+    return tuple(
+        WanAccelerationMethodCapabilities(
+            method_id=method_id,
+            display_name=display_name,
+            kind=WanAccelerationKind.CACHE,
+            supported_modes=cache_modes,
+            supported_model_ids=(model_id,),
+            accelerator_vendors=frozenset({accelerator}),
+            supported_quality_profiles=qualities,
+            rank=rank,
+            default_parameters=parameters,
+            schedule_description=description,
+            speed_summary="Skips compatible diffusion-model work through a cache node.",
+            quality_tradeoff="Higher cache thresholds may reduce temporal or fine detail.",
+        )
+        for (
+            node_name,
+            method_id,
+            display_name,
+            rank,
+            qualities,
+            parameters,
+            description,
+        ) in declarations
+        if node_name in available_nodes
     )
 
 

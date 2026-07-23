@@ -3,7 +3,12 @@ from __future__ import annotations
 import unittest
 
 from wan2core.actions import ActionSpec
-from wan2core.backends import WanMode
+from wan2core.backends import (
+    SegmentAccelerationPolicy,
+    WanAccelerationPolicy,
+    WanMode,
+    resolve_wan_acceleration,
+)
 from wan2core.segments import SegmentRequest
 from wan2lab.backends.comfy_workflow import (
     ComfyModelSelection,
@@ -13,11 +18,13 @@ from wan2lab.backends.comfy_workflow import (
 )
 from wan2lab.backends.comfyui import BACKEND_ID, inspect_comfyui_wan
 
-from test_comfyui_backend import object_info
+from test_comfyui_backend import node, object_info
 
 
 def builder(
     system_stats: dict[str, object] | None = None,
+    *,
+    easycache: bool = False,
 ) -> ComfyWanWorkflowBuilder:
     info = object_info()
     info.update(
@@ -29,6 +36,15 @@ def builder(
             "SpecializedReplace": {"input": {"required": {}}},
         }
     )
+    if easycache:
+        info["WanVideoEasyCache"] = node(
+            {
+                "easycache_thresh": ["FLOAT", {"default": 0.015}],
+                "start_step": ["INT", {"default": 10}],
+                "end_step": ["INT", {"default": -1}],
+                "cache_device": [["main_device", "offload_device"]],
+            }
+        )
     capabilities = inspect_comfyui_wan(
         info,
         system_stats or {"devices": [{"name": "NVIDIA CUDA"}]},
@@ -122,6 +138,44 @@ def request(
 
 
 class ComfyWorkflowTests(unittest.TestCase):
+    def test_default_active_easycache_is_bound_to_the_standard_sampler(self) -> None:
+        workflow_builder = builder(easycache=True)
+        segment_request = request(
+            workflow_builder,
+            WanMode.PROMPT,
+            "t2v",
+        )
+        model = workflow_builder.capabilities.model(segment_request.model_id)
+        acceleration = resolve_wan_acceleration(
+            project_policy=WanAccelerationPolicy(),
+            segment_policy=SegmentAccelerationPolicy(),
+            methods=model.acceleration_methods,
+            model_id=model.model_id,
+            model_family=model.model_family,
+            mode=WanMode.PROMPT,
+            accelerator_vendor="cuda",
+        )
+
+        plan = workflow_builder.build(
+            segment_request,
+            asset_inputs={},
+            filename_prefix="wan2lab/cache",
+            seed=1,
+            acceleration=acceleration,
+        )
+
+        cache_node = next(
+            (key, value)
+            for key, value in plan.workflow.items()
+            if value["class_type"] == "WanVideoEasyCache"
+        )
+        self.assertTrue(acceleration.active)
+        self.assertEqual(
+            plan.workflow["6"]["inputs"]["cache_args"],
+            [cache_node[0], 0],
+        )
+        self.assertEqual(cache_node[1]["inputs"]["easycache_thresh"], 0.015)
+
     def test_prompt_graph_is_api_format_and_resolves_backend_parameters(self) -> None:
         workflow_builder = builder()
         plan = workflow_builder.build(

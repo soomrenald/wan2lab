@@ -214,6 +214,7 @@ class ComfyWorkerService:
             asset_inputs=command.asset_inputs,
             filename_prefix=command.output_prefix,
             seed=command.seed,
+            acceleration=acceleration,
         )
         executor = ComfyWanExecutor(
             self.client,
