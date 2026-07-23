@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 ApplicationWindow {
@@ -11,6 +12,20 @@ ApplicationWindow {
     visible: true
     title: studio.projectName + " — Wan2Lab"
     color: "#11151c"
+
+    FileDialog {
+        id: sheetImageDialog
+        title: "Import character-sheet image"
+        nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
+        onAccepted: studio.importSheetEntry(selectedFile, sheetEntryName.text)
+    }
+
+    FileDialog {
+        id: keyframeImageDialog
+        title: "Import keyframe image"
+        nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
+        onAccepted: studio.importKeyframe(selectedFile, Number(keyframeTime.text))
+    }
 
     palette {
         window: "#11151c"
@@ -44,16 +59,50 @@ ApplicationWindow {
         spacing: 12
 
         Frame {
-            Layout.preferredWidth: 250
+            Layout.preferredWidth: 285
             Layout.fillHeight: true
             background: Rectangle { color: "#191f29"; radius: 8 }
             ColumnLayout {
                 anchors.fill: parent
                 Label { text: "Project & Assets"; font.bold: true }
-                Label { text: "Character sheets"; color: "#aeb9cb" }
-                Label { text: "Keyframes"; color: "#aeb9cb" }
-                Label { text: "Mannequin scenes"; color: "#aeb9cb" }
-                Label { text: "Generated media"; color: "#aeb9cb" }
+                Label { text: "Character identity"; color: "#aeb9cb" }
+                TextField { id: characterName; Layout.fillWidth: true; placeholderText: "Character name" }
+                TextField { id: identityPrompt; Layout.fillWidth: true; placeholderText: "Stable identity prompt" }
+                TextField { id: appearanceName; Layout.fillWidth: true; placeholderText: "Appearance name" }
+                TextField { id: stylePrompt; Layout.fillWidth: true; placeholderText: "Style / clothing prompt" }
+                Button {
+                    text: "Create character & sheet"
+                    Layout.fillWidth: true
+                    onClicked: studio.addCharacter(
+                        characterName.text,
+                        identityPrompt.text,
+                        appearanceName.text,
+                        stylePrompt.text
+                    )
+                }
+                Label { text: studio.characterNames.join(" · "); color: "#8dd7c4"; wrapMode: Text.Wrap }
+                RowLayout {
+                    TextField {
+                        id: sheetEntryName
+                        Layout.fillWidth: true
+                        placeholderText: "Pose/view entry name"
+                    }
+                    Button { text: "Import"; onClicked: sheetImageDialog.open() }
+                }
+                Label { text: studio.sheetEntryNames.join("\n"); color: "#aeb9cb"; wrapMode: Text.Wrap }
+                Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
+                Label { text: "Exact-time keyframe"; font.bold: true }
+                RowLayout {
+                    TextField {
+                        id: keyframeTime
+                        Layout.fillWidth: true
+                        placeholderText: "Seconds"
+                        text: "0"
+                        validator: DoubleValidator { bottom: 0; top: studio.durationSeconds }
+                    }
+                    Button { text: "Import"; onClicked: keyframeImageDialog.open() }
+                }
+                Label { text: studio.keyframeLabels.join("\n"); color: "#aeb9cb"; wrapMode: Text.Wrap }
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
                 Label { text: "Runtime"; font.bold: true }
                 Label {
@@ -160,4 +209,3 @@ ApplicationWindow {
         }
     }
 }
-
