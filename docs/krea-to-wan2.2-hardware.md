@@ -101,6 +101,50 @@ FFmpeg decoded every output frame without error. Inspection of the extracted
 first frame confirms that both mannequins, their colors, and the studio
 composition survive the expected center crop/scale and Wan latent encode.
 
+## Thirty-step visual-review candidate
+
+A longer candidate uses the same Krea keyframe with 17 frames and the model's
+30-step default:
+
+```bash
+/home/wolfhard/krea_region_project/.venv/bin/python \
+  scripts/wan2_2_smoke.py \
+  --mode i2v \
+  --start-image wan2lab/krea-wan-handoff.png \
+  --frames 17 \
+  --steps 30 \
+  --seed 20260728 \
+  --prompt "The blue and orange wooden artist mannequins slowly raise one hand in a friendly synchronized wave, subtle natural joint motion, locked camera, stable studio background." \
+  --negative-prompt "flicker, distortion, warped limbs, extra limbs, camera movement, text, watermark" \
+  --output-prefix wan2lab/hardware/krea_to_wan2_2_i2v_17f_30step_review \
+  --release
+```
+
+Evidence:
+
+- Prompt ID: `47a52813-1567-45b8-b7d4-9b21c8be2501`
+- Path:
+  `output/wan2lab/hardware/krea_to_wan2_2_i2v_17f_30step_review_00001.mp4`
+- H.264/yuv420p, 1280x704, 24 FPS, 17 frames, 0.708333 seconds
+- 146,894 bytes
+- SHA-256:
+  `0e5df779bc26c64e8d65169873b079281a8fd24b1cfd9decef76ff22dd8b729c`
+- ComfyUI execution time: 25 minutes 37 seconds
+- Sampling: 22 minutes 12 seconds, 5.975 GB peak allocated, 6.674 GB
+  peak reserved
+- VAE decode: 45 tiles in 2 minutes 28 seconds
+
+FFmpeg decoded every frame without error. A five-frame contact sheet is stored
+at
+`/home/wolfhard/.cache/wan2lab/review/wan2lab-review-contact-sheet.png`
+(1,345,109 bytes, SHA-256
+`1863e8d6e7dde314a804feddc558eedcf3b10707e01e2638178884f4490e84a6`).
+
+The contact sheet shows a stable studio and stable subject colors, with the blue
+mannequin raising a hand. The orange mannequin remains mostly stationary, so
+the requested synchronized action is not fully demonstrated. This is a review
+candidate, not an automatic semantic or visual-quality acceptance.
+
 ## Constrained-memory behavior
 
 An initial 1280x704 Krea attempt stopped safely after denoising step 1/4 when

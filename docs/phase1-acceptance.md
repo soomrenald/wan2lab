@@ -55,6 +55,10 @@ after a segment becomes stale.
   released and staged byte-for-byte, then produced a valid Wan2.2 I2V result
   whose first frame preserves both subjects. Exact evidence is recorded in
   [krea-to-wan2.2-hardware.md](krea-to-wan2.2-hardware.md).
+- A 17-frame Krea-conditioned I2V candidate completed at the model's 30-step
+  default. Its codec, dimensions, frame count, duration, full decode, resource
+  peaks, and contact sheet are verified; semantic/visual acceptance remains a
+  human decision.
 
 ## Hardware acceptance status
 
@@ -64,9 +68,9 @@ structured provenance, full-duration decoding, and OOM recovery are verified.
 The short four-step and full-duration one-step renders establish runtime
 integration only; they do not establish production visual quality.
 
-Still manually verify a production-quality step count and visual result for
-TI2V-5B. First/last, Animate, and Replace require later compatible model
-families because TI2V-5B does not advertise those modes.
+Still manually review the 30-step visual result and, if required, run the full
+121-frame duration at 30 steps. First/last, Animate, and Replace require later
+compatible model families because TI2V-5B does not advertise those modes.
 Mannequin-guided and adapter-routed multi-character handoff, identity
 correction, batch face repair, long continuation, and final export also remain
 hardware gates.
