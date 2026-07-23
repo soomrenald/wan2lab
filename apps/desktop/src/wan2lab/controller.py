@@ -1959,10 +1959,13 @@ class DesktopController(QObject):
                     "model_family": model_family.strip(),
                 },
             )
-            asset = self._wan_asset(record, AssetKind.ADAPTER)
+            provenance_id = f"provenance-{uuid4().hex}"
+            asset = self._wan_asset(record, AssetKind.ADAPTER).model_copy(
+                update={"creation_operation_id": provenance_id}
+            )
             adapter = adapter.model_copy(update={"asset_id": asset.asset_id})
             provenance = ProvenanceRecord(
-                provenance_id=f"provenance-{uuid4().hex}",
+                provenance_id=provenance_id,
                 operation="import_character_adapter",
                 created_at=datetime.now(UTC),
                 input_asset_ids=(),
@@ -2037,10 +2040,13 @@ class DesktopController(QObject):
             record = self._asset_store.register_imported(
                 source, media_type=image_media_type(source)
             )
-            asset = self._wan_asset(record, AssetKind.IMAGE)
+            provenance_id = f"provenance-{uuid4().hex}"
+            asset = self._wan_asset(record, AssetKind.IMAGE).model_copy(
+                update={"creation_operation_id": provenance_id}
+            )
             sheet = self._session.project.character_sheets[sheet_index]
             provenance = ProvenanceRecord(
-                provenance_id=f"provenance-{uuid4().hex}",
+                provenance_id=provenance_id,
                 operation="import_character_sheet_entry",
                 created_at=datetime.now(UTC),
                 output_asset_ids=(asset.asset_id,),
@@ -2152,9 +2158,15 @@ class DesktopController(QObject):
                     "source_entry_id": source_entry.entry_id,
                 },
             )
-            asset = self._wan_asset(record, AssetKind.IMAGE)
+            provenance_id = f"provenance-{uuid4().hex}"
+            asset = self._wan_asset(record, AssetKind.IMAGE).model_copy(
+                update={
+                    "creation_operation_id": provenance_id,
+                    "immutable_source": False,
+                }
+            )
             provenance = ProvenanceRecord(
-                provenance_id=f"provenance-{uuid4().hex}",
+                provenance_id=provenance_id,
                 operation="replace_character_sheet_entry",
                 created_at=datetime.now(UTC),
                 input_asset_ids=(source_entry.image_asset_id,),
@@ -2214,9 +2226,12 @@ class DesktopController(QObject):
             record = self._asset_store.register_imported(
                 source, media_type=image_media_type(source)
             )
-            asset = self._wan_asset(record, AssetKind.IMAGE)
+            provenance_id = f"provenance-{uuid4().hex}"
+            asset = self._wan_asset(record, AssetKind.IMAGE).model_copy(
+                update={"creation_operation_id": provenance_id}
+            )
             provenance = ProvenanceRecord(
-                provenance_id=f"provenance-{uuid4().hex}",
+                provenance_id=provenance_id,
                 operation="import_keyframe",
                 created_at=datetime.now(UTC),
                 output_asset_ids=(asset.asset_id,),
@@ -3656,9 +3671,15 @@ class DesktopController(QObject):
                     "frame_index": int(context["frame_index"]),
                 },
             )
-            checkpoint_asset = self._wan_asset(record, AssetKind.IMAGE)
+            extraction_provenance_id = f"provenance-{uuid4().hex}"
+            checkpoint_asset = self._wan_asset(record, AssetKind.IMAGE).model_copy(
+                update={
+                    "creation_operation_id": extraction_provenance_id,
+                    "immutable_source": False,
+                }
+            )
             extraction_provenance = ProvenanceRecord(
-                provenance_id=f"provenance-{uuid4().hex}",
+                provenance_id=extraction_provenance_id,
                 operation="extract_identity_checkpoint",
                 created_at=datetime.now(UTC),
                 input_asset_ids=(str(context["source_video_asset_id"]),),
@@ -4177,9 +4198,12 @@ class DesktopController(QObject):
                 media_type=media_type,
                 metadata={"operation": "import_segment_input", "role": role},
             )
-            asset = self._wan_asset(record, kind)
+            provenance_id = f"provenance-{uuid4().hex}"
+            asset = self._wan_asset(record, kind).model_copy(
+                update={"creation_operation_id": provenance_id}
+            )
             provenance = ProvenanceRecord(
-                provenance_id=f"provenance-{uuid4().hex}",
+                provenance_id=provenance_id,
                 operation="import_segment_input",
                 created_at=datetime.now(UTC),
                 output_asset_ids=(asset.asset_id,),
@@ -4785,7 +4809,7 @@ class DesktopController(QObject):
                     revision.source_request.end_ms - revision.source_request.start_ms
                 ),
                 parent_asset_ids=record.parent_asset_ids,
-                creation_operation_id=revision.source_request.request_id,
+                creation_operation_id=f"{revision.revision_id}-provenance",
                 immutable_source=False,
             )
             normalized_result = event.result.model_copy(
@@ -4986,9 +5010,15 @@ class DesktopController(QObject):
                     "operation": str(context["operation"]),
                 },
             )
-            asset = self._wan_asset(record, AssetKind.IMAGE)
+            provenance_id = f"provenance-{uuid4().hex}"
+            asset = self._wan_asset(record, AssetKind.IMAGE).model_copy(
+                update={
+                    "creation_operation_id": provenance_id,
+                    "immutable_source": False,
+                }
+            )
             provenance = ProvenanceRecord(
-                provenance_id=f"provenance-{uuid4().hex}",
+                provenance_id=provenance_id,
                 operation=f"krea_generate_{operation}",
                 created_at=datetime.now(UTC),
                 model_identifiers=("krea2",),
@@ -5208,6 +5238,21 @@ class DesktopController(QObject):
             extract_provenance_id = f"provenance-{uuid4().hex}"
             edit_provenance_id = f"provenance-{uuid4().hex}"
             assembly_provenance_id = f"provenance-{uuid4().hex}"
+            original_asset = original_asset.model_copy(
+                update={
+                    "creation_operation_id": extract_provenance_id,
+                    "immutable_source": False,
+                }
+            )
+            replacement_asset = replacement_asset.model_copy(
+                update={
+                    "creation_operation_id": edit_provenance_id,
+                    "immutable_source": False,
+                }
+            )
+            revised_asset = revised_asset.model_copy(
+                update={"creation_operation_id": assembly_provenance_id}
+            )
             edit = FrameEditRecord(
                 edit_id=f"frame-edit-{uuid4().hex}",
                 segment_revision_id=source_revision_id,
@@ -5368,6 +5413,18 @@ class DesktopController(QObject):
                 replacement_asset = self._wan_asset(replacement_record, AssetKind.IMAGE)
                 extract_id = f"provenance-{uuid4().hex}"
                 edit_id = f"provenance-{uuid4().hex}"
+                original_asset = original_asset.model_copy(
+                    update={
+                        "creation_operation_id": extract_id,
+                        "immutable_source": False,
+                    }
+                )
+                replacement_asset = replacement_asset.model_copy(
+                    update={
+                        "creation_operation_id": edit_id,
+                        "immutable_source": False,
+                    }
+                )
                 originals.append(original_asset)
                 replacements.append(replacement_asset)
                 extraction_provenance.append(
@@ -5474,6 +5531,9 @@ class DesktopController(QObject):
                 immutable_source=False,
             )
             assembly_id = f"provenance-{uuid4().hex}"
+            revised_asset = revised_asset.model_copy(
+                update={"creation_operation_id": assembly_id}
+            )
             assembly_provenance = ProvenanceRecord(
                 provenance_id=assembly_id,
                 operation="assemble_batch_frame_revision",

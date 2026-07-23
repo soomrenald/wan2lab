@@ -198,6 +198,32 @@ class DomainModelTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "newer than supported"):
             load_project_document(document)
 
+    def test_asset_creation_operation_must_claim_the_asset(self) -> None:
+        asset = AssetRef(
+            asset_id="derived-image",
+            kind=AssetKind.IMAGE,
+            storage_path="objects/derived.png",
+            sha256="f" * 64,
+            width=1280,
+            height=720,
+            creation_operation_id="missing-operation",
+            immutable_source=False,
+        )
+
+        with self.assertRaisesRegex(
+            ValidationError,
+            "asset creation operation references missing provenance",
+        ):
+            Wan2LabProject(
+                project_id="invalid-lineage",
+                project_settings=ProjectSettings(
+                    default_wan_backend_id="mock-wan",
+                    default_wan_model_id="wan-test",
+                ),
+                assets=(asset,),
+                timeline=Timeline(duration_ms=1_000, output_fps=24.0),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

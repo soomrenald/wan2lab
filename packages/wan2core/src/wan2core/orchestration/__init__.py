@@ -228,6 +228,21 @@ class WanStudioSession:
         if result.frame_asset_ids != tuple(item.asset_id for item in frame_assets):
             raise ValueError("worker frame IDs and registered frame assets differ")
         provenance_id = f"{revision.revision_id}-provenance"
+        result_asset = result_asset.model_copy(
+            update={
+                "creation_operation_id": provenance_id,
+                "immutable_source": False,
+            }
+        )
+        frame_assets = tuple(
+            item.model_copy(
+                update={
+                    "creation_operation_id": provenance_id,
+                    "immutable_source": False,
+                }
+            )
+            for item in frame_assets
+        )
         segment, revision = complete_generation(
             segment,
             revision,
@@ -451,7 +466,6 @@ class WanStudioSession:
             generation_metadata=result.metadata,
             provenance_id=provenance_id,
         )
-        assets = self._mock_assets(result, request)
         provenance = ProvenanceRecord(
             provenance_id=provenance_id,
             operation="mock_generate_segment",
@@ -493,6 +507,7 @@ class WanStudioSession:
             output_asset_ids=(result.result_asset_id, *result.frame_asset_ids),
             runtime={"mock": True},
         )
+        assets = self._mock_assets(result, request, provenance.provenance_id)
         self.project = self.project.model_copy(
             update={
                 "assets": (*self.project.assets, *assets),
@@ -667,7 +682,11 @@ class WanStudioSession:
         )
 
     @staticmethod
-    def _mock_assets(result, request: SegmentRequest) -> tuple[AssetRef, ...]:
+    def _mock_assets(
+        result,
+        request: SegmentRequest,
+        provenance_id: str,
+    ) -> tuple[AssetRef, ...]:
         def digest(asset_id: str) -> str:
             return hashlib.sha256(asset_id.encode("utf-8")).hexdigest()
 
@@ -680,7 +699,7 @@ class WanStudioSession:
             height=request.height,
             frame_count=request.frame_count,
             duration_ms=request.end_ms - request.start_ms,
-            creation_operation_id=request.request_id,
+            creation_operation_id=provenance_id,
             immutable_source=False,
         )
         frames = tuple(
@@ -692,7 +711,7 @@ class WanStudioSession:
                 width=request.width,
                 height=request.height,
                 parent_asset_ids=(result.result_asset_id,),
-                creation_operation_id=request.request_id,
+                creation_operation_id=provenance_id,
                 immutable_source=False,
             )
             for asset_id in result.frame_asset_ids

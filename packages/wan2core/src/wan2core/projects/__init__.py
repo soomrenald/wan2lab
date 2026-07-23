@@ -177,6 +177,17 @@ class Wan2LabProject(DomainModel):
         segment_ids = set(collections["segment IDs"])
         revision_by_id = {item.revision_id: item for item in self.segment_revisions}
         provenance_ids = set(collections["provenance IDs"])
+        provenance_by_id = {
+            item.provenance_id: item for item in self.generation_records
+        }
+        for asset in self.assets:
+            if asset.creation_operation_id is None:
+                continue
+            operation = provenance_by_id.get(asset.creation_operation_id)
+            if operation is None:
+                raise ValueError("asset creation operation references missing provenance")
+            if asset.asset_id not in operation.output_asset_ids:
+                raise ValueError("asset creation operation does not claim the asset output")
 
         adapters = tuple(
             adapter

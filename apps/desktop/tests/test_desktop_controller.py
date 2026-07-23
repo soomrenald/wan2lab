@@ -570,6 +570,10 @@ class DesktopControllerTests(unittest.TestCase):
             )
             self.assertEqual(fitted_asset.parent_asset_ids, (original_asset.asset_id,))
             self.assertEqual(
+                fitted_asset.creation_operation_id,
+                fitted_keyframe.provenance_id,
+            )
+            self.assertEqual(
                 (fitted_asset.width, fitted_asset.height),
                 (controller.projectWidth, controller.projectHeight),
             )

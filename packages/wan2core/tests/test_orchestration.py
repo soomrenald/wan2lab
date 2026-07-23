@@ -161,7 +161,12 @@ class OrchestrationTests(unittest.TestCase):
             backend_version="test-worker",
         )
         self.assertEqual(completed.review_state, RevisionReviewState.READY_FOR_REVIEW)
-        self.assertEqual(session.project.assets, (video,))
+        self.assertEqual(session.project.assets[0].asset_id, video.asset_id)
+        self.assertEqual(
+            session.project.assets[0].creation_operation_id,
+            completed.provenance_id,
+        )
+        self.assertFalse(session.project.assets[0].immutable_source)
         provenance = session.project.generation_records[0]
         self.assertEqual(provenance.seed, 9)
         self.assertEqual(
