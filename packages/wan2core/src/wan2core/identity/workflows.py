@@ -8,6 +8,7 @@ from wan2core.identity import (
     approve_checkpoint_proposal,
 )
 from wan2core.keyframes import Keyframe, KeyframeSource
+from wan2core.keyframes import Rectangle
 from wan2core.projects import Wan2LabProject
 from wan2core.projects.invalidation import invalidate_segments
 from wan2core.provenance import ProvenanceRecord
@@ -81,6 +82,40 @@ def approve_registered_checkpoint(
     return Wan2LabProject.model_validate(updated.model_dump())
 
 
+def confirm_warning_association(
+    project: Wan2LabProject,
+    *,
+    segment_revision_id: str,
+    identity_id: str,
+    frame_index: int,
+    region: Rectangle,
+) -> Wan2LabProject:
+    found = False
+    warnings = []
+    for warning in project.identity_warnings:
+        if (
+            warning.segment_revision_id == segment_revision_id
+            and warning.identity_id == identity_id
+            and warning.frame_index == frame_index
+        ):
+            found = True
+            warnings.append(
+                warning.model_copy(
+                    update={
+                        "proposed_region": region,
+                        "association_confirmed": True,
+                    }
+                )
+            )
+        else:
+            warnings.append(warning)
+    if not found:
+        return project
+    return Wan2LabProject.model_validate(
+        project.model_copy(update={"identity_warnings": tuple(warnings)}).model_dump()
+    )
+
+
 def apply_approved_checkpoint(
     project: Wan2LabProject,
     *,
@@ -145,6 +180,7 @@ def apply_approved_checkpoint(
 __all__ = [
     "apply_approved_checkpoint",
     "approve_registered_checkpoint",
+    "confirm_warning_association",
     "propose_checkpoint_from_warnings",
     "register_identity_analysis",
 ]

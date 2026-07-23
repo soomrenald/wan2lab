@@ -18,6 +18,11 @@ from wan2core.backends import (
 from wan2core.backends.mock import default_mock_capabilities
 from wan2core.editing import BatchFrameSelection, FrameEditOperation
 from wan2core.editing.faces import FaceProposal, confirm_face_proposal
+from wan2core.identity import IdentityDriftWarning, IdentityWarningKind
+from wan2core.identity.workflows import (
+    propose_checkpoint_from_warnings,
+    register_identity_analysis,
+)
 from wan2core.keyframes import Rectangle
 from wan2core.segments import SegmentState
 from wan2core.workers import AckEvent, CapabilitiesEvent, ResultEvent, WorkerResult
@@ -334,12 +339,25 @@ class DesktopControllerTests(unittest.TestCase):
 
     def test_face_detection_draft_requires_explicit_candidate_or_manual_confirmation(self) -> None:
         controller = DesktopController()
+        controller.addCharacter(
+            "Avery",
+            "averyface, stable identity",
+            "Travel clothes",
+            "blue jacket",
+        )
+        controller.planMockTimeline()
+        controller.generateNextMockSegment()
+        identity = controller.session.project.characters[0]
+        revision = controller.session.project.segment_revisions[0]
+        segment = controller.session.project.segments[0]
         selection = BatchFrameSelection(frame_indices=(3, 5))
         controller._active_batch_frame_edit = {  # noqa: SLF001
             "mode": "face_detection",
             "selection": selection,
-            "identity_id": "character-1",
-            "identity_prompt": "stable Avery identity",
+            "identity_id": identity.identity_id,
+            "identity_prompt": identity.identity_prompt,
+            "revision_id": revision.revision_id,
+            "segment_id": segment.segment_id,
             "pending_indices": [],
             "candidates": {},
         }
@@ -359,6 +377,8 @@ class DesktopControllerTests(unittest.TestCase):
         )
 
         self.assertEqual(len(controller.faceProposalSummaries), 2)
+        self.assertEqual(len(controller.identityWarningSummaries), 2)
+        self.assertEqual(len(controller.checkpointProposalSummaries), 1)
         self.assertFalse(controller.faceBatchReady)
         controller.confirmDetectedBatchFace(1)
         self.assertFalse(controller.faceBatchReady)
@@ -367,6 +387,67 @@ class DesktopControllerTests(unittest.TestCase):
         confirmed = controller._face_batch_draft["confirmed"]  # noqa: SLF001
         self.assertEqual(confirmed[3].box.x0, 30)
         self.assertTrue(confirmed[5].manually_corrected)
+        self.assertTrue(
+            all(
+                item.association_confirmed
+                for item in controller.session.project.identity_warnings
+            )
+        )
+
+    def test_approved_identity_checkpoint_requires_explicit_apply_before_staling(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.addCharacter(
+                "Avery",
+                "averyface, stable identity",
+                "Travel clothes",
+                "blue jacket",
+            )
+            controller.planMockTimeline()
+            controller.generateNextMockSegment()
+            revision = controller.session.project.segment_revisions[0]
+            segment = controller.session.project.segments[0]
+            warning = IdentityDriftWarning(
+                warning_id="warning-checkpoint",
+                segment_revision_id=revision.revision_id,
+                frame_index=2,
+                identity_id=controller.session.project.characters[0].identity_id,
+                kind=IdentityWarningKind.DRIFTING,
+                score=0.4,
+                message="Identity similarity dropped",
+            )
+            proposal = propose_checkpoint_from_warnings(
+                proposal_id="checkpoint-proposal",
+                segment_id=segment.segment_id,
+                segment_start_ms=segment.start_ms,
+                segment_end_ms=segment.end_ms,
+                generation_fps=revision.source_request.generation_fps,
+                warnings=(warning,),
+            )
+            controller.session.project = register_identity_analysis(
+                controller.session.project,
+                warnings=(warning,),
+                proposal=proposal,
+            )
+
+            controller.approveIdentityCheckpoint(0)
+
+            self.assertTrue(controller.session.project.checkpoint_proposals[0].user_approved)
+            self.assertNotEqual(segment.state, SegmentState.STALE)
+            checkpoint = root / "checkpoint.png"
+            Image.new("RGB", (64, 64), "purple").save(checkpoint)
+            controller._pending_checkpoint_application = {  # noqa: SLF001
+                "proposal_id": proposal.proposal_id,
+                "source_video_asset_id": revision.result_asset_id,
+                "frame_index": 2,
+            }
+            controller._complete_checkpoint_extraction(str(checkpoint))  # noqa: SLF001
+
+            project = controller.session.project
+            self.assertEqual(project.segments[0].state, SegmentState.STALE)
+            self.assertEqual(project.keyframes[0].source_type.value, "extracted_video")
+            self.assertTrue(project.keyframes[0].approved)
 
     def test_completed_face_batch_records_identity_regions_and_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -710,6 +710,47 @@ ApplicationWindow {
                         color: modelData.indexOf("required") >= 0 ? "#d6b76b" : "#91d6a8"
                     }
                 }
+                Label {
+                    text: "Identity drift review"
+                    color: "#aeb9cb"
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: "#8f9bb0"
+                    text: "Detection and association warnings are available now; identity-similarity scores appear only when the active backend exposes that capability."
+                }
+                Repeater {
+                    model: studio.identityWarningSummaries
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: modelData
+                        color: "#d6b76b"
+                    }
+                }
+                ComboBox {
+                    id: checkpointProposal
+                    Layout.fillWidth: true
+                    model: studio.checkpointProposalSummaries
+                }
+                RowLayout {
+                    Button {
+                        text: "Approve checkpoint"
+                        enabled: checkpointProposal.currentIndex >= 0
+                        onClicked: studio.approveIdentityCheckpoint(
+                            checkpointProposal.currentIndex
+                        )
+                    }
+                    Button {
+                        text: "Apply approved checkpoint"
+                        enabled: checkpointProposal.currentIndex >= 0
+                            && !studio.frameModificationRunning
+                        onClicked: studio.applyIdentityCheckpoint(
+                            checkpointProposal.currentIndex
+                        )
+                    }
+                }
                 Button {
                     Layout.fillWidth: true
                     text: "Refine confirmed identity batch"

@@ -63,6 +63,14 @@ from wan2core.keyframes.workflows import (
     remove_pose_view_entry,
     update_pose_view_entry,
 )
+from wan2core.identity import IdentityDriftWarning, IdentityWarningKind
+from wan2core.identity.workflows import (
+    apply_approved_checkpoint,
+    approve_registered_checkpoint,
+    confirm_warning_association,
+    propose_checkpoint_from_warnings,
+    register_identity_analysis,
+)
 from wan2core.mannequin import JointPose, Quaternion
 from wan2core.mannequin.workflows import (
     GuideKind,
@@ -204,6 +212,7 @@ class DesktopController(QObject):
         self._batch_frame_runner.failed.connect(self._fail_batch_frame_modification)
         self._active_batch_frame_edit: dict[str, object] | None = None
         self._face_batch_draft: dict[str, object] | None = None
+        self._pending_checkpoint_application: dict[str, object] | None = None
 
     @Property(str, notify=projectChanged)
     def projectName(self) -> str:  # noqa: N802 - Qt property naming
@@ -305,6 +314,26 @@ class DesktopController(QObject):
         if draft is None:
             return False
         return set(draft["selection"].frame_indices) == set(draft["confirmed"])
+
+    @Property("QStringList", notify=projectChanged)
+    def identityWarningSummaries(self) -> list[str]:  # noqa: N802
+        return [
+            (
+                f"Frame {item.frame_index} · {item.kind.value} · {item.message}"
+                f"{' · association confirmed' if item.association_confirmed else ''}"
+            )
+            for item in self._session.project.identity_warnings
+        ]
+
+    @Property("QStringList", notify=projectChanged)
+    def checkpointProposalSummaries(self) -> list[str]:  # noqa: N802
+        return [
+            (
+                f"{item.time_ms / 1000:g}s · {item.reason} · "
+                f"{'approved' if item.user_approved else 'approval required'}"
+            )
+            for item in self._session.project.checkpoint_proposals
+        ]
 
     @Property("QStringList", notify=projectChanged)
     def sheetEntryNames(self) -> list[str]:  # noqa: N802
@@ -433,6 +462,7 @@ class DesktopController(QObject):
         self._events.clear()
         self._draft_keyframe_regions.clear()
         self._face_batch_draft = None
+        self._pending_checkpoint_application = None
         self._mannequin_preview_url = QUrl()
         self._set_status("New project ready")
         self.projectChanged.emit()
@@ -1533,7 +1563,9 @@ class DesktopController(QObject):
 
     @Slot(str)
     def _handle_krea_source_extracted(self, source_path: str) -> None:
-        if self._active_batch_frame_edit is not None:
+        if self._pending_checkpoint_application is not None:
+            self._complete_checkpoint_extraction(source_path)
+        elif self._active_batch_frame_edit is not None:
             if self._active_batch_frame_edit.get("mode") == "face_detection":
                 self._start_batch_face_detection(source_path)
             else:
@@ -1543,7 +1575,11 @@ class DesktopController(QObject):
 
     @Slot(str)
     def _handle_krea_source_extraction_failed(self, message: str) -> None:
-        if self._active_batch_frame_edit is not None:
+        if self._pending_checkpoint_application is not None:
+            self._pending_checkpoint_application = None
+            self._append_event(message)
+            self._set_status(message)
+        elif self._active_batch_frame_edit is not None:
             self._fail_batch_frame_modification(message)
         else:
             self._fail_krea_frame_edit(message)
@@ -1777,6 +1813,62 @@ class DesktopController(QObject):
             "candidate_order": candidate_order,
             "confirmed": {},
         }
+        warnings = []
+        for frame_index in context["selection"].frame_indices:
+            frame_candidates = candidates.get(frame_index, ())
+            if not frame_candidates:
+                warning_kind = IdentityWarningKind.MISSING
+                score = None
+                message = "No candidate face detected; manual association is required"
+                proposed_region = None
+            elif len(frame_candidates) > 1:
+                warning_kind = IdentityWarningKind.UNCERTAIN
+                score = max(item.score for item in frame_candidates)
+                message = "Multiple faces require an explicit character association"
+                proposed_region = None
+            elif frame_candidates[0].score < 0.65:
+                warning_kind = IdentityWarningKind.UNCERTAIN
+                score = frame_candidates[0].score
+                message = "Low-confidence face detection requires review"
+                proposed_region = frame_candidates[0].box
+            else:
+                continue
+            warnings.append(
+                IdentityDriftWarning(
+                    warning_id=f"identity-warning-{uuid4().hex}",
+                    segment_revision_id=str(context["revision_id"]),
+                    frame_index=frame_index,
+                    identity_id=str(context["identity_id"]),
+                    kind=warning_kind,
+                    score=score,
+                    message=message,
+                    proposed_region=proposed_region,
+                )
+            )
+        if warnings:
+            segment = next(
+                item
+                for item in self._session.project.segments
+                if item.segment_id == context["segment_id"]
+            )
+            revision = next(
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == context["revision_id"]
+            )
+            proposal = propose_checkpoint_from_warnings(
+                proposal_id=f"checkpoint-proposal-{uuid4().hex}",
+                segment_id=segment.segment_id,
+                segment_start_ms=segment.start_ms,
+                segment_end_ms=segment.end_ms,
+                generation_fps=revision.source_request.generation_fps,
+                warnings=tuple(warnings),
+            )
+            self._session.project = register_identity_analysis(
+                self._session.project,
+                warnings=tuple(warnings),
+                proposal=proposal,
+            )
         missing = sum(
             not candidates.get(index) for index in context["selection"].frame_indices
         )
@@ -1787,6 +1879,11 @@ class DesktopController(QObject):
         self._set_status(
             "Confirm one face per frame or draw a manual region"
             + (f"; {missing} frame(s) need a manual region" if missing else "")
+            + (
+                f"; {len(warnings)} identity warning(s) need review"
+                if warnings
+                else ""
+            )
         )
         self.projectChanged.emit()
 
@@ -1797,7 +1894,15 @@ class DesktopController(QObject):
             if draft is None:
                 raise ValueError("run batch face detection first")
             proposal, _candidate_index = draft["candidate_order"][proposal_index]
-            draft["confirmed"][proposal.frame_index] = confirm_face_proposal(proposal)
+            confirmed = confirm_face_proposal(proposal)
+            draft["confirmed"][proposal.frame_index] = confirmed
+            self._session.project = confirm_warning_association(
+                self._session.project,
+                segment_revision_id=str(draft["revision_id"]),
+                identity_id=str(draft["identity_id"]),
+                frame_index=proposal.frame_index,
+                region=confirmed.box,
+            )
         except Exception as error:
             self._set_status(f"Face confirmation failed: {error}")
             return
@@ -1829,9 +1934,17 @@ class DesktopController(QObject):
                 score=0.0,
                 prompt=str(draft["identity_prompt"]),
             )
-            draft["confirmed"][frame_index] = confirm_face_proposal(
+            confirmed = confirm_face_proposal(
                 proposal,
                 manual_box=manual_box,
+            )
+            draft["confirmed"][frame_index] = confirmed
+            self._session.project = confirm_warning_association(
+                self._session.project,
+                segment_revision_id=str(draft["revision_id"]),
+                identity_id=str(draft["identity_id"]),
+                frame_index=frame_index,
+                region=confirmed.box,
             )
         except Exception as error:
             self._set_status(f"Manual face confirmation failed: {error}")
@@ -1910,6 +2023,149 @@ class DesktopController(QObject):
         }
         self._start_next_batch_krea_edit()
         self._set_status("Starting confirmed batch identity refinement…")
+
+    @Slot(int)
+    def approveIdentityCheckpoint(self, proposal_index: int) -> None:  # noqa: N802
+        try:
+            proposal = self._session.project.checkpoint_proposals[proposal_index]
+            self._session.project = approve_registered_checkpoint(
+                self._session.project,
+                proposal.proposal_id,
+            )
+        except Exception as error:
+            self._set_status(f"Checkpoint approval failed: {error}")
+            return
+        self._append_event(f"Approved identity checkpoint at {proposal.time_ms / 1000:g}s")
+        self._set_status("Checkpoint approved; apply it explicitly to replan the timeline")
+        self.projectChanged.emit()
+
+    @Slot(int)
+    def applyIdentityCheckpoint(self, proposal_index: int) -> None:  # noqa: N802
+        if self.frameModificationRunning:
+            self._set_status("Finish the active frame operation before applying a checkpoint")
+            return
+        try:
+            proposal = self._session.project.checkpoint_proposals[proposal_index]
+            if not proposal.user_approved:
+                raise ValueError("approve the checkpoint before applying it")
+            warnings = tuple(
+                item
+                for item in self._session.project.identity_warnings
+                if item.warning_id in proposal.warning_ids
+            )
+            if not warnings:
+                raise ValueError("checkpoint has no registered warning frames")
+            revision_id = warnings[0].segment_revision_id
+            revision = next(
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == revision_id
+            )
+            segment = next(
+                item
+                for item in self._session.project.segments
+                if item.segment_id == proposal.segment_id
+            )
+            frame_index = min(
+                revision.source_request.frame_count - 1,
+                max(
+                    0,
+                    round(
+                        (proposal.time_ms - segment.start_ms)
+                        * revision.source_request.generation_fps
+                        / 1000
+                    ),
+                ),
+            )
+            source_asset = next(
+                item
+                for item in self._session.project.assets
+                if item.asset_id == revision.result_asset_id
+            )
+            source_video = self._asset_store.resolve_ref(source_asset)
+            output = (
+                self._asset_base
+                / self._session.project.project_id
+                / ".frame-work"
+                / uuid4().hex
+                / f"checkpoint-{frame_index:08d}.png"
+            )
+            extraction = plan_frame_extraction(
+                ffmpeg_executable=self._session.project.project_settings.ffmpeg_executable,
+                source_video_path=str(source_video),
+                frame_index=frame_index,
+                frame_count=revision.source_request.frame_count,
+                output_path=str(output),
+            )
+        except Exception as error:
+            self._set_status(f"Checkpoint application could not start: {error}")
+            return
+        self._pending_checkpoint_application = {
+            "proposal_id": proposal.proposal_id,
+            "source_video_asset_id": source_asset.asset_id,
+            "frame_index": frame_index,
+        }
+        self._frame_extraction_runner.start(extraction)
+        self._set_status("Extracting the exact user-approved checkpoint frame…")
+
+    def _complete_checkpoint_extraction(self, source_path: str) -> None:
+        context = self._pending_checkpoint_application
+        self._pending_checkpoint_application = None
+        if context is None:
+            return
+        try:
+            record = self._asset_store.register_generated(
+                Path(source_path),
+                media_type="image/png",
+                parent_asset_ids=(str(context["source_video_asset_id"]),),
+                metadata={
+                    "operation": "extract_identity_checkpoint",
+                    "frame_index": int(context["frame_index"]),
+                },
+            )
+            checkpoint_asset = self._wan_asset(record, AssetKind.IMAGE)
+            extraction_provenance = ProvenanceRecord(
+                provenance_id=f"provenance-{uuid4().hex}",
+                operation="extract_identity_checkpoint",
+                created_at=datetime.now(UTC),
+                input_asset_ids=(str(context["source_video_asset_id"]),),
+                output_asset_ids=(checkpoint_asset.asset_id,),
+                parameters={"frame_index": int(context["frame_index"])},
+                runtime={
+                    "ffmpeg": self._session.project.project_settings.ffmpeg_executable
+                },
+            )
+            project_with_asset = Wan2LabProject.model_validate(
+                self._session.project.model_copy(
+                    update={
+                        "assets": (*self._session.project.assets, checkpoint_asset),
+                        "generation_records": (
+                            *self._session.project.generation_records,
+                            extraction_provenance,
+                        ),
+                    }
+                ).model_dump()
+            )
+            link_provenance = ProvenanceRecord(
+                provenance_id=f"provenance-{uuid4().hex}",
+                operation="link_identity_checkpoint",
+                created_at=datetime.now(UTC),
+                input_asset_ids=(checkpoint_asset.asset_id,),
+                parameters={"user_approved": True},
+            )
+            self._session.project = apply_approved_checkpoint(
+                project_with_asset,
+                proposal_id=str(context["proposal_id"]),
+                keyframe_id=f"identity-checkpoint-{uuid4().hex}",
+                source_frame_asset_id=checkpoint_asset.asset_id,
+                provenance=link_provenance,
+            )
+        except Exception as error:
+            self._set_status(f"Checkpoint application failed: {error}")
+            return
+        self._append_event("Applied approved identity checkpoint and marked work for replanning")
+        self._set_status("Identity checkpoint added; stale segments require user-controlled replanning")
+        self.projectChanged.emit()
 
     def _start_batch_krea_edit(self, source_path: str) -> None:
         context = self._active_batch_frame_edit
@@ -2231,6 +2487,7 @@ class DesktopController(QObject):
         self._events.clear()
         self._draft_keyframe_regions.clear()
         self._face_batch_draft = None
+        self._pending_checkpoint_application = None
         self._refresh_mannequin_preview()
         self._set_status(f"Opened {path}")
         self.projectChanged.emit()

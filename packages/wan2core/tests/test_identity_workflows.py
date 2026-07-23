@@ -8,9 +8,11 @@ from wan2core.identity import IdentityDriftWarning, IdentityWarningKind
 from wan2core.identity.workflows import (
     apply_approved_checkpoint,
     approve_registered_checkpoint,
+    confirm_warning_association,
     propose_checkpoint_from_warnings,
     register_identity_analysis,
 )
+from wan2core.keyframes import Rectangle
 from wan2core.projects import Wan2LabProject
 from wan2core.provenance import ProvenanceRecord
 from wan2core.segments import SegmentState
@@ -65,6 +67,15 @@ class IdentityWorkflowTests(unittest.TestCase):
         project = register_identity_analysis(
             project, warnings=warnings, proposal=proposal
         )
+        project = confirm_warning_association(
+            project,
+            segment_revision_id="revision-1",
+            identity_id="character-1",
+            frame_index=3,
+            region=Rectangle(x0=10, y0=20, x1=80, y1=100),
+        )
+        self.assertTrue(project.identity_warnings[1].association_confirmed)
+        self.assertEqual(project.identity_warnings[1].proposed_region.x0, 10)
         provenance = ProvenanceRecord(
             provenance_id="checkpoint-provenance",
             operation="link_identity_checkpoint",
