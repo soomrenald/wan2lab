@@ -41,6 +41,10 @@ from wan2lab.backends.comfy_workflow import (
 from wan2lab.backends.comfyui import BACKEND_ID, ComfyUIClient, inspect_comfyui_wan
 
 
+class WanOutOfMemory(RuntimeError):
+    pass
+
+
 @dataclass(slots=True)
 class ThreadCancellation:
     event: Event = field(default_factory=Event)
@@ -59,6 +63,7 @@ class ComfyWorkerService:
     specialized_templates: Mapping[WanMode, ModeWorkflowTemplate] = field(default_factory=dict)
     poll_interval_seconds: float = 0.25
     object_info: dict[str, object] = field(default_factory=dict, init=False)
+    system_stats: dict[str, object] = field(default_factory=dict, init=False)
     capabilities: BackendCapabilities | None = field(default=None, init=False)
     selections: dict[str, ComfyModelSelection] = field(default_factory=dict, init=False)
     residency: ModelResidencyManager = field(init=False)
@@ -118,6 +123,7 @@ class ComfyWorkerService:
         load_device = request.offload_mode or "offload_device"
         if load_device not in model.supported_offload_modes:
             raise ValueError("selected offload mode is unsupported")
+        _guard_memory_capacity(model.estimated_memory_profiles, self.system_stats, load_device)
         required_components = {"vae", "text_encoder"}
         if missing := required_components - set(request.component_model_ids):
             raise ValueError(
@@ -179,15 +185,24 @@ class ComfyWorkerService:
             self.residency,
             poll_interval_seconds=self.poll_interval_seconds,
         )
-        execution = executor.execute(
-            plan,
-            job_id=command.job_id,
-            segment_id=command.request.segment_id,
-            cancellation=cancellation,
-            progress=lambda item: emit(
-                ProgressEvent(command_id=command.command_id, progress=item)
-            ),
-        )
+        try:
+            execution = executor.execute(
+                plan,
+                job_id=command.job_id,
+                segment_id=command.request.segment_id,
+                cancellation=cancellation,
+                progress=lambda item: emit(
+                    ProgressEvent(command_id=command.command_id, progress=item)
+                ),
+            )
+        except RuntimeError as error:
+            if _is_out_of_memory(error):
+                self.residency.release()
+                raise WanOutOfMemory(
+                    "Wan generation exhausted accelerator memory; models were released. "
+                    "Retry with offload, lower resolution, or a smaller model."
+                ) from error
+            raise
         storage_keys = tuple(item.storage_key for item in execution.outputs)
         digest = hashlib.sha256("\n".join(storage_keys).encode("utf-8")).hexdigest()[:24]
         return ResultEvent(
@@ -222,9 +237,10 @@ class ComfyWorkerService:
 
     def _refresh(self) -> None:
         self.object_info = self.client.object_info()
+        self.system_stats = self.client.system_stats()
         self.capabilities = inspect_comfyui_wan(
             self.object_info,
-            self.client.system_stats(),
+            self.system_stats,
             executable_specialized_modes=frozenset(self.specialized_templates),
         )
 
@@ -298,8 +314,54 @@ def _error_event(request: WanWorkerRequest, error: Exception) -> ErrorEvent:
             job_id=job_id,
             stage="cancelled" if isinstance(error, InterruptedError) else "worker",
             message=f"{type(error).__name__}: {error}",
-            recoverable=isinstance(error, (ConnectionError, InterruptedError, TimeoutError)),
+            recoverable=isinstance(
+                error,
+                (ConnectionError, InterruptedError, TimeoutError, WanOutOfMemory),
+            ),
+            details={
+                "oom_recovered": isinstance(error, WanOutOfMemory),
+            },
         ),
+    )
+
+
+def _guard_memory_capacity(
+    profiles: Mapping[str, float],
+    system_stats: Mapping[str, object],
+    load_device: str,
+) -> None:
+    devices = system_stats.get("devices", ())
+    if not isinstance(devices, list) or not devices:
+        return
+    device = devices[0]
+    if not isinstance(device, Mapping):
+        return
+    free_bytes = device.get("vram_free")
+    if not isinstance(free_bytes, (int, float)) or free_bytes <= 0:
+        return
+    free_gib = float(free_bytes) / (1024**3)
+    full_residency_gib = min(profiles.values()) if profiles else 0.0
+    required_gib = full_residency_gib if load_device == "main_device" else min(
+        4.0,
+        full_residency_gib,
+    )
+    if required_gib and free_gib < required_gib:
+        raise MemoryError(
+            f"only {free_gib:.1f} GiB VRAM is free; {load_device} requires approximately "
+            f"{required_gib:.1f} GiB. Select offload or release another model."
+        )
+
+
+def _is_out_of_memory(error: BaseException) -> bool:
+    text = str(error).casefold()
+    return any(
+        token in text
+        for token in (
+            "out of memory",
+            "cuda oom",
+            "hip out of memory",
+            "allocation on device",
+        )
     )
 
 
@@ -339,4 +401,10 @@ def main() -> int:
     return 0
 
 
-__all__ = ["ComfyWorkerService", "StdioWanWorker", "ThreadCancellation", "main"]
+__all__ = [
+    "ComfyWorkerService",
+    "StdioWanWorker",
+    "ThreadCancellation",
+    "WanOutOfMemory",
+    "main",
+]
