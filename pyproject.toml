@@ -12,7 +12,6 @@ dependencies = [
     "k2core @ git+https://github.com/soomrenald/k2core.git@0dcdb7b1ccd18be61aafe761b56a77a2dcf11030",
     "pydantic>=2.10,<3",
     "PySide6>=6.8,<7",
-    "wan2core==0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -25,8 +24,14 @@ dev = [
 wan2lab = "wan2lab.app:main"
 wan2lab-worker = "wan2lab.worker:main"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
-packages = ["apps/desktop/src/wan2lab"]
+packages = [
+    "apps/desktop/src/wan2lab",
+    "packages/wan2core/src/wan2core",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["packages/wan2core/tests", "apps/desktop/tests"]

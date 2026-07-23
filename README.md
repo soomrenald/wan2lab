@@ -21,10 +21,11 @@ Python 3.12 is required.
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ../k2core
-python -m pip install -e packages/wan2core
 python -m pip install -e '.[dev]'
 pytest
 ```
 
-Model weights are external assets and are never included in this repository.
+The desktop distribution includes the matching `wan2core` package. Core-only
+consumers may instead install `packages/wan2core` independently.
 
+Model weights are external assets and are never included in this repository.
