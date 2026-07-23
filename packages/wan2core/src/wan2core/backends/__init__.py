@@ -202,6 +202,9 @@ class ModelVariantCapabilities(DomainModel):
             raise ValueError("frame-count rule has no values inside model bounds")
         return values
 
+    def valid_frame_counts(self) -> tuple[int, ...]:
+        return self._valid_counts()
+
 
 class BackendCapabilities(DomainModel):
     backend_id: Identifier
@@ -243,4 +246,3 @@ __all__ = [
     "Resolution",
     "WanMode",
 ]
-

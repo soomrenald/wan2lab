@@ -1,0 +1,3912 @@
+{
+  "backend_capabilities": {
+    "$defs": {
+      "AdapterCompatibility": {
+        "additionalProperties": false,
+        "properties": {
+          "maximum_reference_characters": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Maximum Reference Characters"
+          },
+          "mode": {
+            "$ref": "#/$defs/WanMode"
+          },
+          "model_families": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Model Families",
+            "type": "array"
+          },
+          "supported_adapter_kinds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Adapter Kinds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "AdapterCompatibility",
+        "type": "object"
+      },
+      "AnyFrameCount": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "any",
+            "default": "any",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "AnyFrameCount",
+        "type": "object"
+      },
+      "ExplicitFrameCount": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "explicit",
+            "default": "explicit",
+            "title": "Kind",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "title": "ExplicitFrameCount",
+        "type": "object"
+      },
+      "FrameDurationBasis": {
+        "enum": [
+          "frames",
+          "intervals"
+        ],
+        "title": "FrameDurationBasis",
+        "type": "string"
+      },
+      "ModelVariantCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter_compatibility": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/AdapterCompatibility"
+            },
+            "title": "Adapter Compatibility",
+            "type": "array"
+          },
+          "default_frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Default Frame Count",
+            "type": "integer"
+          },
+          "default_generation_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Default Generation Fps",
+            "type": "number"
+          },
+          "default_resolution": {
+            "$ref": "#/$defs/Resolution"
+          },
+          "display_name": {
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "duration_basis": {
+            "$ref": "#/$defs/FrameDurationBasis",
+            "default": "intervals"
+          },
+          "estimated_memory_profiles": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Estimated Memory Profiles",
+            "type": "object"
+          },
+          "frame_count_rule": {
+            "discriminator": {
+              "mapping": {
+                "any": "#/$defs/AnyFrameCount",
+                "explicit": "#/$defs/ExplicitFrameCount",
+                "multiple_plus_offset": "#/$defs/MultiplePlusOffsetFrameCount"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/AnyFrameCount"
+              },
+              {
+                "$ref": "#/$defs/MultiplePlusOffsetFrameCount"
+              },
+              {
+                "$ref": "#/$defs/ExplicitFrameCount"
+              }
+            ],
+            "title": "Frame Count Rule"
+          },
+          "max_frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Max Frame Count",
+            "type": "integer"
+          },
+          "min_frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Min Frame Count",
+            "type": "integer"
+          },
+          "model_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "optional_inputs_by_mode": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "propertyNames": {
+              "$ref": "#/$defs/WanMode"
+            },
+            "title": "Optional Inputs By Mode",
+            "type": "object"
+          },
+          "parameter_descriptors": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/ParameterDescriptor"
+            },
+            "title": "Parameter Descriptors",
+            "type": "array"
+          },
+          "required_inputs_by_mode": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "propertyNames": {
+              "$ref": "#/$defs/WanMode"
+            },
+            "title": "Required Inputs By Mode",
+            "type": "object"
+          },
+          "supported_generation_fps": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Supported Generation Fps",
+            "type": "array"
+          },
+          "supported_modes": {
+            "items": {
+              "$ref": "#/$defs/WanMode"
+            },
+            "title": "Supported Modes",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "supported_offload_modes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Offload Modes",
+            "type": "array"
+          },
+          "supported_precisions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Precisions",
+            "type": "array"
+          },
+          "supported_quantizations": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Quantizations",
+            "type": "array"
+          },
+          "supported_resolutions": {
+            "items": {
+              "$ref": "#/$defs/Resolution"
+            },
+            "title": "Supported Resolutions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "display_name",
+          "supported_modes",
+          "required_inputs_by_mode",
+          "supported_resolutions",
+          "default_resolution",
+          "frame_count_rule",
+          "default_frame_count",
+          "min_frame_count",
+          "max_frame_count",
+          "default_generation_fps",
+          "supported_generation_fps",
+          "supported_precisions"
+        ],
+        "title": "ModelVariantCapabilities",
+        "type": "object"
+      },
+      "MultiplePlusOffsetFrameCount": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "multiple_plus_offset",
+            "default": "multiple_plus_offset",
+            "title": "Kind",
+            "type": "string"
+          },
+          "multiple": {
+            "exclusiveMinimum": 0,
+            "title": "Multiple",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "multiple"
+        ],
+        "title": "MultiplePlusOffsetFrameCount",
+        "type": "object"
+      },
+      "ParameterDescriptor": {
+        "additionalProperties": false,
+        "properties": {
+          "applicable_modes": {
+            "items": {
+              "$ref": "#/$defs/WanMode"
+            },
+            "title": "Applicable Modes",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "backend_key": {
+            "minLength": 1,
+            "title": "Backend Key",
+            "type": "string"
+          },
+          "choices": {
+            "default": [],
+            "items": {},
+            "title": "Choices",
+            "type": "array"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "display_name": {
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "group": {
+            "$ref": "#/$defs/ParameterGroup",
+            "default": "common"
+          },
+          "hardware_restrictions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Hardware Restrictions",
+            "type": "array"
+          },
+          "help_text": {
+            "default": "",
+            "title": "Help Text",
+            "type": "string"
+          },
+          "key": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Minimum"
+          },
+          "parameter_type": {
+            "$ref": "#/$defs/ParameterType"
+          }
+        },
+        "required": [
+          "key",
+          "display_name",
+          "parameter_type",
+          "default",
+          "applicable_modes",
+          "backend_key"
+        ],
+        "title": "ParameterDescriptor",
+        "type": "object"
+      },
+      "ParameterGroup": {
+        "enum": [
+          "common",
+          "advanced"
+        ],
+        "title": "ParameterGroup",
+        "type": "string"
+      },
+      "ParameterType": {
+        "enum": [
+          "integer",
+          "number",
+          "boolean",
+          "string",
+          "enum"
+        ],
+        "title": "ParameterType",
+        "type": "string"
+      },
+      "Resolution": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "exclusiveMinimum": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "width": {
+            "exclusiveMinimum": 0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height"
+        ],
+        "title": "Resolution",
+        "type": "object"
+      },
+      "WanMode": {
+        "enum": [
+          "prompt",
+          "i2v",
+          "first_last",
+          "animate",
+          "replace"
+        ],
+        "title": "WanMode",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "accelerator_vendors": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Accelerator Vendors",
+        "type": "array",
+        "uniqueItems": true
+      },
+      "backend_id": {
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "title": "Backend Id",
+        "type": "string"
+      },
+      "backend_version": {
+        "minLength": 1,
+        "title": "Backend Version",
+        "type": "string"
+      },
+      "model_variants": {
+        "items": {
+          "$ref": "#/$defs/ModelVariantCapabilities"
+        },
+        "title": "Model Variants",
+        "type": "array"
+      },
+      "package_versions": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "title": "Package Versions",
+        "type": "object"
+      },
+      "parameter_descriptors": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ParameterDescriptor"
+        },
+        "title": "Parameter Descriptors",
+        "type": "array"
+      },
+      "runtime_features": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "title": "Runtime Features",
+        "type": "array",
+        "uniqueItems": true
+      },
+      "wrapper_version": {
+        "default": "",
+        "title": "Wrapper Version",
+        "type": "string"
+      }
+    },
+    "required": [
+      "backend_id",
+      "backend_version",
+      "accelerator_vendors",
+      "model_variants"
+    ],
+    "title": "BackendCapabilities",
+    "type": "object"
+  },
+  "project": {
+    "$defs": {
+      "ActionSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Action Id",
+            "type": "string"
+          },
+          "camera_trajectory": {
+            "default": "",
+            "title": "Camera Trajectory",
+            "type": "string"
+          },
+          "character_trajectory": {
+            "default": "",
+            "title": "Character Trajectory",
+            "type": "string"
+          },
+          "contact_constraints": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Contact Constraints",
+            "type": "array"
+          },
+          "driving_video_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Driving Video Asset Id"
+          },
+          "ending_pose_ref": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ending Pose Ref"
+          },
+          "motion_instruction": {
+            "default": "",
+            "title": "Motion Instruction",
+            "type": "string"
+          },
+          "pose_accuracy_preference": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Pose Accuracy Preference",
+            "type": "number"
+          },
+          "speed_easing": {
+            "default": "",
+            "title": "Speed Easing",
+            "type": "string"
+          },
+          "starting_pose_ref": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Starting Pose Ref"
+          }
+        },
+        "required": [
+          "action_id"
+        ],
+        "title": "ActionSpec",
+        "type": "object"
+      },
+      "AdapterFamily": {
+        "enum": [
+          "krea",
+          "wan"
+        ],
+        "title": "AdapterFamily",
+        "type": "string"
+      },
+      "AdapterKind": {
+        "enum": [
+          "lora",
+          "lokr"
+        ],
+        "title": "AdapterKind",
+        "type": "string"
+      },
+      "AdapterRef": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Adapter Id",
+            "type": "string"
+          },
+          "asset_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "default_strength": {
+            "default": 1.0,
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Default Strength",
+            "type": "number"
+          },
+          "family": {
+            "$ref": "#/$defs/AdapterFamily"
+          },
+          "kind": {
+            "$ref": "#/$defs/AdapterKind"
+          },
+          "model_family": {
+            "minLength": 1,
+            "title": "Model Family",
+            "type": "string"
+          },
+          "trigger": {
+            "default": "",
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "adapter_id",
+          "asset_id",
+          "family",
+          "kind",
+          "model_family"
+        ],
+        "title": "AdapterRef",
+        "type": "object"
+      },
+      "AdapterSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Adapter Id",
+            "type": "string"
+          },
+          "strength": {
+            "default": 1.0,
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Strength",
+            "type": "number"
+          }
+        },
+        "required": [
+          "adapter_id"
+        ],
+        "title": "AdapterSelection",
+        "type": "object"
+      },
+      "AppearanceProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/AdapterRef"
+            },
+            "title": "Adapter Refs",
+            "type": "array"
+          },
+          "appearance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Appearance Id",
+            "type": "string"
+          },
+          "clothing_state": {
+            "default": "",
+            "title": "Clothing State",
+            "type": "string"
+          },
+          "hairstyle_state": {
+            "default": "",
+            "title": "Hairstyle State",
+            "type": "string"
+          },
+          "identity_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Identity Id",
+            "type": "string"
+          },
+          "makeup_accessory_state": {
+            "default": "",
+            "title": "Makeup Accessory State",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "nudity_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Nudity State"
+          },
+          "style_prompt": {
+            "default": "",
+            "title": "Style Prompt",
+            "type": "string"
+          },
+          "visible_features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Visible Features",
+            "type": "array"
+          }
+        },
+        "required": [
+          "appearance_id",
+          "identity_id",
+          "name"
+        ],
+        "title": "AppearanceProfile",
+        "type": "object"
+      },
+      "ApprovalState": {
+        "enum": [
+          "draft",
+          "approved",
+          "rejected"
+        ],
+        "title": "ApprovalState",
+        "type": "string"
+      },
+      "AssetKind": {
+        "enum": [
+          "image",
+          "video",
+          "frame_sequence",
+          "mask",
+          "depth",
+          "mannequin_guide",
+          "project"
+        ],
+        "title": "AssetKind",
+        "type": "string"
+      },
+      "AssetRef": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "creation_operation_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Creation Operation Id"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duration Ms"
+          },
+          "frame_count": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Frame Count"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Height"
+          },
+          "immutable_source": {
+            "default": true,
+            "title": "Immutable Source",
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/AssetKind"
+          },
+          "parent_asset_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Parent Asset Ids",
+            "type": "array"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "storage_path": {
+            "minLength": 1,
+            "title": "Storage Path",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Width"
+          }
+        },
+        "required": [
+          "asset_id",
+          "kind",
+          "storage_path",
+          "sha256"
+        ],
+        "title": "AssetRef",
+        "type": "object"
+      },
+      "BoundaryPropagation": {
+        "enum": [
+          "local_repair",
+          "propagate_as_anchor"
+        ],
+        "title": "BoundaryPropagation",
+        "type": "string"
+      },
+      "Camera": {
+        "additionalProperties": false,
+        "properties": {
+          "crop": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Crop"
+          },
+          "focal_length_mm": {
+            "default": 50.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Focal Length Mm",
+            "type": "number"
+          },
+          "frame_height": {
+            "exclusiveMinimum": 0,
+            "title": "Frame Height",
+            "type": "integer"
+          },
+          "frame_width": {
+            "exclusiveMinimum": 0,
+            "title": "Frame Width",
+            "type": "integer"
+          },
+          "orientation": {
+            "$ref": "#/$defs/Quaternion",
+            "default": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "position": {
+            "$ref": "#/$defs/Vector3"
+          }
+        },
+        "required": [
+          "position",
+          "frame_width",
+          "frame_height"
+        ],
+        "title": "Camera",
+        "type": "object"
+      },
+      "CharacterIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/AdapterRef"
+            },
+            "title": "Adapter Refs",
+            "type": "array"
+          },
+          "character_sheet_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Character Sheet Ids",
+            "type": "array"
+          },
+          "face_refinement_settings": {
+            "additionalProperties": true,
+            "title": "Face Refinement Settings",
+            "type": "object"
+          },
+          "identity_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Identity Id",
+            "type": "string"
+          },
+          "identity_prompt": {
+            "minLength": 1,
+            "title": "Identity Prompt",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "permanent_features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Permanent Features",
+            "type": "array"
+          },
+          "stable_description": {
+            "default": "",
+            "title": "Stable Description",
+            "type": "string"
+          },
+          "trigger_text": {
+            "default": "",
+            "title": "Trigger Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity_id",
+          "name",
+          "identity_prompt"
+        ],
+        "title": "CharacterIdentity",
+        "type": "object"
+      },
+      "CharacterRegionAssignment": {
+        "additionalProperties": false,
+        "properties": {
+          "adapters": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/AdapterSelection"
+            },
+            "title": "Adapters",
+            "type": "array"
+          },
+          "appearance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Appearance Id",
+            "type": "string"
+          },
+          "identity_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Identity Id",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "negative_prompt": {
+            "default": "",
+            "title": "Negative Prompt",
+            "type": "string"
+          },
+          "pose_view_entry_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Pose View Entry Id",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          },
+          "rectangle": {
+            "$ref": "#/$defs/Rectangle"
+          },
+          "region_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Region Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "region_id",
+          "name",
+          "rectangle",
+          "identity_id",
+          "appearance_id",
+          "pose_view_entry_id"
+        ],
+        "title": "CharacterRegionAssignment",
+        "type": "object"
+      },
+      "CharacterSheet": {
+        "additionalProperties": false,
+        "properties": {
+          "appearance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Appearance Id",
+            "type": "string"
+          },
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/PoseViewEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "identity_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Identity Id",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "sheet_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Sheet Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sheet_id",
+          "name",
+          "identity_id",
+          "appearance_id"
+        ],
+        "title": "CharacterSheet",
+        "type": "object"
+      },
+      "ContactConstraint": {
+        "additionalProperties": false,
+        "properties": {
+          "instance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Instance Id",
+            "type": "string"
+          },
+          "joint_name": {
+            "minLength": 1,
+            "title": "Joint Name",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/$defs/Vector3"
+          }
+        },
+        "required": [
+          "instance_id",
+          "joint_name",
+          "target"
+        ],
+        "title": "ContactConstraint",
+        "type": "object"
+      },
+      "ContinuationPolicy": {
+        "enum": [
+          "authored_anchor",
+          "generated_last_frame",
+          "corrected_continuation",
+          "dual_boundary",
+          "overlap"
+        ],
+        "title": "ContinuationPolicy",
+        "type": "string"
+      },
+      "ExportPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "commands": {
+            "items": {
+              "$ref": "#/$defs/FfmpegCommand"
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "concat_manifest_entries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Concat Manifest Entries",
+            "type": "array"
+          },
+          "export_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Export Id",
+            "type": "string"
+          },
+          "fps_plans": {
+            "items": {
+              "$ref": "#/$defs/FpsConversionPlan"
+            },
+            "title": "Fps Plans",
+            "type": "array"
+          },
+          "output_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Output Fps",
+            "type": "number"
+          },
+          "output_path": {
+            "minLength": 1,
+            "title": "Output Path",
+            "type": "string"
+          },
+          "provenance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Provenance Id",
+            "type": "string"
+          },
+          "segment_inputs": {
+            "items": {
+              "$ref": "#/$defs/SegmentExportInput"
+            },
+            "title": "Segment Inputs",
+            "type": "array"
+          },
+          "stale_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stale Reason"
+          },
+          "state": {
+            "$ref": "#/$defs/ExportState",
+            "default": "planned"
+          }
+        },
+        "required": [
+          "export_id",
+          "output_path",
+          "output_fps",
+          "segment_inputs",
+          "fps_plans",
+          "commands",
+          "concat_manifest_entries",
+          "provenance_id"
+        ],
+        "title": "ExportPlan",
+        "type": "object"
+      },
+      "ExportState": {
+        "enum": [
+          "planned",
+          "running",
+          "complete",
+          "stale",
+          "error"
+        ],
+        "title": "ExportState",
+        "type": "string"
+      },
+      "FfmpegCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Arguments",
+            "type": "array"
+          },
+          "output_path": {
+            "minLength": 1,
+            "title": "Output Path",
+            "type": "string"
+          },
+          "stage": {
+            "minLength": 1,
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "arguments",
+          "output_path"
+        ],
+        "title": "FfmpegCommand",
+        "type": "object"
+      },
+      "FpsConversionPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_ms": {
+            "exclusiveMinimum": 0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "filter_expression": {
+            "title": "Filter Expression",
+            "type": "string"
+          },
+          "input_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Input Fps",
+            "type": "number"
+          },
+          "input_frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Input Frame Count",
+            "type": "integer"
+          },
+          "method": {
+            "default": "ffmpeg_fps_duplicate_drop",
+            "title": "Method",
+            "type": "string"
+          },
+          "output_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Output Fps",
+            "type": "number"
+          },
+          "output_frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Output Frame Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "duration_ms",
+          "input_fps",
+          "input_frame_count",
+          "output_fps",
+          "output_frame_count",
+          "filter_expression"
+        ],
+        "title": "FpsConversionPlan",
+        "type": "object"
+      },
+      "FrameEditOperation": {
+        "enum": [
+          "image_edit",
+          "regional_edit",
+          "face_refinement",
+          "mannequin_guided"
+        ],
+        "title": "FrameEditOperation",
+        "type": "string"
+      },
+      "FrameEditRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "adapters": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/AdapterSelection"
+            },
+            "title": "Adapters",
+            "type": "array"
+          },
+          "appearance_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Appearance Id"
+          },
+          "boundary_propagation": {
+            "$ref": "#/$defs/BoundaryPropagation",
+            "default": "local_repair"
+          },
+          "edit_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Edit Id",
+            "type": "string"
+          },
+          "frame_index": {
+            "minimum": 0,
+            "title": "Frame Index",
+            "type": "integer"
+          },
+          "identity_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Identity Id"
+          },
+          "mask_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mask Asset Id"
+          },
+          "operation_type": {
+            "$ref": "#/$defs/FrameEditOperation"
+          },
+          "original_frame_asset_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Original Frame Asset Id",
+            "type": "string"
+          },
+          "parent_edit_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Edit Id"
+          },
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          },
+          "provenance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Provenance Id",
+            "type": "string"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rectangle"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "replacement_frame_asset_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Replacement Frame Asset Id",
+            "type": "string"
+          },
+          "segment_revision_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Segment Revision Id",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "user_confirmed_face_region": {
+            "default": false,
+            "title": "User Confirmed Face Region",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "edit_id",
+          "segment_revision_id",
+          "original_frame_asset_id",
+          "replacement_frame_asset_id",
+          "frame_index",
+          "operation_type",
+          "provenance_id"
+        ],
+        "title": "FrameEditRecord",
+        "type": "object"
+      },
+      "FrameRounding": {
+        "enum": [
+          "nearest",
+          "floor",
+          "ceil"
+        ],
+        "title": "FrameRounding",
+        "type": "string"
+      },
+      "JointPose": {
+        "additionalProperties": false,
+        "properties": {
+          "joint_name": {
+            "minLength": 1,
+            "title": "Joint Name",
+            "type": "string"
+          },
+          "rotation": {
+            "$ref": "#/$defs/Quaternion",
+            "default": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          }
+        },
+        "required": [
+          "joint_name"
+        ],
+        "title": "JointPose",
+        "type": "object"
+      },
+      "Keyframe": {
+        "additionalProperties": false,
+        "properties": {
+          "approved": {
+            "default": false,
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "environment_prompt": {
+            "default": "",
+            "title": "Environment Prompt",
+            "type": "string"
+          },
+          "image_asset_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Image Asset Id",
+            "type": "string"
+          },
+          "keyframe_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Keyframe Id",
+            "type": "string"
+          },
+          "lighting_prompt": {
+            "default": "",
+            "title": "Lighting Prompt",
+            "type": "string"
+          },
+          "locked": {
+            "default": false,
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "mannequin_scene_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mannequin Scene Id"
+          },
+          "parent_keyframe_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Keyframe Id"
+          },
+          "provenance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Provenance Id",
+            "type": "string"
+          },
+          "region_assignments": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/CharacterRegionAssignment"
+            },
+            "title": "Region Assignments",
+            "type": "array"
+          },
+          "scene_prompt": {
+            "default": "",
+            "title": "Scene Prompt",
+            "type": "string"
+          },
+          "source_frame_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Frame Asset Id"
+          },
+          "source_type": {
+            "$ref": "#/$defs/KeyframeSource"
+          },
+          "time_ms": {
+            "minimum": 0,
+            "title": "Time Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "keyframe_id",
+          "time_ms",
+          "image_asset_id",
+          "source_type",
+          "provenance_id"
+        ],
+        "title": "Keyframe",
+        "type": "object"
+      },
+      "KeyframeSource": {
+        "enum": [
+          "imported",
+          "krea_generated",
+          "extracted_video",
+          "edited"
+        ],
+        "title": "KeyframeSource",
+        "type": "string"
+      },
+      "MannequinInstance": {
+        "additionalProperties": false,
+        "properties": {
+          "body_proportions": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Body Proportions",
+            "type": "object"
+          },
+          "character_region_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Character Region Id"
+          },
+          "instance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Instance Id",
+            "type": "string"
+          },
+          "joints": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/JointPose"
+            },
+            "title": "Joints",
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "skeleton_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Skeleton Id",
+            "type": "string"
+          },
+          "world_transform": {
+            "$ref": "#/$defs/Transform",
+            "default": {
+              "rotation": {
+                "w": 1.0,
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+              },
+              "translation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            }
+          }
+        },
+        "required": [
+          "instance_id",
+          "name",
+          "skeleton_id"
+        ],
+        "title": "MannequinInstance",
+        "type": "object"
+      },
+      "MannequinScene": {
+        "additionalProperties": false,
+        "properties": {
+          "camera": {
+            "$ref": "#/$defs/Camera"
+          },
+          "contact_constraints": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/ContactConstraint"
+            },
+            "title": "Contact Constraints",
+            "type": "array"
+          },
+          "guide_asset_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Guide Asset Ids",
+            "type": "array"
+          },
+          "imported_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Imported Asset Id"
+          },
+          "instances": {
+            "items": {
+              "$ref": "#/$defs/MannequinInstance"
+            },
+            "title": "Instances",
+            "type": "array"
+          },
+          "lights": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/SceneLight"
+            },
+            "title": "Lights",
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "prop_asset_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Prop Asset Ids",
+            "type": "array"
+          },
+          "scene_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "source_type": {
+            "$ref": "#/$defs/MannequinSource",
+            "default": "integrated"
+          }
+        },
+        "required": [
+          "scene_id",
+          "name",
+          "instances",
+          "camera"
+        ],
+        "title": "MannequinScene",
+        "type": "object"
+      },
+      "MannequinSource": {
+        "enum": [
+          "integrated",
+          "blender"
+        ],
+        "title": "MannequinSource",
+        "type": "string"
+      },
+      "PoseViewEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "appearance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Appearance Id",
+            "type": "string"
+          },
+          "approval_state": {
+            "$ref": "#/$defs/ApprovalState",
+            "default": "draft"
+          },
+          "entry_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "expression_label": {
+            "default": "",
+            "title": "Expression Label",
+            "type": "string"
+          },
+          "framing_label": {
+            "default": "",
+            "title": "Framing Label",
+            "type": "string"
+          },
+          "identity_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Identity Id",
+            "type": "string"
+          },
+          "image_asset_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Image Asset Id",
+            "type": "string"
+          },
+          "mannequin_scene_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mannequin Scene Id"
+          },
+          "mask_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mask Asset Id"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "parent_entry_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Entry Id"
+          },
+          "pose_label": {
+            "default": "",
+            "title": "Pose Label",
+            "type": "string"
+          },
+          "provenance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Provenance Id",
+            "type": "string"
+          },
+          "source_type": {
+            "$ref": "#/$defs/PoseViewSource"
+          },
+          "view_label": {
+            "default": "",
+            "title": "View Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "name",
+          "image_asset_id",
+          "identity_id",
+          "appearance_id",
+          "source_type",
+          "provenance_id"
+        ],
+        "title": "PoseViewEntry",
+        "type": "object"
+      },
+      "PoseViewSource": {
+        "enum": [
+          "imported",
+          "generated",
+          "edited",
+          "derived_style_copy"
+        ],
+        "title": "PoseViewSource",
+        "type": "string"
+      },
+      "ProjectSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_root": {
+            "default": "assets",
+            "title": "Asset Root",
+            "type": "string"
+          },
+          "default_continuation_policy": {
+            "$ref": "#/$defs/ContinuationPolicy",
+            "default": "authored_anchor"
+          },
+          "default_krea_backend_id": {
+            "default": "krea-comfyui",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Default Krea Backend Id",
+            "type": "string"
+          },
+          "default_krea_model_id": {
+            "default": "krea2",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Default Krea Model Id",
+            "type": "string"
+          },
+          "default_segment_duration_ms": {
+            "default": 5000,
+            "exclusiveMinimum": 0,
+            "title": "Default Segment Duration Ms",
+            "type": "integer"
+          },
+          "default_wan_backend_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Default Wan Backend Id",
+            "type": "string"
+          },
+          "default_wan_model_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Default Wan Model Id",
+            "type": "string"
+          },
+          "ffmpeg_executable": {
+            "default": "ffmpeg",
+            "title": "Ffmpeg Executable",
+            "type": "string"
+          },
+          "height": {
+            "default": 720,
+            "exclusiveMinimum": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "memory_policy": {
+            "default": "safe_16gb",
+            "title": "Memory Policy",
+            "type": "string"
+          },
+          "output_fps": {
+            "default": 24.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Output Fps",
+            "type": "number"
+          },
+          "width": {
+            "default": 1280,
+            "exclusiveMinimum": 0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "default_wan_backend_id",
+          "default_wan_model_id"
+        ],
+        "title": "ProjectSettings",
+        "type": "object"
+      },
+      "ProvenanceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "backend_id": {
+            "default": "",
+            "title": "Backend Id",
+            "type": "string"
+          },
+          "backend_version": {
+            "default": "",
+            "title": "Backend Version",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "input_asset_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Input Asset Ids",
+            "type": "array"
+          },
+          "model_hashes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Model Hashes",
+            "type": "object"
+          },
+          "model_identifiers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Model Identifiers",
+            "type": "array"
+          },
+          "operation": {
+            "minLength": 1,
+            "title": "Operation",
+            "type": "string"
+          },
+          "output_asset_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Output Asset Ids",
+            "type": "array"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
+          "parent_provenance_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Parent Provenance Ids",
+            "type": "array"
+          },
+          "prompts": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Prompts",
+            "type": "object"
+          },
+          "provenance_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Provenance Id",
+            "type": "string"
+          },
+          "runtime": {
+            "additionalProperties": true,
+            "title": "Runtime",
+            "type": "object"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Seed"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "provenance_id",
+          "operation",
+          "created_at"
+        ],
+        "title": "ProvenanceRecord",
+        "type": "object"
+      },
+      "Quaternion": {
+        "additionalProperties": false,
+        "properties": {
+          "w": {
+            "default": 1.0,
+            "title": "W",
+            "type": "number"
+          },
+          "x": {
+            "default": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "default": 0.0,
+            "title": "Y",
+            "type": "number"
+          },
+          "z": {
+            "default": 0.0,
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "title": "Quaternion",
+        "type": "object"
+      },
+      "Rectangle": {
+        "additionalProperties": false,
+        "properties": {
+          "x0": {
+            "minimum": 0.0,
+            "title": "X0",
+            "type": "number"
+          },
+          "x1": {
+            "exclusiveMinimum": 0.0,
+            "title": "X1",
+            "type": "number"
+          },
+          "y0": {
+            "minimum": 0.0,
+            "title": "Y0",
+            "type": "number"
+          },
+          "y1": {
+            "exclusiveMinimum": 0.0,
+            "title": "Y1",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x0",
+          "y0",
+          "x1",
+          "y1"
+        ],
+        "title": "Rectangle",
+        "type": "object"
+      },
+      "RevisionReviewState": {
+        "enum": [
+          "queued",
+          "generating",
+          "ready_for_review",
+          "modifying",
+          "approved",
+          "rejected",
+          "superseded",
+          "cancelled",
+          "error"
+        ],
+        "title": "RevisionReviewState",
+        "type": "string"
+      },
+      "SceneLight": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "default": "#ffffff",
+            "title": "Color",
+            "type": "string"
+          },
+          "intensity": {
+            "default": 1.0,
+            "minimum": 0.0,
+            "title": "Intensity",
+            "type": "number"
+          },
+          "kind": {
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "light_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Light Id",
+            "type": "string"
+          },
+          "transform": {
+            "$ref": "#/$defs/Transform",
+            "default": {
+              "rotation": {
+                "w": 1.0,
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+              },
+              "translation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            }
+          }
+        },
+        "required": [
+          "light_id",
+          "kind"
+        ],
+        "title": "SceneLight",
+        "type": "object"
+      },
+      "Segment": {
+        "additionalProperties": false,
+        "properties": {
+          "action_spec_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Action Spec Id"
+          },
+          "backend_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Backend Id",
+            "type": "string"
+          },
+          "character_identity_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Character Identity Ids",
+            "type": "array"
+          },
+          "continuation_policy": {
+            "$ref": "#/$defs/ContinuationPolicy"
+          },
+          "current_approved_revision_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Current Approved Revision Id"
+          },
+          "driving_video_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Driving Video Asset Id"
+          },
+          "end_keyframe_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End Keyframe Id"
+          },
+          "end_ms": {
+            "minimum": 0,
+            "title": "End Ms",
+            "type": "integer"
+          },
+          "mode": {
+            "$ref": "#/$defs/WanMode"
+          },
+          "model_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          },
+          "revision_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Revision Ids",
+            "type": "array"
+          },
+          "segment_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "stale_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stale Reason"
+          },
+          "start_keyframe_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Start Keyframe Id"
+          },
+          "start_ms": {
+            "minimum": 0,
+            "title": "Start Ms",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/$defs/SegmentState",
+            "default": "draft"
+          }
+        },
+        "required": [
+          "segment_id",
+          "start_ms",
+          "end_ms",
+          "mode",
+          "backend_id",
+          "model_id",
+          "continuation_policy"
+        ],
+        "title": "Segment",
+        "type": "object"
+      },
+      "SegmentExportInput": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_ms": {
+            "exclusiveMinimum": 0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Frame Count",
+            "type": "integer"
+          },
+          "generation_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Generation Fps",
+            "type": "number"
+          },
+          "revision_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "segment_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "source_path": {
+            "minLength": 1,
+            "title": "Source Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment_id",
+          "revision_id",
+          "source_path",
+          "duration_ms",
+          "generation_fps",
+          "frame_count"
+        ],
+        "title": "SegmentExportInput",
+        "type": "object"
+      },
+      "SegmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action_spec_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Action Spec Id"
+          },
+          "backend_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Backend Id",
+            "type": "string"
+          },
+          "character_identity_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Character Identity Ids",
+            "type": "array"
+          },
+          "driving_video_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Driving Video Asset Id"
+          },
+          "end_image_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End Image Asset Id"
+          },
+          "end_ms": {
+            "minimum": 0,
+            "title": "End Ms",
+            "type": "integer"
+          },
+          "frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Frame Count",
+            "type": "integer"
+          },
+          "frame_rounding": {
+            "$ref": "#/$defs/FrameRounding",
+            "default": "nearest"
+          },
+          "generation_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Generation Fps",
+            "type": "number"
+          },
+          "height": {
+            "exclusiveMinimum": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "mask_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mask Asset Id"
+          },
+          "mode": {
+            "$ref": "#/$defs/WanMode"
+          },
+          "model_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          },
+          "reference_character_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reference Character Asset Id"
+          },
+          "request_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "segment_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "source_video_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Video Asset Id"
+          },
+          "start_image_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Start Image Asset Id"
+          },
+          "start_ms": {
+            "minimum": 0,
+            "title": "Start Ms",
+            "type": "integer"
+          },
+          "width": {
+            "exclusiveMinimum": 0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_id",
+          "segment_id",
+          "mode",
+          "backend_id",
+          "model_id",
+          "start_ms",
+          "end_ms",
+          "width",
+          "height",
+          "generation_fps",
+          "frame_count"
+        ],
+        "title": "SegmentRequest",
+        "type": "object"
+      },
+      "SegmentRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "end_frame_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End Frame Asset Id"
+          },
+          "errors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "frame_asset_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Frame Asset Ids",
+            "type": "array"
+          },
+          "generation_metadata": {
+            "additionalProperties": true,
+            "title": "Generation Metadata",
+            "type": "object"
+          },
+          "parent_revision_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Revision Id"
+          },
+          "provenance_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Provenance Id"
+          },
+          "replacement_frame_map": {
+            "additionalProperties": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Replacement Frame Map",
+            "type": "object"
+          },
+          "resolved_parameters": {
+            "additionalProperties": true,
+            "title": "Resolved Parameters",
+            "type": "object"
+          },
+          "result_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Result Asset Id"
+          },
+          "review_state": {
+            "$ref": "#/$defs/RevisionReviewState",
+            "default": "queued"
+          },
+          "revision_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_number": {
+            "exclusiveMinimum": 0,
+            "title": "Revision Number",
+            "type": "integer"
+          },
+          "seed": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "segment_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "source_request": {
+            "$ref": "#/$defs/SegmentRequest"
+          },
+          "start_frame_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Start Frame Asset Id"
+          },
+          "superseded_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Superseded Reason"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision_id",
+          "segment_id",
+          "revision_number",
+          "source_request",
+          "seed"
+        ],
+        "title": "SegmentRevision",
+        "type": "object"
+      },
+      "SegmentState": {
+        "enum": [
+          "draft",
+          "queued",
+          "generating",
+          "ready_for_review",
+          "modifying",
+          "approved_locked",
+          "rejected",
+          "stale",
+          "cancelled",
+          "error"
+        ],
+        "title": "SegmentState",
+        "type": "string"
+      },
+      "Timeline": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_ms": {
+            "minimum": 0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "keyframe_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Keyframe Ids",
+            "type": "array"
+          },
+          "output_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Output Fps",
+            "type": "number"
+          },
+          "segment_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Segment Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "duration_ms",
+          "output_fps"
+        ],
+        "title": "Timeline",
+        "type": "object"
+      },
+      "Transform": {
+        "additionalProperties": false,
+        "properties": {
+          "rotation": {
+            "$ref": "#/$defs/Quaternion",
+            "default": {
+              "w": 1.0,
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          },
+          "scale": {
+            "$ref": "#/$defs/Vector3",
+            "default": {
+              "x": 1.0,
+              "y": 1.0,
+              "z": 1.0
+            }
+          },
+          "translation": {
+            "$ref": "#/$defs/Vector3",
+            "default": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          }
+        },
+        "title": "Transform",
+        "type": "object"
+      },
+      "Vector3": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "default": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "default": 0.0,
+            "title": "Y",
+            "type": "number"
+          },
+          "z": {
+            "default": 0.0,
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "title": "Vector3",
+        "type": "object"
+      },
+      "WanMode": {
+        "enum": [
+          "prompt",
+          "i2v",
+          "first_last",
+          "animate",
+          "replace"
+        ],
+        "title": "WanMode",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "actions": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ActionSpec"
+        },
+        "title": "Actions",
+        "type": "array"
+      },
+      "appearance_profiles": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/AppearanceProfile"
+        },
+        "title": "Appearance Profiles",
+        "type": "array"
+      },
+      "assets": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/AssetRef"
+        },
+        "title": "Assets",
+        "type": "array"
+      },
+      "character_sheets": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/CharacterSheet"
+        },
+        "title": "Character Sheets",
+        "type": "array"
+      },
+      "characters": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/CharacterIdentity"
+        },
+        "title": "Characters",
+        "type": "array"
+      },
+      "exports": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ExportPlan"
+        },
+        "title": "Exports",
+        "type": "array"
+      },
+      "frame_edit_records": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/FrameEditRecord"
+        },
+        "title": "Frame Edit Records",
+        "type": "array"
+      },
+      "generation_records": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ProvenanceRecord"
+        },
+        "title": "Generation Records",
+        "type": "array"
+      },
+      "keyframes": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/Keyframe"
+        },
+        "title": "Keyframes",
+        "type": "array"
+      },
+      "mannequin_scenes": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/MannequinScene"
+        },
+        "title": "Mannequin Scenes",
+        "type": "array"
+      },
+      "project_id": {
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "title": "Project Id",
+        "type": "string"
+      },
+      "project_settings": {
+        "$ref": "#/$defs/ProjectSettings"
+      },
+      "schema_version": {
+        "default": 1,
+        "title": "Schema Version",
+        "type": "integer"
+      },
+      "segment_revisions": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/SegmentRevision"
+        },
+        "title": "Segment Revisions",
+        "type": "array"
+      },
+      "segments": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/Segment"
+        },
+        "title": "Segments",
+        "type": "array"
+      },
+      "timeline": {
+        "$ref": "#/$defs/Timeline"
+      }
+    },
+    "required": [
+      "project_id",
+      "project_settings",
+      "timeline"
+    ],
+    "title": "Wan2LabProject",
+    "type": "object"
+  },
+  "segment_request": {
+    "$defs": {
+      "FrameRounding": {
+        "enum": [
+          "nearest",
+          "floor",
+          "ceil"
+        ],
+        "title": "FrameRounding",
+        "type": "string"
+      },
+      "WanMode": {
+        "enum": [
+          "prompt",
+          "i2v",
+          "first_last",
+          "animate",
+          "replace"
+        ],
+        "title": "WanMode",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "action_spec_id": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Action Spec Id"
+      },
+      "backend_id": {
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "title": "Backend Id",
+        "type": "string"
+      },
+      "character_identity_ids": {
+        "default": [],
+        "items": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "type": "string"
+        },
+        "title": "Character Identity Ids",
+        "type": "array"
+      },
+      "driving_video_asset_id": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Driving Video Asset Id"
+      },
+      "end_image_asset_id": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "End Image Asset Id"
+      },
+      "end_ms": {
+        "minimum": 0,
+        "title": "End Ms",
+        "type": "integer"
+      },
+      "frame_count": {
+        "exclusiveMinimum": 0,
+        "title": "Frame Count",
+        "type": "integer"
+      },
+      "frame_rounding": {
+        "$ref": "#/$defs/FrameRounding",
+        "default": "nearest"
+      },
+      "generation_fps": {
+        "exclusiveMinimum": 0.0,
+        "title": "Generation Fps",
+        "type": "number"
+      },
+      "height": {
+        "exclusiveMinimum": 0,
+        "title": "Height",
+        "type": "integer"
+      },
+      "mask_asset_id": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Mask Asset Id"
+      },
+      "mode": {
+        "$ref": "#/$defs/WanMode"
+      },
+      "model_id": {
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "title": "Model Id",
+        "type": "string"
+      },
+      "parameters": {
+        "additionalProperties": true,
+        "title": "Parameters",
+        "type": "object"
+      },
+      "prompt": {
+        "default": "",
+        "title": "Prompt",
+        "type": "string"
+      },
+      "reference_character_asset_id": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Reference Character Asset Id"
+      },
+      "request_id": {
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "title": "Request Id",
+        "type": "string"
+      },
+      "segment_id": {
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "title": "Segment Id",
+        "type": "string"
+      },
+      "source_video_asset_id": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source Video Asset Id"
+      },
+      "start_image_asset_id": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Start Image Asset Id"
+      },
+      "start_ms": {
+        "minimum": 0,
+        "title": "Start Ms",
+        "type": "integer"
+      },
+      "width": {
+        "exclusiveMinimum": 0,
+        "title": "Width",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "request_id",
+      "segment_id",
+      "mode",
+      "backend_id",
+      "model_id",
+      "start_ms",
+      "end_ms",
+      "width",
+      "height",
+      "generation_fps",
+      "frame_count"
+    ],
+    "title": "SegmentRequest",
+    "type": "object"
+  },
+  "worker_request": {
+    "$defs": {
+      "CancelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "job_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "cancel",
+            "default": "cancel",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "job_id"
+        ],
+        "title": "CancelRequest",
+        "type": "object"
+      },
+      "DiscoverModelsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "backend_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Backend Id",
+            "type": "string"
+          },
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "discover_wan_models",
+            "default": "discover_wan_models",
+            "title": "Kind",
+            "type": "string"
+          },
+          "search_roots": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Search Roots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "command_id",
+          "backend_id",
+          "search_roots"
+        ],
+        "title": "DiscoverModelsRequest",
+        "type": "object"
+      },
+      "FrameRounding": {
+        "enum": [
+          "nearest",
+          "floor",
+          "ceil"
+        ],
+        "title": "FrameRounding",
+        "type": "string"
+      },
+      "GenerateSegmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "job_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "generate_wan_segment",
+            "default": "generate_wan_segment",
+            "title": "Kind",
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/$defs/SegmentRequest"
+          }
+        },
+        "required": [
+          "command_id",
+          "job_id",
+          "request"
+        ],
+        "title": "GenerateSegmentRequest",
+        "type": "object"
+      },
+      "InspectCapabilitiesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "backend_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Backend Id",
+            "type": "string"
+          },
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "inspect_wan_capabilities",
+            "default": "inspect_wan_capabilities",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "backend_id"
+        ],
+        "title": "InspectCapabilitiesRequest",
+        "type": "object"
+      },
+      "LoadModelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "backend_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Backend Id",
+            "type": "string"
+          },
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "load_wan_model",
+            "default": "load_wan_model",
+            "title": "Kind",
+            "type": "string"
+          },
+          "model_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "offload_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Offload Mode"
+          },
+          "precision": {
+            "title": "Precision",
+            "type": "string"
+          },
+          "quantization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Quantization"
+          }
+        },
+        "required": [
+          "command_id",
+          "backend_id",
+          "model_id",
+          "precision"
+        ],
+        "title": "LoadModelRequest",
+        "type": "object"
+      },
+      "ReleaseAllModelsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "release_all_models",
+            "default": "release_all_models",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id"
+        ],
+        "title": "ReleaseAllModelsRequest",
+        "type": "object"
+      },
+      "ReleaseWanModelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "backend_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Backend Id"
+          },
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "release_wan_model",
+            "default": "release_wan_model",
+            "title": "Kind",
+            "type": "string"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Model Id"
+          }
+        },
+        "required": [
+          "command_id"
+        ],
+        "title": "ReleaseWanModelRequest",
+        "type": "object"
+      },
+      "RuntimeStatusRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "runtime_status",
+            "default": "runtime_status",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id"
+        ],
+        "title": "RuntimeStatusRequest",
+        "type": "object"
+      },
+      "SegmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action_spec_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Action Spec Id"
+          },
+          "backend_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Backend Id",
+            "type": "string"
+          },
+          "character_identity_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Character Identity Ids",
+            "type": "array"
+          },
+          "driving_video_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Driving Video Asset Id"
+          },
+          "end_image_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End Image Asset Id"
+          },
+          "end_ms": {
+            "minimum": 0,
+            "title": "End Ms",
+            "type": "integer"
+          },
+          "frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Frame Count",
+            "type": "integer"
+          },
+          "frame_rounding": {
+            "$ref": "#/$defs/FrameRounding",
+            "default": "nearest"
+          },
+          "generation_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Generation Fps",
+            "type": "number"
+          },
+          "height": {
+            "exclusiveMinimum": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "mask_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mask Asset Id"
+          },
+          "mode": {
+            "$ref": "#/$defs/WanMode"
+          },
+          "model_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          },
+          "reference_character_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reference Character Asset Id"
+          },
+          "request_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "segment_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "source_video_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Video Asset Id"
+          },
+          "start_image_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Start Image Asset Id"
+          },
+          "start_ms": {
+            "minimum": 0,
+            "title": "Start Ms",
+            "type": "integer"
+          },
+          "width": {
+            "exclusiveMinimum": 0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_id",
+          "segment_id",
+          "mode",
+          "backend_id",
+          "model_id",
+          "start_ms",
+          "end_ms",
+          "width",
+          "height",
+          "generation_fps",
+          "frame_count"
+        ],
+        "title": "SegmentRequest",
+        "type": "object"
+      },
+      "WanMode": {
+        "enum": [
+          "prompt",
+          "i2v",
+          "first_last",
+          "animate",
+          "replace"
+        ],
+        "title": "WanMode",
+        "type": "string"
+      }
+    },
+    "discriminator": {
+      "mapping": {
+        "cancel": "#/$defs/CancelRequest",
+        "discover_wan_models": "#/$defs/DiscoverModelsRequest",
+        "generate_wan_segment": "#/$defs/GenerateSegmentRequest",
+        "inspect_wan_capabilities": "#/$defs/InspectCapabilitiesRequest",
+        "load_wan_model": "#/$defs/LoadModelRequest",
+        "release_all_models": "#/$defs/ReleaseAllModelsRequest",
+        "release_wan_model": "#/$defs/ReleaseWanModelRequest",
+        "runtime_status": "#/$defs/RuntimeStatusRequest"
+      },
+      "propertyName": "kind"
+    },
+    "oneOf": [
+      {
+        "$ref": "#/$defs/InspectCapabilitiesRequest"
+      },
+      {
+        "$ref": "#/$defs/DiscoverModelsRequest"
+      },
+      {
+        "$ref": "#/$defs/LoadModelRequest"
+      },
+      {
+        "$ref": "#/$defs/GenerateSegmentRequest"
+      },
+      {
+        "$ref": "#/$defs/CancelRequest"
+      },
+      {
+        "$ref": "#/$defs/ReleaseWanModelRequest"
+      },
+      {
+        "$ref": "#/$defs/ReleaseAllModelsRequest"
+      },
+      {
+        "$ref": "#/$defs/RuntimeStatusRequest"
+      }
+    ]
+  }
+}

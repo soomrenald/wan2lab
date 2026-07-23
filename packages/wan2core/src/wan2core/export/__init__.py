@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import PurePosixPath
 
 from pydantic import Field, model_validator
@@ -32,6 +33,14 @@ class FfmpegCommand(DomainModel):
         return self
 
 
+class ExportState(StrEnum):
+    PLANNED = "planned"
+    RUNNING = "running"
+    COMPLETE = "complete"
+    STALE = "stale"
+    ERROR = "error"
+
+
 class ExportPlan(DomainModel):
     export_id: Identifier
     output_path: str = Field(min_length=1)
@@ -41,6 +50,14 @@ class ExportPlan(DomainModel):
     commands: tuple[FfmpegCommand, ...]
     concat_manifest_entries: tuple[str, ...]
     provenance_id: Identifier
+    state: ExportState = ExportState.PLANNED
+    stale_reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_state(self) -> "ExportPlan":
+        if self.state is ExportState.STALE and not self.stale_reason:
+            raise ValueError("stale export requires a reason")
+        return self
 
 
 def build_export_plan(
@@ -152,8 +169,8 @@ def build_export_plan(
 
 __all__ = [
     "ExportPlan",
+    "ExportState",
     "FfmpegCommand",
     "SegmentExportInput",
     "build_export_plan",
 ]
-
