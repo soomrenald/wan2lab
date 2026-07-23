@@ -51,8 +51,14 @@ class ComfyUIClient:
     def history(self, prompt_id: str) -> dict[str, object]:
         return self._json("GET", f"/history/{quote(prompt_id, safe='')}")
 
+    def queue(self) -> dict[str, object]:
+        return self._json("GET", "/queue")
+
     def interrupt(self) -> dict[str, object]:
         return self._json("POST", "/interrupt", {})
+
+    def free_models(self) -> dict[str, object]:
+        return self._json("POST", "/free", {"unload_models": True, "free_memory": True})
 
     def _json(
         self,

@@ -63,6 +63,7 @@ class SegmentRequest(DomainModel):
     source_video_asset_id: Identifier | None = None
     mask_asset_id: Identifier | None = None
     prompt: str = ""
+    negative_prompt: str = ""
     action_spec_id: Identifier | None = None
     character_identity_ids: tuple[Identifier, ...] = ()
     parameters: dict[str, object] = Field(default_factory=dict)
@@ -182,4 +183,3 @@ __all__ = [
     "SegmentRevision",
     "SegmentState",
 ]
-
