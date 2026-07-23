@@ -1107,6 +1107,49 @@ class DesktopControllerTests(unittest.TestCase):
         )
         self.assertIn("at most 1 reference character", controller.status)
 
+    def test_model_load_rejects_unsupported_project_canvas_before_worker_command(self) -> None:
+        controller = DesktopController()
+        controller._inspected_capabilities = default_mock_capabilities()  # noqa: SLF001
+        settings = controller.session.project.project_settings.model_copy(
+            update={"width": 640, "height": 480}
+        )
+        controller.session.project = controller.session.project.model_copy(
+            update={"project_settings": settings}
+        )
+        controller._wan_worker.send = Mock()  # type: ignore[method-assign]  # noqa: SLF001
+
+        controller.loadLocalWanModel(0, "vae", "text", "mock", "", "")
+
+        controller._wan_worker.send.assert_not_called()  # type: ignore[union-attr]  # noqa: SLF001
+        self.assertIn("project canvas 640x480 is unsupported", controller.status)
+
+    def test_model_control_options_follow_inspected_accelerator_capabilities(self) -> None:
+        controller = DesktopController()
+        capabilities = default_mock_capabilities()
+        controller._inspected_capabilities = capabilities  # noqa: SLF001
+
+        controller.selectWanModel(0)
+
+        self.assertEqual(controller.wanPrecisionOptions, ["mock"])
+        self.assertEqual(controller.wanQuantizationOptions, [])
+        self.assertIn("cpu", controller.wanModelCompatibility)
+        self.assertIn("1280x720", controller.wanModelCompatibility)
+
+    def test_export_rejects_missing_ffmpeg_before_starting_runner(self) -> None:
+        controller = DesktopController()
+        settings = controller.session.project.project_settings.model_copy(
+            update={"ffmpeg_executable": "wan2lab-definitely-missing-ffmpeg"}
+        )
+        controller.session.project = controller.session.project.model_copy(
+            update={"project_settings": settings}
+        )
+        controller._export_runner.start = Mock()  # type: ignore[method-assign]  # noqa: SLF001
+
+        controller.exportApprovedVideo(QUrl.fromLocalFile("/tmp/output.mp4"))
+
+        controller._export_runner.start.assert_not_called()  # type: ignore[union-attr]  # noqa: SLF001
+        self.assertIn("configured FFmpeg executable was not found", controller.status)
+
     def test_explicit_discovered_components_are_sent_to_isolated_worker(self) -> None:
         controller = DesktopController()
         controller._wan_worker.send = Mock()  # type: ignore[method-assign]  # noqa: SLF001

@@ -99,6 +99,35 @@ class WorkerClient:
 
 
 class WorkerServiceTests(unittest.TestCase):
+    def test_model_load_rejects_missing_gpu_before_materialization(self) -> None:
+        class CpuWorkerClient(WorkerClient):
+            def system_stats(self):
+                return {"devices": [{"name": "CPU", "type": "cpu"}]}
+
+        service = ComfyWorkerService(CpuWorkerClient(), poll_interval_seconds=0)
+        service.inspect("inspect")
+        assert service.capabilities is not None
+        prompt_model = model_id(
+            type("BuilderView", (), {"capabilities": service.capabilities})(),
+            "t2v",
+        )
+
+        with self.assertRaisesRegex(ValueError, "requires a detected CUDA or ROCm"):
+            service.load(
+                LoadModelRequest(
+                    command_id="load",
+                    backend_id=BACKEND_ID,
+                    model_id=prompt_model,
+                    precision="fp32",
+                    quantization="disabled",
+                    offload_mode="offload_device",
+                    component_model_ids={
+                        "vae": "wan_2.1_vae.safetensors",
+                        "text_encoder": "umt5_xxl_fp16.safetensors",
+                    },
+                )
+            )
+
     def test_runtime_oom_releases_resident_model_for_recovery(self) -> None:
         client = WorkerClient(fail_with_oom=True)
         service = ComfyWorkerService(client, poll_interval_seconds=0)

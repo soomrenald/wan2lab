@@ -36,6 +36,16 @@ class WanStudioSession:
         self.segment_plan: SegmentPlan | None = project.segment_plan
 
     def plan(self, capabilities: BackendCapabilities, *, model_id: str) -> SegmentPlan:
+        model = capabilities.model(model_id)
+        settings = self.project.project_settings
+        if not model.supports_resolution(settings.width, settings.height):
+            supported = ", ".join(
+                f"{item.width}x{item.height}" for item in model.supported_resolutions
+            )
+            raise ValueError(
+                f"project canvas {settings.width}x{settings.height} is unsupported by "
+                f"{model.display_name}; supported resolutions: {supported}"
+            )
         plan = plan_segments(
             self.project.timeline,
             self.project.keyframes,
@@ -547,7 +557,7 @@ class WanStudioSession:
             if segment.end_keyframe_id is not None
             else None
         )
-        return SegmentRequest(
+        request = SegmentRequest(
             request_id=f"{segment.segment_id}-request-{len(segment.revision_ids) + 1}",
             segment_id=segment.segment_id,
             mode=segment.mode,
@@ -573,6 +583,50 @@ class WanStudioSession:
             character_identity_ids=segment.character_identity_ids,
             parameters=segment.parameters,
         )
+        self._validate_request_assets(request)
+        return request
+
+    def _validate_request_assets(self, request: SegmentRequest) -> None:
+        assets = {item.asset_id: item for item in self.project.assets}
+        expected_kinds = {
+            "start_image_asset_id": {
+                AssetKind.IMAGE,
+                AssetKind.DEPTH,
+                AssetKind.MANNEQUIN_GUIDE,
+            },
+            "end_image_asset_id": {
+                AssetKind.IMAGE,
+                AssetKind.DEPTH,
+                AssetKind.MANNEQUIN_GUIDE,
+            },
+            "reference_character_asset_id": {AssetKind.IMAGE},
+            "driving_video_asset_id": {AssetKind.VIDEO},
+            "source_video_asset_id": {AssetKind.VIDEO},
+            "mask_asset_id": {AssetKind.IMAGE, AssetKind.MASK},
+        }
+        for field_name, kinds in expected_kinds.items():
+            asset_id = getattr(request, field_name)
+            if asset_id is None:
+                continue
+            asset = assets.get(asset_id)
+            if asset is None:
+                raise ValueError(
+                    f"{request.segment_id} {field_name} references missing asset {asset_id}"
+                )
+            if asset.kind not in kinds:
+                expected = ", ".join(sorted(item.value for item in kinds))
+                raise ValueError(
+                    f"{request.segment_id} {field_name} requires {expected}, "
+                    f"not {asset.kind.value}"
+                )
+            if field_name in {"start_image_asset_id", "end_image_asset_id"} and (
+                asset.width != request.width or asset.height != request.height
+            ):
+                raise ValueError(
+                    f"{request.segment_id} {field_name} asset {asset_id} is "
+                    f"{asset.width}x{asset.height}, but generation requires "
+                    f"{request.width}x{request.height}; resize or replace the boundary image"
+                )
 
     def _previous_boundary_asset(self, segment: Segment) -> str | None:
         previous = next(

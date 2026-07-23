@@ -7,6 +7,7 @@ import json
 import math
 import mimetypes
 from pathlib import Path
+import shutil
 import tempfile
 from uuid import uuid4
 
@@ -197,6 +198,7 @@ class DesktopController(QObject):
         self._backend_status = "Local ComfyUI backend not inspected"
         self._backend_models: list[str] = []
         self._backend_model_descriptors: list[dict[str, object]] = []
+        self._wan_model_control_index = 0
         self._backend_parameters: list[str] = []
         self._backend_parameter_descriptors: list[dict[str, object]] = []
         self._backend_vae_models: list[str] = []
@@ -849,6 +851,43 @@ class DesktopController(QObject):
     def backendParameters(self) -> list[str]:  # noqa: N802
         return list(self._backend_parameters)
 
+    def _wan_model_control(self):
+        capabilities = self._inspected_capabilities
+        if capabilities is None or not capabilities.model_variants:
+            return None
+        index = min(self._wan_model_control_index, len(capabilities.model_variants) - 1)
+        return capabilities.model_variants[index]
+
+    @Property("QStringList", notify=projectChanged)
+    def wanPrecisionOptions(self) -> list[str]:  # noqa: N802
+        model = self._wan_model_control()
+        return list(model.supported_precisions) if model is not None else []
+
+    @Property("QStringList", notify=projectChanged)
+    def wanQuantizationOptions(self) -> list[str]:  # noqa: N802
+        model = self._wan_model_control()
+        return list(model.supported_quantizations) if model is not None else []
+
+    @Property("QStringList", notify=projectChanged)
+    def wanOffloadOptions(self) -> list[str]:  # noqa: N802
+        model = self._wan_model_control()
+        return list(model.supported_offload_modes) if model is not None else []
+
+    @Property(str, notify=projectChanged)
+    def wanModelCompatibility(self) -> str:  # noqa: N802
+        model = self._wan_model_control()
+        if model is None or self._inspected_capabilities is None:
+            return "Inspect the backend to see hardware-specific model controls."
+        accelerator = ", ".join(sorted(self._inspected_capabilities.accelerator_vendors))
+        resolutions = ", ".join(
+            f"{item.width}x{item.height}" for item in model.supported_resolutions
+        )
+        return (
+            f"{accelerator or 'unknown accelerator'} · "
+            f"{'/'.join(sorted(item.value for item in model.supported_modes))} · "
+            f"{resolutions}"
+        )
+
     @Property("QVariantList", notify=projectChanged)
     def backendParameterDescriptors(self) -> list[dict[str, object]]:  # noqa: N802
         segment = self._selected_segment()
@@ -1141,6 +1180,15 @@ class DesktopController(QObject):
             return
         try:
             model = self._inspected_capabilities.model_variants[model_index]
+            settings = self._session.project.project_settings
+            if not model.supports_resolution(settings.width, settings.height):
+                supported = ", ".join(
+                    f"{item.width}x{item.height}" for item in model.supported_resolutions
+                )
+                raise ValueError(
+                    f"project canvas {settings.width}x{settings.height} is unsupported; "
+                    f"choose one of {supported}"
+                )
             if vae not in self._backend_vae_models:
                 raise ValueError("select an installed Wan VAE")
             if text_encoder not in self._backend_text_encoder_models:
@@ -1170,6 +1218,19 @@ class DesktopController(QObject):
             self._krea_loaded = False
         self._wan_worker.send(request)
         self._set_status(f"Loading {model.display_name} through the isolated worker…")
+
+    @Slot(int)
+    def selectWanModel(self, model_index: int) -> None:  # noqa: N802
+        if (
+            self._inspected_capabilities is None
+            or not 0 <= model_index < len(self._inspected_capabilities.model_variants)
+        ):
+            self._set_status("Select a discovered Wan model")
+            return
+        self._wan_model_control_index = model_index
+        model = self._inspected_capabilities.model_variants[model_index]
+        self._set_status(f"Selected {model.display_name}; compatible controls updated")
+        self.projectChanged.emit()
 
     @Slot()
     def closeWorker(self) -> None:  # noqa: N802
@@ -4031,6 +4092,13 @@ class DesktopController(QObject):
         if not output.suffix:
             output = output.with_suffix(".mp4")
         try:
+            ffmpeg_executable = (
+                self._session.project.project_settings.ffmpeg_executable
+            )
+            if shutil.which(ffmpeg_executable) is None:
+                raise FileNotFoundError(
+                    f"configured FFmpeg executable was not found: {ffmpeg_executable}"
+                )
             revisions = {item.revision_id: item for item in self._session.project.segment_revisions}
             source_paths = {}
             for segment in self._session.project.segments:
@@ -4053,7 +4121,7 @@ class DesktopController(QObject):
                 source_paths=source_paths,
                 output_path=str(output),
                 output_fps=self.outputFps,
-                ffmpeg_executable=self._session.project.project_settings.ffmpeg_executable,
+                ffmpeg_executable=ffmpeg_executable,
                 work_directory=str(output.parent / f".{output.stem}-wan2lab-work"),
                 provenance_id=f"provenance-{uuid4().hex}",
             )
@@ -4259,6 +4327,7 @@ class DesktopController(QObject):
             self._backend_model_descriptors = [
                 dict(item) for item in models if isinstance(item, dict)
             ]
+            self._wan_model_control_index = 0
             self._backend_models = [
                 str(item.get("display_name", item.get("model_id", "unknown")))
                 for item in models

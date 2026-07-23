@@ -94,6 +94,14 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
             frozenset({WanMode.ANIMATE}),
         )
         self.assertEqual(len(by_name["wan2.2_t2v_1.3B_fp16.safetensors"].supported_resolutions), 2)
+        self.assertEqual(
+            by_name["wan2.2_t2v_1.3B_fp16.safetensors"].supported_precisions,
+            ("bf16", "fp16", "fp32"),
+        )
+        self.assertEqual(
+            by_name["wan2.2_t2v_1.3B_fp16.safetensors"].supported_quantizations,
+            ("disabled",),
+        )
         parameters = {item.key: item for item in capabilities.parameter_descriptors}
         self.assertEqual(parameters["steps"].group, ParameterGroup.COMMON)
         self.assertEqual(parameters["shift"].group, ParameterGroup.ADVANCED)

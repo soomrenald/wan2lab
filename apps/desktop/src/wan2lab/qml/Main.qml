@@ -894,6 +894,7 @@ ApplicationWindow {
                     model: studio.backendModels
                     enabled: count > 0
                     displayText: count > 0 ? currentText : "Wan model"
+                    onActivated: studio.selectWanModel(index)
                 }
                 ComboBox {
                     id: wanVae
@@ -913,23 +914,31 @@ ApplicationWindow {
                     ComboBox {
                         id: wanPrecision
                         Layout.fillWidth: true
-                        model: ["bf16", "fp16", "fp32", "fp16_fast"]
+                        model: studio.wanPrecisionOptions
+                        displayText: count > 0 ? currentText : "No compatible precision"
                     }
                     ComboBox {
                         id: wanQuantization
                         Layout.fillWidth: true
-                        model: ["disabled", "fp8_e4m3fn", "fp8_e4m3fn_scaled", "fp8_e5m2"]
+                        model: studio.wanQuantizationOptions
+                        displayText: count > 0 ? currentText : "No compatible quantization"
                     }
                 }
                 RowLayout {
                     ComboBox {
                         id: wanOffload
                         Layout.fillWidth: true
-                        model: ["offload_device", "main_device"]
+                        model: studio.wanOffloadOptions
+                        displayText: count > 0 ? currentText : "No compatible offload mode"
                     }
                     Button {
                         text: "Load"
-                        enabled: wanModel.count > 0 && wanVae.count > 0 && wanTextEncoder.count > 0
+                        enabled: wanModel.count > 0
+                            && wanVae.count > 0
+                            && wanTextEncoder.count > 0
+                            && wanPrecision.count > 0
+                            && wanQuantization.count > 0
+                            && wanOffload.count > 0
                         onClicked: studio.loadLocalWanModel(
                             wanModel.currentIndex,
                             wanVae.currentText,
@@ -939,6 +948,12 @@ ApplicationWindow {
                             wanOffload.currentText
                         )
                     }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: studio.wanModelCompatibility
+                    color: "#8f9bb0"
                 }
                 Item { Layout.fillHeight: true }
                 }

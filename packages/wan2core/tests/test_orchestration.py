@@ -18,6 +18,61 @@ from wan2core.workers import WorkerResult
 
 
 class OrchestrationTests(unittest.TestCase):
+    def test_planning_rejects_a_canvas_unsupported_by_the_selected_model(self) -> None:
+        project = Wan2LabProject(
+            project_id="project-resolution",
+            project_settings=ProjectSettings(
+                width=640,
+                height=480,
+                default_wan_backend_id="mock-wan",
+                default_wan_model_id="wan-test",
+            ),
+            timeline=Timeline(duration_ms=5_000, output_fps=24.0),
+        )
+
+        with self.assertRaisesRegex(ValueError, "project canvas 640x480 is unsupported"):
+            WanStudioSession(project).plan(
+                default_mock_capabilities(),
+                model_id="wan-test",
+            )
+
+    def test_generation_rejects_mismatched_boundary_dimensions_before_queueing(self) -> None:
+        project = Wan2LabProject(
+            project_id="project-boundary-size",
+            project_settings=ProjectSettings(
+                default_wan_backend_id="mock-wan",
+                default_wan_model_id="wan-test",
+            ),
+            timeline=Timeline(duration_ms=5_000, output_fps=24.0),
+        )
+        session = WanStudioSession(project)
+        session.plan(default_mock_capabilities(), model_id="wan-test")
+        boundary = AssetRef(
+            asset_id="small-boundary",
+            kind=AssetKind.IMAGE,
+            storage_path="objects/small.png",
+            sha256="a" * 64,
+            width=640,
+            height=480,
+        )
+        segment = session.project.segments[0].model_copy(
+            update={
+                "mode": WanMode.I2V,
+                "start_image_asset_id": boundary.asset_id,
+            }
+        )
+        session.project = Wan2LabProject.model_validate(
+            session.project.model_copy(
+                update={"assets": (boundary,), "segments": (segment,)}
+            ).model_dump()
+        )
+
+        with self.assertRaisesRegex(ValueError, "resize or replace the boundary image"):
+            session.queue_next_generation(seed=1)
+
+        self.assertEqual(session.project.segments[0].state, SegmentState.DRAFT)
+        self.assertEqual(session.project.segment_revisions, ())
+
     def test_persisted_segment_plan_resumes_generation_after_reload(self) -> None:
         project = Wan2LabProject(
             project_id="project-resume",

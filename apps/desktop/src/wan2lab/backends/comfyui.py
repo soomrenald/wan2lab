@@ -141,8 +141,14 @@ def inspect_comfyui_wan(
     model_loader_info = _node(object_info, nodes.model_loader)
     model_names = tuple(str(item) for item in _choices(model_loader_info, "model"))
     descriptors = _workflow_descriptors(object_info, frozenset(executable_modes), nodes)
+    detected_accelerator = accelerator_vendor(system_stats)
     variants = tuple(
-        _model_capabilities(name, executable_modes, descriptors)
+        _model_capabilities(
+            name,
+            executable_modes,
+            descriptors,
+            accelerator=detected_accelerator,
+        )
         for name in model_names
         if _modes_for_model(name, executable_modes)
     )
@@ -163,7 +169,7 @@ def inspect_comfyui_wan(
     return BackendCapabilities(
         backend_id=BACKEND_ID,
         backend_version=backend_version,
-        accelerator_vendors=frozenset({accelerator_vendor(system_stats)}),
+        accelerator_vendors=frozenset({detected_accelerator}),
         model_variants=variants,
         runtime_features=frozenset(runtime_features),
         parameter_descriptors=descriptors,
@@ -176,6 +182,8 @@ def _model_capabilities(
     filename: str,
     wrapper_modes: set[WanMode],
     descriptors: tuple[ParameterDescriptor, ...],
+    *,
+    accelerator: str,
 ) -> ModelVariantCapabilities:
     modes = _modes_for_model(filename, wrapper_modes)
     model_id = "wan-" + re.sub(r"[^A-Za-z0-9._:-]+", "-", filename).strip("-")
@@ -213,10 +221,16 @@ def _model_capabilities(
         max_frame_count=1001,
         default_generation_fps=16.0,
         supported_generation_fps=(16.0, 24.0),
-        supported_precisions=("bf16", "fp16", "fp32", "fp16_fast"),
+        supported_precisions=(
+            ("bf16", "fp16", "fp32", "fp16_fast")
+            if accelerator == "cuda"
+            else ("bf16", "fp16", "fp32")
+            if accelerator == "rocm"
+            else ("fp32",)
+        ),
         supported_quantizations=(
             ("disabled",)
-            if filename.casefold().endswith(".gguf")
+            if filename.casefold().endswith(".gguf") or accelerator != "cuda"
             else (
                 "disabled",
                 "fp8_e4m3fn",

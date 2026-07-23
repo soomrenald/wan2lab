@@ -119,6 +119,11 @@ class ComfyWorkerService:
         assert self.capabilities is not None
         if request.backend_id != BACKEND_ID:
             raise ValueError("load request targets a different backend")
+        vendor = accelerator_vendor(self.system_stats)
+        if vendor not in {"cuda", "rocm"}:
+            raise ValueError(
+                "the ComfyUI Wan backend requires a detected CUDA or ROCm accelerator"
+            )
         model = self.capabilities.model(request.model_id)
         if request.precision not in model.supported_precisions:
             raise ValueError("selected precision is unsupported")
