@@ -78,6 +78,9 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(failed.review_state, RevisionReviewState.ERROR)
         self.assertEqual(session.project.segments[0].state, SegmentState.ERROR)
         self.assertEqual(failed.parent_revision_id, revision.revision_id)
+        _job_id, retried = session.queue_rejected_generation(seed=11)
+        self.assertEqual(retried.parent_revision_id, failed.revision_id)
+        self.assertEqual(retried.review_state, RevisionReviewState.GENERATING)
 
     def test_mock_end_to_end_stops_at_every_review_gate(self) -> None:
         project = Wan2LabProject(

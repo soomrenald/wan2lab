@@ -138,6 +138,37 @@ class LocalAssetStore:
         )
 
 
+class LocalComfyAssetBridge:
+    """Stages immutable project inputs and resolves typed local ComfyUI outputs."""
+
+    def __init__(self, input_root: Path, output_root: Path) -> None:
+        self.input_root = input_root.expanduser().resolve()
+        self.output_root = output_root.expanduser().resolve()
+
+    def stage_input(self, store: LocalAssetStore, asset: AssetRef) -> str:
+        source = store.resolve_ref(asset)
+        relative = Path("wan2lab") / asset.sha256[:2] / f"{asset.asset_id}{source.suffix}"
+        destination = (self.input_root / relative).resolve()
+        if self.input_root not in destination.parents:
+            raise ValueError("staged input path escapes the ComfyUI input directory")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            if _sha256(destination) != asset.sha256:
+                raise FileExistsError(f"different staged input already exists: {destination}")
+        else:
+            shutil.copy2(source, destination)
+        return relative.as_posix()
+
+    def resolve_output(self, storage_key: str) -> Path:
+        parts = storage_key.replace("\\", "/").split("/")
+        if len(parts) < 2 or parts[0] != "output" or ".." in parts:
+            raise ValueError("ComfyUI result must be a safe persistent output key")
+        resolved = (self.output_root / Path(*parts[1:])).resolve()
+        if self.output_root not in resolved.parents or not resolved.is_file():
+            raise FileNotFoundError(resolved)
+        return resolved
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -146,4 +177,4 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-__all__ = ["LocalAssetStore", "image_media_type"]
+__all__ = ["LocalAssetStore", "LocalComfyAssetBridge", "image_media_type"]

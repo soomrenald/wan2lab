@@ -52,15 +52,19 @@ from wan2core.timeline import Timeline
 from wan2core.provenance import ProvenanceRecord
 from wan2core.workers import (
     AckEvent,
+    CancelRequest,
     CapabilitiesEvent,
     ErrorEvent,
+    GenerateSegmentRequest,
     InspectCapabilitiesRequest,
     LoadModelRequest,
     ModelsEvent,
+    ProgressEvent,
+    ResultEvent,
     RuntimeStatusEvent,
 )
 from wan2lab.backends.comfyui import BACKEND_ID
-from wan2lab.assets import LocalAssetStore, image_media_type
+from wan2lab.assets import LocalAssetStore, LocalComfyAssetBridge, image_media_type
 from wan2lab.export_runner import ExportProcessRunner
 from wan2lab.mannequin import render_mannequin_guides
 from wan2lab.worker_client import WanWorkerProcess
@@ -76,6 +80,8 @@ class DesktopController(QObject):
         parent: QObject | None = None,
         *,
         asset_base: Path | None = None,
+        comfy_input_root: Path | None = None,
+        comfy_output_root: Path | None = None,
     ) -> None:
         super().__init__(parent)
         self._asset_base = (
@@ -87,6 +93,10 @@ class DesktopController(QObject):
         self._backend = MockWanBackend(self._capabilities)
         self._session = self._new_session(18_000)
         self._asset_store = self._store_for_project(self._session.project.project_id)
+        self._comfy_assets = LocalComfyAssetBridge(
+            comfy_input_root or Path("~/ComfyUI/input"),
+            comfy_output_root or Path("~/ComfyUI/output"),
+        )
         self._project_name = "Untitled Wan2Lab Project"
         self._status = "Ready — plan the timeline to begin"
         self._events: list[str] = []
@@ -104,6 +114,10 @@ class DesktopController(QObject):
         self._backend_text_encoder_models: list[str] = []
         self._inspected_capabilities: BackendCapabilities | None = None
         self._selected_wan_model_id: str | None = None
+        self._pending_model_command_id: str | None = None
+        self._pending_wan_model_id: str | None = None
+        self._active_wan_commands: dict[str, str] = {}
+        self._active_wan_jobs: dict[str, str] = {}
         self._export_runner = ExportProcessRunner(self)
         self._export_runner.progress.connect(self._handle_export_progress)
         self._export_runner.completed.connect(self._complete_export)
@@ -136,6 +150,14 @@ class DesktopController(QObject):
     @Property(bool, notify=statusChanged)
     def exportRunning(self) -> bool:  # noqa: N802
         return self._export_runner.running
+
+    @Property(bool, notify=statusChanged)
+    def generationRunning(self) -> bool:  # noqa: N802
+        return bool(self._active_wan_commands)
+
+    @Property(str, notify=statusChanged)
+    def generationBackendLabel(self) -> str:  # noqa: N802
+        return "Local ComfyUI Wan worker" if self._selected_wan_model_id else "Mock backend"
 
     @Property(str, notify=statusChanged)
     def status(self) -> str:
@@ -254,6 +276,9 @@ class DesktopController(QObject):
 
     @Slot(float)
     def newProject(self, duration_seconds: float = 18.0) -> None:  # noqa: N802
+        if self._active_wan_commands:
+            self._set_status("Cancel the active Wan generation before creating a project")
+            return
         duration_ms = max(1_000, round(duration_seconds * 1000))
         self._session = self._new_session(duration_ms)
         self._asset_store = self._store_for_project(self._session.project.project_id)
@@ -315,19 +340,10 @@ class DesktopController(QObject):
         except Exception as error:
             self._set_status(f"Wan model selection failed: {error}")
             return
-        self._selected_wan_model_id = model.model_id
-        settings = self._session.project.project_settings.model_copy(
-            update={
-                "default_wan_backend_id": self._inspected_capabilities.backend_id,
-                "default_wan_model_id": model.model_id,
-            }
-        )
-        self._session.project = Wan2LabProject.model_validate(
-            self._session.project.model_copy(update={"project_settings": settings}).model_dump()
-        )
+        self._pending_model_command_id = request.command_id
+        self._pending_wan_model_id = model.model_id
         self._wan_worker.send(request)
         self._set_status(f"Loading {model.display_name} through the isolated worker…")
-        self.projectChanged.emit()
 
     @Slot()
     def closeWorker(self) -> None:  # noqa: N802
@@ -604,8 +620,15 @@ class DesktopController(QObject):
 
     @Slot()
     def planMockTimeline(self) -> None:  # noqa: N802
+        if self._active_wan_commands:
+            self._set_status("Cancel the active Wan generation before replanning")
+            return
         try:
-            plan = self._session.plan(self._capabilities, model_id="wan-test")
+            capabilities = self._inspected_capabilities or self._capabilities
+            model_id = self._selected_wan_model_id or "wan-test"
+            if self._inspected_capabilities is not None and self._selected_wan_model_id is None:
+                raise ValueError("load an explicitly selected Wan model before planning")
+            plan = self._session.plan(capabilities, model_id=model_id)
         except Exception as error:
             self._set_status(f"Plan failed: {error}")
             return
@@ -615,6 +638,12 @@ class DesktopController(QObject):
 
     @Slot()
     def generateNextMockSegment(self) -> None:  # noqa: N802
+        if self._session.project.segments and any(
+            item.backend_id != self._backend.backend_id
+            for item in self._session.project.segments
+        ):
+            self._queue_worker_generation(regenerate=False)
+            return
         try:
             revision = self._session.generate_next_with_mock(
                 self._backend,
@@ -659,6 +688,14 @@ class DesktopController(QObject):
 
     @Slot()
     def regenerateRejectedMockSegment(self) -> None:  # noqa: N802
+        if any(
+            item.state
+            in {SegmentState.REJECTED, SegmentState.ERROR, SegmentState.CANCELLED}
+            and item.backend_id != self._backend.backend_id
+            for item in self._session.project.segments
+        ):
+            self._queue_worker_generation(regenerate=True)
+            return
         try:
             revision = self._session.regenerate_rejected_with_mock(
                 self._backend,
@@ -674,6 +711,85 @@ class DesktopController(QObject):
             f"Regenerated {revision.segment_id} as immutable revision {revision.revision_number}"
         )
         self._set_status("Regenerated revision ready for mandatory review")
+        self.projectChanged.emit()
+
+    @Slot()
+    def cancelGeneration(self) -> None:  # noqa: N802
+        if not self._active_wan_jobs:
+            self._set_status("No local Wan generation is active")
+            return
+        job_id = next(iter(self._active_wan_jobs))
+        self._wan_worker.send(
+            CancelRequest(
+                command_id=f"cancel-{uuid4().hex}",
+                job_id=job_id,
+            )
+        )
+        self._set_status(f"Cancelling {job_id}…")
+
+    def _queue_worker_generation(self, *, regenerate: bool) -> None:
+        if self._selected_wan_model_id is None or self._inspected_capabilities is None:
+            self._set_status("Inspect and load the planned Wan model before generation")
+            return
+        seed = len(self._session.project.segment_revisions) + 1
+        revision = None
+        try:
+            if regenerate:
+                job_id, revision = self._session.queue_rejected_generation(seed=seed)
+            else:
+                job_id, revision = self._session.queue_next_generation(seed=seed)
+            request = revision.source_request
+            asset_ids = {
+                item
+                for item in (
+                    request.start_image_asset_id,
+                    request.end_image_asset_id,
+                    request.reference_character_asset_id,
+                    request.driving_video_asset_id,
+                    request.source_video_asset_id,
+                    request.mask_asset_id,
+                )
+                if item is not None
+            }
+            assets = {item.asset_id: item for item in self._session.project.assets}
+            missing = asset_ids - set(assets)
+            if missing:
+                raise ValueError(f"generation inputs are missing: {', '.join(sorted(missing))}")
+            asset_inputs = {
+                asset_id: self._comfy_assets.stage_input(self._asset_store, assets[asset_id])
+                for asset_id in asset_ids
+            }
+            command_id = f"generate-{uuid4().hex}"
+            command = GenerateSegmentRequest(
+                command_id=command_id,
+                job_id=job_id,
+                request=request,
+                seed=seed,
+                asset_inputs=asset_inputs,
+                output_prefix=(
+                    f"wan2lab/{self._session.project.project_id}/"
+                    f"{revision.segment_id}/{revision.revision_id}"
+                ),
+            )
+        except Exception as error:
+            if revision is not None:
+                try:
+                    self._session.fail_worker_generation(
+                        revision_id=revision.revision_id,
+                        message=str(error),
+                    )
+                except Exception:
+                    pass
+            self._set_status(f"Wan generation could not start: {error}")
+            self.projectChanged.emit()
+            return
+        self._active_wan_commands[command_id] = revision.revision_id
+        self._active_wan_jobs[job_id] = command_id
+        self._wan_worker.send(command)
+        self._append_event(
+            f"Queued {revision.segment_id} revision {revision.revision_number} on local ComfyUI"
+        )
+        self._set_status("Local Wan generation started; review remains mandatory")
         self.projectChanged.emit()
 
     @Slot(str)
@@ -847,6 +963,9 @@ class DesktopController(QObject):
 
     @Slot(str)
     def openProject(self, path: str) -> None:  # noqa: N802
+        if self._active_wan_commands:
+            self._set_status("Cancel the active Wan generation before opening a project")
+            return
         try:
             project = load_project(Path(path).expanduser())
         except Exception as error:
@@ -966,18 +1085,158 @@ class DesktopController(QObject):
             self._backend_models = [str(item.get("display_name", "unknown")) for item in event.models]
         elif isinstance(event, RuntimeStatusEvent):
             self._backend_status = json.dumps(event.status, sort_keys=True)
+        elif isinstance(event, ProgressEvent):
+            progress = event.progress
+            detail = (
+                f" {progress.current}/{progress.total}"
+                if progress.current is not None and progress.total is not None
+                else ""
+            )
+            self._backend_status = progress.message or f"Wan {progress.stage}{detail}"
+            self._set_status(f"{progress.segment_id or progress.job_id}: {progress.stage}{detail}")
+        elif isinstance(event, ResultEvent):
+            self._complete_worker_result(event)
         elif isinstance(event, ErrorEvent):
             self._backend_status = event.error.message
             self._append_event(f"Wan worker: {event.error.message}")
+            if event.command_id == self._pending_model_command_id:
+                self._pending_model_command_id = None
+                self._pending_wan_model_id = None
+            revision_id = self._finish_active_wan_command(event.command_id)
+            if revision_id is not None:
+                try:
+                    self._session.fail_worker_generation(
+                        revision_id=revision_id,
+                        message=event.error.message,
+                        cancelled=event.error.stage == "cancelled",
+                    )
+                    self.projectChanged.emit()
+                except Exception as error:
+                    self._append_event(f"Could not record worker failure: {error}")
         elif isinstance(event, AckEvent):
             self._backend_status = event.message
             self._append_event(f"Wan worker: {event.message}")
+            if (
+                event.command_id == self._pending_model_command_id
+                and self._pending_wan_model_id is not None
+                and self._inspected_capabilities is not None
+            ):
+                self._selected_wan_model_id = self._pending_wan_model_id
+                self._capabilities = self._inspected_capabilities
+                settings = self._session.project.project_settings.model_copy(
+                    update={
+                        "default_wan_backend_id": self._capabilities.backend_id,
+                        "default_wan_model_id": self._selected_wan_model_id,
+                    }
+                )
+                self._session.project = Wan2LabProject.model_validate(
+                    self._session.project.model_copy(
+                        update={"project_settings": settings}
+                    ).model_dump()
+                )
+                self._pending_model_command_id = None
+                self._pending_wan_model_id = None
+                self.projectChanged.emit()
         self.statusChanged.emit()
+
+    def _complete_worker_result(self, event: ResultEvent) -> None:
+        revision_id = self._finish_active_wan_command(event.command_id)
+        if revision_id is None:
+            self._append_event(f"Ignored result for unknown command {event.command_id}")
+            return
+        try:
+            revision = next(
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == revision_id
+            )
+            storage_keys = event.result.metadata.get("output_storage_keys", ())
+            if not isinstance(storage_keys, (list, tuple)) or len(storage_keys) != 1:
+                raise ValueError("Wan generation requires exactly one persistent video output")
+            source = self._comfy_assets.resolve_output(str(storage_keys[0]))
+            record = self._asset_store.register_generated(
+                source,
+                media_type="video/mp4",
+                parent_asset_ids=tuple(
+                    item
+                    for item in (
+                        revision.source_request.start_image_asset_id,
+                        revision.source_request.end_image_asset_id,
+                    )
+                    if item is not None
+                ),
+                metadata={"comfyui_storage_key": str(storage_keys[0])},
+            )
+            result_asset = AssetRef(
+                asset_id=record.asset_id,
+                kind=AssetKind.VIDEO,
+                storage_path=record.relative_path,
+                sha256=record.sha256,
+                width=revision.source_request.width,
+                height=revision.source_request.height,
+                frame_count=revision.source_request.frame_count,
+                duration_ms=(
+                    revision.source_request.end_ms - revision.source_request.start_ms
+                ),
+                parent_asset_ids=record.parent_asset_ids,
+                creation_operation_id=revision.source_request.request_id,
+                immutable_source=False,
+            )
+            normalized_result = event.result.model_copy(
+                update={"result_asset_id": result_asset.asset_id}
+            )
+            completed = self._session.complete_worker_generation(
+                revision_id=revision_id,
+                result=normalized_result,
+                result_asset=result_asset,
+                backend_version=(
+                    self._inspected_capabilities.backend_version
+                    if self._inspected_capabilities is not None
+                    else None
+                ),
+            )
+        except Exception as error:
+            try:
+                self._session.fail_worker_generation(
+                    revision_id=revision_id,
+                    message=f"result registration failed: {error}",
+                )
+            except Exception:
+                pass
+            self._set_status(f"Wan result registration failed: {error}")
+            self.projectChanged.emit()
+            return
+        self._append_event(
+            f"{completed.segment_id} revision {completed.revision_number} ready for review"
+        )
+        self._set_status("Segment ready for review — approve before continuing")
+        self.projectChanged.emit()
+
+    def _finish_active_wan_command(self, command_id: str) -> str | None:
+        revision_id = self._active_wan_commands.pop(command_id, None)
+        for job_id, active_command_id in tuple(self._active_wan_jobs.items()):
+            if active_command_id == command_id:
+                del self._active_wan_jobs[job_id]
+        return revision_id
 
     @Slot(str)
     def _handle_worker_transport_error(self, message: str) -> None:
         self._backend_status = message
         self._append_event(message)
+        for command_id in tuple(self._active_wan_commands):
+            revision_id = self._finish_active_wan_command(command_id)
+            if revision_id is not None:
+                try:
+                    self._session.fail_worker_generation(
+                        revision_id=revision_id,
+                        message=message,
+                    )
+                except Exception as error:
+                    self._append_event(f"Could not record worker transport failure: {error}")
+        if self._pending_model_command_id is not None:
+            self._pending_model_command_id = None
+            self._pending_wan_model_id = None
+        self.projectChanged.emit()
         self.statusChanged.emit()
 
     @Slot(str, int, int)

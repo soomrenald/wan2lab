@@ -6,10 +6,40 @@ from pathlib import Path
 
 from PIL import Image
 
-from wan2lab.assets import LocalAssetStore, image_media_type
+from wan2core.assets import AssetKind, AssetRef
+from wan2lab.assets import LocalAssetStore, LocalComfyAssetBridge, image_media_type
 
 
 class LocalAssetStoreTests(unittest.TestCase):
+    def test_local_comfy_bridge_stages_verified_inputs_and_rejects_unsafe_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.png"
+            Image.new("RGB", (10, 10), "blue").save(source)
+            store = LocalAssetStore(root / "assets")
+            record = store.register_imported(source, media_type="image/png")
+            asset = AssetRef(
+                asset_id=record.asset_id,
+                kind=AssetKind.IMAGE,
+                storage_path=record.relative_path,
+                sha256=record.sha256,
+                width=record.width,
+                height=record.height,
+            )
+            bridge = LocalComfyAssetBridge(root / "input", root / "output")
+
+            staged = bridge.stage_input(store, asset)
+            self.assertEqual((root / "input" / staged).read_bytes(), source.read_bytes())
+            output = root / "output" / "wan2lab" / "result.mp4"
+            output.parent.mkdir(parents=True)
+            output.write_bytes(b"video")
+            self.assertEqual(
+                bridge.resolve_output("output/wan2lab/result.mp4"),
+                output,
+            )
+            with self.assertRaises(ValueError):
+                bridge.resolve_output("output/../secret")
+
     def test_image_media_type_uses_file_content(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "misleading.png"

@@ -81,7 +81,12 @@ ApplicationWindow {
             Button { text: "Open"; onClicked: openProjectDialog.open() }
             Button { text: "Save"; onClicked: saveProjectDialog.open() }
             Button { text: "Plan"; onClicked: studio.planMockTimeline() }
-            Button { text: "Generate next"; onClicked: studio.generateNextMockSegment() }
+            Button {
+                text: studio.generationRunning ? "Cancel generation" : "Generate next"
+                onClicked: studio.generationRunning
+                    ? studio.cancelGeneration()
+                    : studio.generateNextMockSegment()
+            }
             Button { text: "Approve"; onClicked: studio.approveCurrentSegment() }
             TextField {
                 id: rejectionReason
@@ -479,7 +484,7 @@ ApplicationWindow {
             anchors.leftMargin: 14
             anchors.rightMargin: 14
             Label { text: studio.status; Layout.fillWidth: true }
-            Label { text: "Mock backend · no GPU work"; color: "#f1bf78" }
+            Label { text: studio.generationBackendLabel; color: "#f1bf78" }
         }
     }
 }

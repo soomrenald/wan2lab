@@ -17,7 +17,7 @@ from wan2core.backends import (
 )
 from wan2core.backends.mock import default_mock_capabilities
 from wan2core.segments import SegmentState
-from wan2core.workers import CapabilitiesEvent
+from wan2core.workers import AckEvent, CapabilitiesEvent, ResultEvent, WorkerResult
 from wan2lab.controller import DesktopController
 
 
@@ -150,12 +150,89 @@ class DesktopControllerTests(unittest.TestCase):
         )
 
         request = controller._wan_worker.send.call_args.args[0]  # type: ignore[union-attr]  # noqa: SLF001
+        controller._handle_worker_event(  # noqa: SLF001
+            AckEvent(command_id=request.command_id, message="model ready")
+        )
         self.assertEqual(request.component_model_ids["vae"], "wan.vae")
         self.assertEqual(request.component_model_ids["text_encoder"], "umt5.safetensors")
         self.assertEqual(
             controller.session.project.project_settings.default_wan_backend_id,
             "comfy-wan",
         )
+
+    def test_local_worker_result_becomes_an_immutable_reviewable_video(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller = DesktopController(
+                asset_base=root / "projects",
+                comfy_input_root=root / "comfy-input",
+                comfy_output_root=root / "comfy-output",
+            )
+            controller._wan_worker.send = Mock()  # type: ignore[method-assign]  # noqa: SLF001
+            base = default_mock_capabilities()
+            model = base.model_variants[0].model_copy(
+                update={
+                    "supported_precisions": ("bf16",),
+                    "supported_quantizations": ("disabled",),
+                    "supported_offload_modes": ("offload_device",),
+                }
+            )
+            capabilities = base.model_copy(
+                update={"backend_id": "comfy-wan", "model_variants": (model,)}
+            )
+            payload = capabilities.model_dump(mode="json")
+            payload["component_models"] = {
+                "vae": ["wan.vae"],
+                "text_encoder": ["umt5.safetensors"],
+            }
+            controller._handle_worker_event(  # noqa: SLF001
+                CapabilitiesEvent(command_id="inspect", capabilities=payload)
+            )
+            controller.loadLocalWanModel(
+                0,
+                "wan.vae",
+                "umt5.safetensors",
+                "bf16",
+                "disabled",
+                "offload_device",
+            )
+            load_request = controller._wan_worker.send.call_args.args[0]  # type: ignore[union-attr]  # noqa: SLF001
+            controller._handle_worker_event(  # noqa: SLF001
+                AckEvent(command_id=load_request.command_id, message="model ready")
+            )
+            controller.planMockTimeline()
+            controller.generateNextMockSegment()
+            generate_request = controller._wan_worker.send.call_args.args[0]  # type: ignore[union-attr]  # noqa: SLF001
+            output = root / "comfy-output" / "wan2lab" / "revision.mp4"
+            output.parent.mkdir(parents=True)
+            output.write_bytes(b"typed video output")
+
+            controller._handle_worker_event(  # noqa: SLF001
+                ResultEvent(
+                    command_id=generate_request.command_id,
+                    result=WorkerResult(
+                        job_id=generate_request.job_id,
+                        result_asset_id="worker-video",
+                        metadata={
+                            "output_storage_keys": (
+                                "output/wan2lab/revision.mp4",
+                            ),
+                            "resolved_parameters": {},
+                        },
+                    ),
+                )
+            )
+
+            revision = controller.session.project.segment_revisions[0]
+            result_asset = next(
+                item
+                for item in controller.session.project.assets
+                if item.asset_id == revision.result_asset_id
+            )
+            self.assertEqual(revision.review_state.value, "ready_for_review")
+            self.assertTrue(result_asset.storage_path.startswith("objects/"))
+            self.assertFalse(controller.generationRunning)
+            self.assertIn("ready for review", controller.status.lower())
 
     def test_output_fps_and_project_file_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
