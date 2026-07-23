@@ -177,6 +177,12 @@ class ComfyWanWorkflowBuilder:
         parameters: Mapping[str, object],
         seed: int,
     ) -> dict[str, object]:
+        normalized_model_name = selection.model_filename.casefold()
+        unified_ti2v_5b = (
+            ("wan2_2" in normalized_model_name or "wan2.2" in normalized_model_name)
+            and "ti2v" in normalized_model_name
+            and "5b" in normalized_model_name
+        )
         workflow: dict[str, object] = {
             "1": {
                 "class_type": "WanVideoModelLoader",
@@ -253,7 +259,7 @@ class ComfyWanWorkflowBuilder:
                 },
             },
         }
-        if request.mode is WanMode.PROMPT:
+        if request.mode is WanMode.PROMPT and not unified_ti2v_5b:
             workflow["5"] = {
                 "class_type": "WanVideoEmptyEmbeds",
                 "inputs": {
@@ -263,10 +269,6 @@ class ComfyWanWorkflowBuilder:
                 },
             }
         else:
-            workflow["9"] = {
-                "class_type": "LoadImage",
-                "inputs": {"image": asset_inputs[request.start_image_asset_id]},
-            }
             inputs: dict[str, object] = {
                 "vae": ["2", 0],
                 "width": request.width,
@@ -276,8 +278,13 @@ class ComfyWanWorkflowBuilder:
                 "start_latent_strength": float(parameters.get("start_latent_strength", 1.0)),
                 "end_latent_strength": float(parameters.get("end_latent_strength", 1.0)),
                 "force_offload": bool(parameters.get("force_offload", True)),
-                "start_image": ["9", 0],
             }
+            if request.mode is not WanMode.PROMPT:
+                workflow["9"] = {
+                    "class_type": "LoadImage",
+                    "inputs": {"image": asset_inputs[request.start_image_asset_id]},
+                }
+                inputs["start_image"] = ["9", 0]
             if request.mode is WanMode.FIRST_LAST:
                 workflow["10"] = {
                     "class_type": "LoadImage",

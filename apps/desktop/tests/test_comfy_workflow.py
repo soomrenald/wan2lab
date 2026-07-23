@@ -155,6 +155,28 @@ class ComfyWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(plan.output_node_id, "8")
 
+    def test_unified_ti2v_prompt_uses_matching_vae_latent_shape(self) -> None:
+        workflow_builder = builder()
+        plan = workflow_builder.build(
+            request(
+                workflow_builder,
+                WanMode.PROMPT,
+                "TI2V-5B",
+                width=1280,
+                height=704,
+                generation_fps=24,
+                frame_count=121,
+            ),
+            asset_inputs={},
+            filename_prefix="wan2lab/ti2v-prompt",
+            seed=45,
+        )
+
+        self.assertEqual(plan.workflow["5"]["class_type"], "WanVideoImageToVideoEncode")
+        self.assertEqual(plan.workflow["5"]["inputs"]["vae"], ["2", 0])
+        self.assertNotIn("start_image", plan.workflow["5"]["inputs"])
+        self.assertNotIn("9", plan.workflow)
+
     def test_first_last_graph_binds_individual_immutable_assets(self) -> None:
         workflow_builder = builder()
         segment_request = request(
