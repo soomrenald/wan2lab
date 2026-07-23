@@ -335,6 +335,30 @@ class DesktopControllerTests(unittest.TestCase):
             SegmentState.READY_FOR_REVIEW,
         )
 
+    def test_generated_segment_changes_mark_stale_and_regenerate_as_child(self) -> None:
+        controller = DesktopController()
+        controller.planMockTimeline()
+        controller.generateNextMockSegment()
+        original = controller.session.project.segment_revisions[0]
+
+        controller.updateSegmentInspector(0, "prompt", "revised camera orbit", "flicker")
+
+        stale = controller.session.project.segments[0]
+        self.assertEqual(stale.state, SegmentState.STALE)
+        self.assertEqual(stale.revision_ids, (original.revision_id,))
+        self.assertIn("prompt", stale.stale_reason)
+
+        controller.regenerateRejectedMockSegment()
+
+        revisions = controller.session.project.segment_revisions
+        self.assertEqual(len(revisions), 2)
+        self.assertEqual(revisions[-1].parent_revision_id, original.revision_id)
+        self.assertEqual(revisions[-1].source_request.prompt, "revised camera orbit")
+        self.assertEqual(
+            controller.session.project.segments[0].state,
+            SegmentState.READY_FOR_REVIEW,
+        )
+
     def test_completed_frame_modification_creates_a_new_reviewable_revision(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

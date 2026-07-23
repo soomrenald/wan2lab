@@ -30,6 +30,7 @@ def queue_revision(
         SegmentState.READY_FOR_REVIEW,
         SegmentState.ERROR,
         SegmentState.CANCELLED,
+        SegmentState.STALE,
     }:
         raise InvalidReviewTransition(f"cannot queue a revision from {segment.state.value}")
     if request.segment_id != segment.segment_id:

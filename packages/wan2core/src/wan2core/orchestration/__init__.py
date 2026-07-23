@@ -159,12 +159,19 @@ class WanStudioSession:
                 item
                 for item in self.project.segments
                 if item.state
-                in {SegmentState.REJECTED, SegmentState.ERROR, SegmentState.CANCELLED}
+                in {
+                    SegmentState.REJECTED,
+                    SegmentState.ERROR,
+                    SegmentState.CANCELLED,
+                    SegmentState.STALE,
+                }
             ),
             None,
         )
         if segment is None:
-            raise ReviewGateBlocked("no rejected or failed segment is ready to regenerate")
+            raise ReviewGateBlocked(
+                "no rejected, failed, or stale segment is ready to regenerate"
+            )
         return self._queue_external_revision(
             segment,
             seed=seed,
@@ -302,11 +309,23 @@ class WanStudioSession:
         if self.segment_plan is None:
             raise RuntimeError("timeline must be planned before generation")
         segment = next(
-            (item for item in self.project.segments if item.state is SegmentState.REJECTED),
+            (
+                item
+                for item in self.project.segments
+                if item.state
+                in {
+                    SegmentState.REJECTED,
+                    SegmentState.ERROR,
+                    SegmentState.CANCELLED,
+                    SegmentState.STALE,
+                }
+            ),
             None,
         )
         if segment is None:
-            raise ReviewGateBlocked("no rejected segment is ready to regenerate")
+            raise ReviewGateBlocked(
+                "no rejected, failed, or stale segment is ready to regenerate"
+            )
         parent = self._latest_revision(segment)
         planned = next(item for item in self.segment_plan.segments if item.segment_id == segment.segment_id)
         return self._generate_mock_revision(

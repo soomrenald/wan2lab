@@ -94,7 +94,7 @@ from wan2core.projects import (
     load_project,
     save_project,
 )
-from wan2core.projects.invalidation import change_output_fps
+from wan2core.projects.invalidation import change_output_fps, invalidate_segments
 from wan2core.segments import ContinuationPolicy, SegmentState
 from wan2core.timeline import Timeline
 from wan2core.provenance import ProvenanceRecord
@@ -1439,7 +1439,12 @@ class DesktopController(QObject):
     def regenerateRejectedMockSegment(self) -> None:  # noqa: N802
         if any(
             item.state
-            in {SegmentState.REJECTED, SegmentState.ERROR, SegmentState.CANCELLED}
+            in {
+                SegmentState.REJECTED,
+                SegmentState.ERROR,
+                SegmentState.CANCELLED,
+                SegmentState.STALE,
+            }
             and item.backend_id != self._backend.backend_id
             for item in self._session.project.segments
         ):
@@ -2540,8 +2545,13 @@ class DesktopController(QObject):
                 segment if index == segment_index else item
                 for index, item in enumerate(self._session.project.segments)
             )
-            self._session.project = Wan2LabProject.model_validate(
+            updated = Wan2LabProject.model_validate(
                 self._session.project.model_copy(update={"segments": segments}).model_dump()
+            )
+            self._session.project = self._invalidate_generated_segment(
+                updated,
+                segment.segment_id,
+                "segment prompt or mode changed",
             )
         except Exception as error:
             self._set_status(f"Segment update failed: {error}")
@@ -2604,10 +2614,15 @@ class DesktopController(QObject):
                 else item
                 for index, item in enumerate(self._session.project.segments)
             )
-            self._session.project = Wan2LabProject.model_validate(
+            updated = Wan2LabProject.model_validate(
                 self._session.project.model_copy(
                     update={"actions": actions, "segments": segments}
                 ).model_dump()
+            )
+            self._session.project = self._invalidate_generated_segment(
+                updated,
+                segment.segment_id,
+                "structured action changed",
             )
         except Exception as error:
             self._set_status(f"Action update failed: {error}")
@@ -2630,8 +2645,13 @@ class DesktopController(QObject):
                 else item
                 for index, item in enumerate(self._session.project.segments)
             )
-            self._session.project = Wan2LabProject.model_validate(
+            updated = Wan2LabProject.model_validate(
                 self._session.project.model_copy(update={"segments": segments}).model_dump()
+            )
+            self._session.project = self._invalidate_generated_segment(
+                updated,
+                segments[segment_index].segment_id,
+                "continuation policy changed",
             )
         except Exception as error:
             self._set_status(f"Continuation policy update failed: {error}")
@@ -2682,7 +2702,7 @@ class DesktopController(QObject):
                 else item
                 for index, item in enumerate(self._session.project.segments)
             )
-            self._session.project = Wan2LabProject.model_validate(
+            updated = Wan2LabProject.model_validate(
                 self._session.project.model_copy(
                     update={
                         "assets": (*self._session.project.assets, asset),
@@ -2694,12 +2714,30 @@ class DesktopController(QObject):
                     }
                 ).model_dump()
             )
+            self._session.project = self._invalidate_generated_segment(
+                updated,
+                segments[segment_index].segment_id,
+                f"segment {role} input changed",
+            )
         except Exception as error:
             self._set_status(f"Segment input import failed: {error}")
             return
         self._append_event(f"Imported immutable {role} input for segment {segment_index}")
         self._set_status("Segment mode input saved; original assets remain immutable")
         self.projectChanged.emit()
+
+    @staticmethod
+    def _invalidate_generated_segment(
+        project: Wan2LabProject,
+        segment_id: str,
+        reason: str,
+    ) -> Wan2LabProject:
+        segment = next(item for item in project.segments if item.segment_id == segment_id)
+        if not segment.revision_ids:
+            return project
+        return Wan2LabProject.model_validate(
+            invalidate_segments(project, (segment_id,), reason=reason).model_dump()
+        )
 
     @Slot(int, str, str)
     def setSegmentBackendParameter(
@@ -2728,8 +2766,13 @@ class DesktopController(QObject):
                 segment if index == segment_index else item
                 for index, item in enumerate(self._session.project.segments)
             )
-            self._session.project = Wan2LabProject.model_validate(
+            updated = Wan2LabProject.model_validate(
                 self._session.project.model_copy(update={"segments": segments}).model_dump()
+            )
+            self._session.project = self._invalidate_generated_segment(
+                updated,
+                segment.segment_id,
+                f"Wan generation parameter {key} changed",
             )
         except Exception as error:
             self._set_status(f"Parameter update failed: {error}")

@@ -120,7 +120,16 @@ class ReviewStateMachineTests(unittest.TestCase):
         self.assertEqual(stale.state, SegmentState.STALE)
         self.assertIsNone(stale.current_approved_revision_id)
 
+        queued, replacement = queue_revision(
+            stale,
+            revision_id="revision-2",
+            request=request().model_copy(update={"request_id": "request-2"}),
+            seed=43,
+            parent_revision_id=revision.revision_id,
+        )
+        self.assertEqual(queued.state, SegmentState.QUEUED)
+        self.assertEqual(replacement.parent_revision_id, revision.revision_id)
+
 
 if __name__ == "__main__":
     unittest.main()
-
