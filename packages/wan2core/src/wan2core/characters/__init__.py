@@ -28,6 +28,15 @@ class AdapterRef(DomainModel):
     trigger: str = ""
     default_strength: float = Field(default=1.0, ge=-10.0, le=10.0)
 
+    @model_validator(mode="after")
+    def validate_model_family(self) -> "AdapterRef":
+        if not self.model_family.casefold().startswith(self.family.value):
+            raise ValueError(
+                f"{self.family.value} adapter model family must start with "
+                f"'{self.family.value}'"
+            )
+        return self
+
 
 class CharacterIdentity(DomainModel):
     identity_id: Identifier
@@ -172,4 +181,3 @@ __all__ = [
     "StyleDuplicationEntry",
     "duplicate_sheet_style",
 ]
-

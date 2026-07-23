@@ -7,6 +7,9 @@ from pydantic import ValidationError
 
 from wan2core.assets import AssetKind, AssetRef
 from wan2core.characters import (
+    AdapterFamily,
+    AdapterKind,
+    AdapterRef,
     AppearanceProfile,
     ApprovalState,
     CharacterIdentity,
@@ -63,6 +66,16 @@ class DomainModelTests(unittest.TestCase):
         )
         self.assertEqual(red.identity_id, swim.identity_id)
         self.assertNotEqual(red.appearance_id, swim.appearance_id)
+
+    def test_adapter_family_must_match_declared_model_family(self) -> None:
+        with self.assertRaises(ValidationError):
+            AdapterRef(
+                adapter_id="adapter-1",
+                asset_id="adapter-asset",
+                family=AdapterFamily.KREA,
+                kind=AdapterKind.LORA,
+                model_family="wan2.2",
+            )
 
     def test_style_duplication_preserves_pose_and_parentage(self) -> None:
         entry = PoseViewEntry(
@@ -147,4 +160,3 @@ class DomainModelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

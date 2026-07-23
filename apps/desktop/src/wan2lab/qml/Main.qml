@@ -26,6 +26,22 @@ ApplicationWindow {
     }
 
     FileDialog {
+        id: characterAdapterDialog
+        title: "Import immutable character adapter"
+        nameFilters: ["Model adapters (*.safetensors *.pt *.ckpt)", "All files (*)"]
+        onAccepted: studio.importCharacterAdapter(
+            sheetEntrySheet.value,
+            adapterTarget.currentText,
+            selectedFile,
+            adapterFamily.currentText,
+            adapterKind.currentText,
+            adapterModelFamily.text,
+            adapterTrigger.text,
+            Number(adapterStrength.text)
+        )
+    }
+
+    FileDialog {
         id: saveProjectDialog
         title: "Save Wan2Lab project"
         fileMode: FileDialog.SaveFile
@@ -160,6 +176,40 @@ ApplicationWindow {
                     )
                 }
                 Label { text: studio.characterNames.join(" · "); color: "#8dd7c4"; wrapMode: Text.Wrap }
+                Label { text: "Identity / appearance adapters"; color: "#aeb9cb" }
+                RowLayout {
+                    ComboBox { id: adapterTarget; model: ["identity", "appearance"] }
+                    ComboBox { id: adapterFamily; model: ["krea", "wan"] }
+                    ComboBox { id: adapterKind; model: ["lora", "lokr"] }
+                }
+                RowLayout {
+                    TextField {
+                        id: adapterModelFamily
+                        Layout.fillWidth: true
+                        text: adapterFamily.currentText === "krea" ? "krea2" : "wan2.2"
+                        placeholderText: "Compatible model family"
+                    }
+                    TextField {
+                        id: adapterStrength
+                        Layout.preferredWidth: 58
+                        text: "1.0"
+                        validator: DoubleValidator { bottom: -10; top: 10 }
+                    }
+                }
+                RowLayout {
+                    TextField {
+                        id: adapterTrigger
+                        Layout.fillWidth: true
+                        placeholderText: "Identity trigger (if required)"
+                    }
+                    Button { text: "Import adapter"; onClicked: characterAdapterDialog.open() }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: studio.characterAdapterLabels.join("\n")
+                    color: "#8dd7c4"
+                    wrapMode: Text.Wrap
+                }
                 RowLayout {
                     SpinBox {
                         id: sheetEntrySheet

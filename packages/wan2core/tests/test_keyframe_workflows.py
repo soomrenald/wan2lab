@@ -89,6 +89,18 @@ def character_data(index: int, x0: int):
         width=512,
         height=512,
     )
+    identity_adapter_asset = AssetRef(
+        asset_id=identity_adapter.asset_id,
+        kind=AssetKind.ADAPTER,
+        storage_path=f"assets/identity-{index}.safetensors",
+        sha256="a" * 64,
+    )
+    style_adapter_asset = AssetRef(
+        asset_id=style_adapter.asset_id,
+        kind=AssetKind.ADAPTER,
+        storage_path=f"assets/style-{index}.safetensors",
+        sha256="b" * 64,
+    )
     provenance = ProvenanceRecord(
         provenance_id=f"pose-prov-{index}",
         operation="import_pose",
@@ -116,7 +128,14 @@ def character_data(index: int, x0: int):
         ),
         priority=10 - index,
     )
-    return identity, appearance, sheet, assignment, asset, provenance
+    return (
+        identity,
+        appearance,
+        sheet,
+        assignment,
+        (asset, identity_adapter_asset, style_adapter_asset),
+        provenance,
+    )
 
 
 def composition_project() -> tuple[Wan2LabProject, tuple[CharacterRegionAssignment, ...]]:
@@ -133,7 +152,7 @@ def composition_project() -> tuple[Wan2LabProject, tuple[CharacterRegionAssignme
         characters=(first[0], second[0]),
         appearance_profiles=(first[1], second[1]),
         character_sheets=(first[2], second[2]),
-        assets=(first[4], second[4]),
+        assets=(*first[4], *second[4]),
         generation_records=(first[5], second[5]),
         timeline=Timeline(duration_ms=18_000, output_fps=24),
     )

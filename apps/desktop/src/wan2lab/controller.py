@@ -20,6 +20,9 @@ from wan2core.assets import AssetKind, AssetRef
 from wan2core.backends import BackendCapabilities, WanMode
 from wan2core.backends.mock import MockWanBackend, default_mock_capabilities
 from wan2core.characters import (
+    AdapterFamily,
+    AdapterKind,
+    AdapterRef,
     AppearanceProfile,
     ApprovalState,
     CharacterIdentity,
@@ -279,6 +282,25 @@ class DesktopController(QObject):
     @Property("QStringList", notify=projectChanged)
     def characterNames(self) -> list[str]:  # noqa: N802
         return [item.name for item in self._session.project.characters]
+
+    @Property("QStringList", notify=projectChanged)
+    def characterAdapterLabels(self) -> list[str]:  # noqa: N802
+        identities = {
+            item.identity_id: item.name for item in self._session.project.characters
+        }
+        labels = [
+            f"{identity.name} · identity · {adapter.kind.value} · "
+            f"{adapter.model_family} · {adapter.default_strength:g}"
+            for identity in self._session.project.characters
+            for adapter in identity.adapter_refs
+        ]
+        labels.extend(
+            f"{identities[appearance.identity_id]} / {appearance.name} · appearance · "
+            f"{adapter.kind.value} · {adapter.model_family} · {adapter.default_strength:g}"
+            for appearance in self._session.project.appearance_profiles
+            for adapter in appearance.adapter_refs
+        )
+        return labels
 
     @Property("QStringList", notify=projectChanged)
     def faceProposalSummaries(self) -> list[str]:  # noqa: N802
@@ -1026,6 +1048,103 @@ class DesktopController(QObject):
         self._session.project = Wan2LabProject.model_validate(project.model_dump())
         self._append_event(f"Created character {identity.name} with appearance {appearance.name}")
         self._set_status("Character sheet ready for imported or generated entries")
+        self.projectChanged.emit()
+
+    @Slot(int, str, QUrl, str, str, str, str, float)
+    def importCharacterAdapter(  # noqa: N802
+        self,
+        sheet_index: int,
+        target_scope: str,
+        source_url: QUrl,
+        family: str,
+        kind: str,
+        model_family: str,
+        trigger: str,
+        strength: float,
+    ) -> None:
+        try:
+            sheet = self._session.project.character_sheets[sheet_index]
+            selected_family = AdapterFamily(family)
+            selected_kind = AdapterKind(kind)
+            if target_scope not in {"identity", "appearance"}:
+                raise ValueError("adapter target must be identity or appearance")
+            if target_scope == "appearance" and selected_family is not AdapterFamily.KREA:
+                raise ValueError("appearance adapters must target the Krea image model")
+            adapter = AdapterRef(
+                adapter_id=f"adapter-{uuid4().hex}",
+                asset_id="pending-adapter-asset",
+                family=selected_family,
+                kind=selected_kind,
+                model_family=model_family.strip(),
+                trigger=trigger.strip(),
+                default_strength=strength,
+            )
+            source = Path(source_url.toLocalFile()).expanduser().resolve()
+            record = self._asset_store.register_imported(
+                source,
+                media_type="application/octet-stream",
+                metadata={
+                    "operation": "import_character_adapter",
+                    "target_scope": target_scope,
+                    "family": selected_family.value,
+                    "kind": selected_kind.value,
+                    "model_family": model_family.strip(),
+                },
+            )
+            asset = self._wan_asset(record, AssetKind.ADAPTER)
+            adapter = adapter.model_copy(update={"asset_id": asset.asset_id})
+            provenance = ProvenanceRecord(
+                provenance_id=f"provenance-{uuid4().hex}",
+                operation="import_character_adapter",
+                created_at=datetime.now(UTC),
+                input_asset_ids=(),
+                output_asset_ids=(asset.asset_id,),
+                parameters={
+                    "adapter_id": adapter.adapter_id,
+                    "target_scope": target_scope,
+                    "identity_id": sheet.identity_id,
+                    "appearance_id": (
+                        sheet.appearance_id if target_scope == "appearance" else None
+                    ),
+                },
+            )
+            characters = self._session.project.characters
+            appearances = self._session.project.appearance_profiles
+            if target_scope == "identity":
+                characters = tuple(
+                    item.model_copy(update={"adapter_refs": (*item.adapter_refs, adapter)})
+                    if item.identity_id == sheet.identity_id
+                    else item
+                    for item in characters
+                )
+            else:
+                appearances = tuple(
+                    item.model_copy(update={"adapter_refs": (*item.adapter_refs, adapter)})
+                    if item.appearance_id == sheet.appearance_id
+                    else item
+                    for item in appearances
+                )
+            self._session.project = Wan2LabProject.model_validate(
+                self._session.project.model_copy(
+                    update={
+                        "assets": (*self._session.project.assets, asset),
+                        "characters": characters,
+                        "appearance_profiles": appearances,
+                        "generation_records": (
+                            *self._session.project.generation_records,
+                            provenance,
+                        ),
+                    }
+                ).model_dump()
+            )
+        except Exception as error:
+            self._set_status(f"Adapter import failed: {error}")
+            return
+        self._append_event(
+            f"Imported immutable {selected_family.value} {selected_kind.value} "
+            f"for {target_scope} {sheet.name}"
+        )
+        self._set_status("Character adapter imported with explicit model compatibility")
         self.projectChanged.emit()
 
     @Slot(QUrl, str)

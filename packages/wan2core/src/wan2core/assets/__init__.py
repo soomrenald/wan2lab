@@ -16,6 +16,7 @@ class AssetKind(StrEnum):
     MASK = "mask"
     DEPTH = "depth"
     MANNEQUIN_GUIDE = "mannequin_guide"
+    ADAPTER = "adapter"
     PROJECT = "project"
 
 

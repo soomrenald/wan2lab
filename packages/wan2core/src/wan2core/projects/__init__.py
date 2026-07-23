@@ -8,7 +8,7 @@ import tempfile
 from pydantic import Field, field_validator, model_validator
 
 from wan2core.actions import ActionSpec
-from wan2core.assets import AssetRef
+from wan2core.assets import AssetKind, AssetRef
 from wan2core.base import DomainModel, Identifier, require_unique
 from wan2core.characters import AppearanceProfile, CharacterIdentity, CharacterSheet
 from wan2core.editing import FrameEditRecord
@@ -103,6 +103,24 @@ class Wan2LabProject(DomainModel):
         segment_ids = set(collections["segment IDs"])
         revision_by_id = {item.revision_id: item for item in self.segment_revisions}
         provenance_ids = set(collections["provenance IDs"])
+
+        adapters = tuple(
+            adapter
+            for identity in self.characters
+            for adapter in identity.adapter_refs
+        ) + tuple(
+            adapter
+            for appearance in self.appearance_profiles
+            for adapter in appearance.adapter_refs
+        )
+        require_unique([item.adapter_id for item in adapters], "adapter IDs")
+        assets_by_id = {item.asset_id: item for item in self.assets}
+        for adapter in adapters:
+            asset = assets_by_id.get(adapter.asset_id)
+            if asset is None:
+                raise ValueError("character adapter references a missing asset")
+            if asset.kind is not AssetKind.ADAPTER:
+                raise ValueError("character adapter must reference an adapter asset")
 
         for appearance in self.appearance_profiles:
             if appearance.identity_id not in identity_ids:

@@ -30,6 +30,50 @@ from wan2lab.controller import DesktopController
 
 
 class DesktopControllerTests(unittest.TestCase):
+    def test_character_adapters_are_immutable_and_model_family_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter_file = root / "identity.safetensors"
+            adapter_file.write_bytes(b"immutable adapter weights")
+            controller = DesktopController(asset_base=root / "projects")
+            controller.addCharacter("Avery", "avery person", "Travel", "blue jacket")
+
+            controller.importCharacterAdapter(
+                0,
+                "identity",
+                QUrl.fromLocalFile(str(adapter_file)),
+                "krea",
+                "lora",
+                "krea2",
+                "avery_token",
+                0.8,
+            )
+
+            identity = controller.session.project.characters[0]
+            imported = identity.adapter_refs[0]
+            asset = next(
+                item
+                for item in controller.session.project.assets
+                if item.asset_id == imported.asset_id
+            )
+            self.assertEqual(asset.kind.value, "adapter")
+            self.assertEqual(imported.trigger, "avery_token")
+            self.assertTrue(controller._asset_store.resolve_ref(asset).is_file())  # noqa: SLF001
+            self.assertEqual(len(controller.characterAdapterLabels), 1)
+
+            controller.importCharacterAdapter(
+                0,
+                "appearance",
+                QUrl.fromLocalFile(str(adapter_file)),
+                "wan",
+                "lora",
+                "wan2.2",
+                "",
+                1.0,
+            )
+            self.assertIn("appearance adapters", controller.status)
+            self.assertFalse(controller.session.project.appearance_profiles[0].adapter_refs)
+
     def test_review_player_properties_resolve_latest_immutable_segment_video(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

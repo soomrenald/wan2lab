@@ -778,6 +778,7 @@
           "mask",
           "depth",
           "mannequin_guide",
+          "adapter",
           "project"
         ],
         "title": "AssetKind",
