@@ -23,6 +23,7 @@ dev = [
 
 [project.scripts]
 wan2lab = "wan2lab.app:main"
+wan2lab-worker = "wan2lab.worker:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["apps/desktop/src/wan2lab"]
@@ -34,4 +35,3 @@ addopts = "-ra"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-

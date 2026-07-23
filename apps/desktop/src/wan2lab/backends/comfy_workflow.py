@@ -21,6 +21,8 @@ class ComfyModelSelection:
     vae_filename: str
     text_encoder_filename: str
     precision: str = "bf16"
+    vae_precision: str = "bf16"
+    text_encoder_precision: str = "bf16"
     quantization: str = "disabled"
     load_device: str = "offload_device"
 
@@ -180,13 +182,16 @@ class ComfyWanWorkflowBuilder:
             },
             "2": {
                 "class_type": "WanVideoVAELoader",
-                "inputs": {"model_name": selection.vae_filename, "precision": selection.precision},
+                "inputs": {
+                    "model_name": selection.vae_filename,
+                    "precision": selection.vae_precision,
+                },
             },
             "3": {
                 "class_type": "LoadWanVideoT5TextEncoder",
                 "inputs": {
                     "model_name": selection.text_encoder_filename,
-                    "precision": selection.precision,
+                    "precision": selection.text_encoder_precision,
                     "load_device": selection.load_device,
                     "quantization": "disabled",
                 },
@@ -331,6 +336,8 @@ def _template_context(
         "model.vae_filename": selection.vae_filename,
         "model.text_encoder_filename": selection.text_encoder_filename,
         "model.precision": selection.precision,
+        "model.vae_precision": selection.vae_precision,
+        "model.text_encoder_precision": selection.text_encoder_precision,
         "model.quantization": selection.quantization,
         "model.load_device": selection.load_device,
         "asset.start_image": (

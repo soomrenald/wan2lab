@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import Field, TypeAdapter
+from pydantic import Field, TypeAdapter, model_validator
 
 from wan2core.base import DomainModel, Identifier
 from wan2core.segments import SegmentRequest
@@ -46,6 +46,7 @@ class LoadModelRequest(DomainModel):
     precision: str
     quantization: str | None = None
     offload_mode: str | None = None
+    component_model_ids: dict[str, Identifier] = Field(default_factory=dict)
 
 
 class GenerateSegmentRequest(DomainModel):
@@ -53,6 +54,17 @@ class GenerateSegmentRequest(DomainModel):
     command_id: Identifier
     job_id: Identifier
     request: SegmentRequest
+    seed: int = Field(ge=0, le=2_147_483_647)
+    asset_inputs: dict[Identifier, str] = Field(default_factory=dict)
+    output_prefix: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_paths(self) -> "GenerateSegmentRequest":
+        for path in (*self.asset_inputs.values(), self.output_prefix):
+            normalized = path.replace("\\", "/")
+            if normalized.startswith("/") or ".." in normalized.split("/"):
+                raise ValueError("worker paths must be workspace-relative and cannot escape")
+        return self
 
 
 class CancelRequest(DomainModel):
@@ -101,6 +113,16 @@ def worker_request_schema() -> dict[str, object]:
     return _REQUEST_ADAPTER.json_schema()
 
 
+class WorkerEventKind(StrEnum):
+    CAPABILITIES = "capabilities"
+    MODELS = "models"
+    RUNTIME_STATUS = "runtime_status"
+    PROGRESS = "progress"
+    RESULT = "result"
+    ERROR = "error"
+    ACK = "ack"
+
+
 class WorkerProgress(DomainModel):
     job_id: Identifier
     segment_id: Identifier | None = None
@@ -128,21 +150,94 @@ class WorkerError(DomainModel):
     details: dict[str, object] = Field(default_factory=dict)
 
 
+class CapabilitiesEvent(DomainModel):
+    kind: Literal[WorkerEventKind.CAPABILITIES] = WorkerEventKind.CAPABILITIES
+    command_id: Identifier
+    capabilities: dict[str, object]
+
+
+class ModelsEvent(DomainModel):
+    kind: Literal[WorkerEventKind.MODELS] = WorkerEventKind.MODELS
+    command_id: Identifier
+    models: tuple[dict[str, object], ...]
+
+
+class RuntimeStatusEvent(DomainModel):
+    kind: Literal[WorkerEventKind.RUNTIME_STATUS] = WorkerEventKind.RUNTIME_STATUS
+    command_id: Identifier
+    status: dict[str, object]
+
+
+class ProgressEvent(DomainModel):
+    kind: Literal[WorkerEventKind.PROGRESS] = WorkerEventKind.PROGRESS
+    command_id: Identifier
+    progress: WorkerProgress
+
+
+class ResultEvent(DomainModel):
+    kind: Literal[WorkerEventKind.RESULT] = WorkerEventKind.RESULT
+    command_id: Identifier
+    result: WorkerResult
+
+
+class ErrorEvent(DomainModel):
+    kind: Literal[WorkerEventKind.ERROR] = WorkerEventKind.ERROR
+    command_id: Identifier
+    error: WorkerError
+
+
+class AckEvent(DomainModel):
+    kind: Literal[WorkerEventKind.ACK] = WorkerEventKind.ACK
+    command_id: Identifier
+    message: str
+
+
+WanWorkerEvent = Annotated[
+    CapabilitiesEvent
+    | ModelsEvent
+    | RuntimeStatusEvent
+    | ProgressEvent
+    | ResultEvent
+    | ErrorEvent
+    | AckEvent,
+    Field(discriminator="kind"),
+]
+
+_EVENT_ADAPTER = TypeAdapter(WanWorkerEvent)
+
+
+def parse_worker_event(payload: dict[str, object]) -> WanWorkerEvent:
+    return _EVENT_ADAPTER.validate_python(payload)
+
+
+def worker_event_schema() -> dict[str, object]:
+    return _EVENT_ADAPTER.json_schema()
+
+
 __all__ = [
     "CancelRequest",
+    "CapabilitiesEvent",
     "DiscoverModelsRequest",
     "GenerateSegmentRequest",
     "InspectCapabilitiesRequest",
     "LoadModelRequest",
+    "ModelsEvent",
+    "ProgressEvent",
     "ReleaseAllModelsRequest",
     "ReleaseWanModelRequest",
     "RuntimeStatusRequest",
+    "RuntimeStatusEvent",
+    "ResultEvent",
     "WAN_WORKER_PROTOCOL_VERSION",
     "WanCommandKind",
+    "WanWorkerEvent",
     "WanWorkerRequest",
     "WorkerError",
+    "WorkerEventKind",
     "WorkerProgress",
     "WorkerResult",
     "parse_worker_request",
+    "parse_worker_event",
+    "worker_event_schema",
     "worker_request_schema",
 ]

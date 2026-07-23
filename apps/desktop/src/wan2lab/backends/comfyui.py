@@ -103,6 +103,7 @@ def inspect_comfyui_wan(
     backend_version: str = "1",
     wrapper_version: str = "unknown",
     nodes: WrapperNodes = WrapperNodes(),
+    executable_specialized_modes: frozenset[WanMode] = frozenset(),
 ) -> BackendCapabilities:
     """Normalize a live ComfyUI registry into strict shared capability records."""
 
@@ -128,14 +129,20 @@ def inspect_comfyui_wan(
     if not wrapper_modes:
         raise ValueError("Wan wrapper exposes no supported generation modes")
 
+    executable_modes = {
+        WanMode.PROMPT,
+        WanMode.I2V,
+        WanMode.FIRST_LAST,
+    }.intersection(wrapper_modes)
+    executable_modes.update(executable_specialized_modes.intersection(wrapper_modes))
     sampler_info = _node(object_info, nodes.sampler)
     model_loader_info = _node(object_info, nodes.model_loader)
     model_names = tuple(str(item) for item in _choices(model_loader_info, "model"))
-    descriptors = _sampler_descriptors(sampler_info, frozenset(wrapper_modes))
+    descriptors = _sampler_descriptors(sampler_info, frozenset(executable_modes))
     variants = tuple(
-        _model_capabilities(name, wrapper_modes, descriptors)
+        _model_capabilities(name, executable_modes, descriptors)
         for name in model_names
-        if _modes_for_model(name, wrapper_modes)
+        if _modes_for_model(name, executable_modes)
     )
     runtime_features = {
         "object_info_probe",
@@ -143,7 +150,8 @@ def inspect_comfyui_wan(
         "history_polling",
         "cancellation",
         "model_residency_via_comfyui_cache",
-        *(f"wrapper_mode:{mode.value}" for mode in wrapper_modes),
+        *(f"wrapper_node_mode:{mode.value}" for mode in wrapper_modes),
+        *(f"executable_mode:{mode.value}" for mode in executable_modes),
     }
     package_versions = {
         str(key): str(value)
@@ -205,13 +213,16 @@ def _model_capabilities(
         supported_generation_fps=(16.0, 24.0),
         supported_precisions=("bf16", "fp16", "fp32", "fp16_fast"),
         supported_quantizations=(
-            "disabled",
-            "fp8_e4m3fn",
-            "fp8_e4m3fn_scaled",
-            "fp8_e5m2",
-            "gguf",
+            ("disabled",)
+            if filename.casefold().endswith(".gguf")
+            else (
+                "disabled",
+                "fp8_e4m3fn",
+                "fp8_e4m3fn_scaled",
+                "fp8_e5m2",
+            )
         ),
-        supported_offload_modes=("offload_device", "main_device", "block_swap"),
+        supported_offload_modes=("offload_device", "main_device"),
         estimated_memory_profiles={"safe_16gb": 16.0, "performance_24gb": 24.0},
         parameter_descriptors=applicable,
     )

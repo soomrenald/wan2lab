@@ -3562,6 +3562,411 @@
     "title": "SegmentRequest",
     "type": "object"
   },
+  "worker_event": {
+    "$defs": {
+      "AckEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "ack",
+            "default": "ack",
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "message"
+        ],
+        "title": "AckEvent",
+        "type": "object"
+      },
+      "CapabilitiesEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "additionalProperties": true,
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "capabilities",
+            "default": "capabilities",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "capabilities"
+        ],
+        "title": "CapabilitiesEvent",
+        "type": "object"
+      },
+      "ErrorEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/$defs/WorkerError"
+          },
+          "kind": {
+            "const": "error",
+            "default": "error",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "error"
+        ],
+        "title": "ErrorEvent",
+        "type": "object"
+      },
+      "ModelsEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "models",
+            "default": "models",
+            "title": "Kind",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "command_id",
+          "models"
+        ],
+        "title": "ModelsEvent",
+        "type": "object"
+      },
+      "ProgressEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "progress",
+            "default": "progress",
+            "title": "Kind",
+            "type": "string"
+          },
+          "progress": {
+            "$ref": "#/$defs/WorkerProgress"
+          }
+        },
+        "required": [
+          "command_id",
+          "progress"
+        ],
+        "title": "ProgressEvent",
+        "type": "object"
+      },
+      "ResultEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "result",
+            "default": "result",
+            "title": "Kind",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/$defs/WorkerResult"
+          }
+        },
+        "required": [
+          "command_id",
+          "result"
+        ],
+        "title": "ResultEvent",
+        "type": "object"
+      },
+      "RuntimeStatusEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "runtime_status",
+            "default": "runtime_status",
+            "title": "Kind",
+            "type": "string"
+          },
+          "status": {
+            "additionalProperties": true,
+            "title": "Status",
+            "type": "object"
+          }
+        },
+        "required": [
+          "command_id",
+          "status"
+        ],
+        "title": "RuntimeStatusEvent",
+        "type": "object"
+      },
+      "WorkerError": {
+        "additionalProperties": false,
+        "properties": {
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "job_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "message": {
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "recoverable": {
+            "default": false,
+            "title": "Recoverable",
+            "type": "boolean"
+          },
+          "stage": {
+            "minLength": 1,
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "stage",
+          "message"
+        ],
+        "title": "WorkerError",
+        "type": "object"
+      },
+      "WorkerProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Current"
+          },
+          "frame_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Frame Id"
+          },
+          "job_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "runtime_status": {
+            "additionalProperties": true,
+            "title": "Runtime Status",
+            "type": "object"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Segment Id"
+          },
+          "stage": {
+            "minLength": 1,
+            "title": "Stage",
+            "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "job_id",
+          "stage"
+        ],
+        "title": "WorkerProgress",
+        "type": "object"
+      },
+      "WorkerResult": {
+        "additionalProperties": false,
+        "properties": {
+          "frame_asset_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Frame Asset Ids",
+            "type": "array"
+          },
+          "job_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "result_asset_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Result Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "result_asset_id"
+        ],
+        "title": "WorkerResult",
+        "type": "object"
+      }
+    },
+    "discriminator": {
+      "mapping": {
+        "ack": "#/$defs/AckEvent",
+        "capabilities": "#/$defs/CapabilitiesEvent",
+        "error": "#/$defs/ErrorEvent",
+        "models": "#/$defs/ModelsEvent",
+        "progress": "#/$defs/ProgressEvent",
+        "result": "#/$defs/ResultEvent",
+        "runtime_status": "#/$defs/RuntimeStatusEvent"
+      },
+      "propertyName": "kind"
+    },
+    "oneOf": [
+      {
+        "$ref": "#/$defs/CapabilitiesEvent"
+      },
+      {
+        "$ref": "#/$defs/ModelsEvent"
+      },
+      {
+        "$ref": "#/$defs/RuntimeStatusEvent"
+      },
+      {
+        "$ref": "#/$defs/ProgressEvent"
+      },
+      {
+        "$ref": "#/$defs/ResultEvent"
+      },
+      {
+        "$ref": "#/$defs/ErrorEvent"
+      },
+      {
+        "$ref": "#/$defs/AckEvent"
+      }
+    ]
+  },
   "worker_request": {
     "$defs": {
       "CancelRequest": {
@@ -3642,6 +4047,18 @@
       "GenerateSegmentRequest": {
         "additionalProperties": false,
         "properties": {
+          "asset_inputs": {
+            "patternProperties": {
+              "^[A-Za-z0-9][A-Za-z0-9._:-]*$": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "minLength": 1
+            },
+            "title": "Asset Inputs",
+            "type": "object"
+          },
           "command_id": {
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
@@ -3660,14 +4077,27 @@
             "title": "Kind",
             "type": "string"
           },
+          "output_prefix": {
+            "minLength": 1,
+            "title": "Output Prefix",
+            "type": "string"
+          },
           "request": {
             "$ref": "#/$defs/SegmentRequest"
+          },
+          "seed": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "title": "Seed",
+            "type": "integer"
           }
         },
         "required": [
           "command_id",
           "job_id",
-          "request"
+          "request",
+          "seed",
+          "output_prefix"
         ],
         "title": "GenerateSegmentRequest",
         "type": "object"
@@ -3715,6 +4145,15 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Command Id",
             "type": "string"
+          },
+          "component_model_ids": {
+            "additionalProperties": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Component Model Ids",
+            "type": "object"
           },
           "kind": {
             "const": "load_wan_model",

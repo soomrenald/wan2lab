@@ -58,6 +58,7 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
                 "devices": [{"name": "AMD Radeon", "type": "rocm"}],
             },
             wrapper_version="test-revision",
+            executable_specialized_modes=frozenset({WanMode.ANIMATE, WanMode.REPLACE}),
         )
         self.assertEqual(capabilities.accelerator_vendors, frozenset({"rocm"}))
         self.assertEqual(capabilities.wrapper_version, "test-revision")

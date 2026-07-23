@@ -12,7 +12,13 @@ class SchemaTests(unittest.TestCase):
         bundle = schema_bundle()
         self.assertEqual(
             set(bundle),
-            {"project", "backend_capabilities", "segment_request", "worker_request"},
+            {
+                "project",
+                "backend_capabilities",
+                "segment_request",
+                "worker_request",
+                "worker_event",
+            },
         )
         self.assertEqual(bundle["project"]["title"], "Wan2LabProject")
         self.assertIn("$defs", bundle["backend_capabilities"])

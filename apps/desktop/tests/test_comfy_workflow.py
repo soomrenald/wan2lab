@@ -26,7 +26,11 @@ def builder() -> ComfyWanWorkflowBuilder:
             "SpecializedReplace": {"input": {"required": {}}},
         }
     )
-    capabilities = inspect_comfyui_wan(info, {"devices": [{"name": "NVIDIA CUDA"}]})
+    capabilities = inspect_comfyui_wan(
+        info,
+        {"devices": [{"name": "NVIDIA CUDA"}]},
+        executable_specialized_modes=frozenset({WanMode.ANIMATE, WanMode.REPLACE}),
+    )
     selections = {
         model.model_id: ComfyModelSelection(
             model_id=model.model_id,
