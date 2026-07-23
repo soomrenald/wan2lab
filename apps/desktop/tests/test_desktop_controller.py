@@ -439,6 +439,26 @@ class DesktopControllerTests(unittest.TestCase):
             )
             self.assertEqual(request_payload["request"]["operation"], "edit_image")
 
+    def test_keyframe_retime_preserves_asset_and_requires_replanning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.png"
+            Image.new("RGB", (1280, 720), "green").save(source)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.importKeyframe(QUrl.fromLocalFile(str(source)), 3.0)
+            original = controller.session.project.keyframes[0]
+            controller.planMockTimeline()
+
+            controller.retimeKeyframe(0, 4.25)
+
+            moved = controller.session.project.keyframes[0]
+            self.assertEqual(moved.keyframe_id, original.keyframe_id)
+            self.assertEqual(moved.image_asset_id, original.image_asset_id)
+            self.assertEqual(moved.provenance_id, original.provenance_id)
+            self.assertEqual(moved.time_ms, 4_250)
+            self.assertIsNone(controller.session.project.segment_plan)
+            self.assertIsNone(controller.session.segment_plan)
+
     def test_reject_and_regenerate_create_a_new_reviewable_revision(self) -> None:
         controller = DesktopController()
         controller.planMockTimeline()

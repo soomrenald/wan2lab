@@ -482,6 +482,13 @@ ApplicationWindow {
                         text: "Approve keyframe"
                         onClicked: studio.approveKeyframe(keyframeReviewIndex.value)
                     }
+                    Button {
+                        text: "Move"
+                        onClicked: studio.retimeKeyframe(
+                            keyframeReviewIndex.value,
+                            Number(keyframeTime.text)
+                        )
+                    }
                 }
                 Label { text: "Keyframe face refinement"; color: "#aeb9cb" }
                 RowLayout {

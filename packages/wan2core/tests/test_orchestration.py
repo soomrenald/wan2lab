@@ -36,6 +36,29 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(job_id, "segment-1-job-1")
         self.assertEqual(revision.source_request.frame_count, 81)
 
+    def test_replanning_preserves_revision_history_and_uses_fresh_segment_ids(self) -> None:
+        project = Wan2LabProject(
+            project_id="project-replan",
+            project_settings=ProjectSettings(
+                default_wan_backend_id="mock-wan",
+                default_wan_model_id="wan-test",
+            ),
+            timeline=Timeline(duration_ms=5_000, output_fps=24.0),
+        )
+        session = WanStudioSession(project)
+        session.plan(default_mock_capabilities(), model_id="wan-test")
+        original = session.generate_next_with_mock(
+            MockWanBackend(default_mock_capabilities()),
+            seed=1,
+            progress=lambda _event: None,
+        )
+
+        session.plan(default_mock_capabilities(), model_id="wan-test")
+
+        self.assertEqual(session.project.segment_revisions, (original,))
+        self.assertNotEqual(session.project.segments[0].segment_id, original.segment_id)
+        self.assertFalse(session.project.segments[0].revision_ids)
+
     def test_external_worker_lifecycle_registers_assets_and_failure_state(self) -> None:
         project = Wan2LabProject(
             project_id="project-worker",

@@ -66,6 +66,7 @@ from wan2core.keyframes.workflows import (
     register_pose_view_entry,
     register_style_duplication,
     remove_pose_view_entry,
+    retime_timeline_keyframe,
     revise_timeline_keyframe,
     update_pose_view_entry,
 )
@@ -1617,6 +1618,25 @@ class DesktopController(QObject):
             self._session.project.model_copy(update={"keyframes": keyframes}).model_dump()
         )
         self._set_status("Keyframe approved and locked for Wan planning")
+        self.projectChanged.emit()
+
+    @Slot(int, float)
+    def retimeKeyframe(self, keyframe_index: int, time_seconds: float) -> None:  # noqa: N802
+        try:
+            keyframe = self._session.project.keyframes[keyframe_index]
+            self._session.project = retime_timeline_keyframe(
+                self._session.project,
+                keyframe_id=keyframe.keyframe_id,
+                time_ms=round(time_seconds * 1000),
+            )
+            self._session.segment_plan = None
+        except Exception as error:
+            self._set_status(f"Keyframe retime failed: {error}")
+            return
+        self._append_event(
+            f"Moved keyframe {keyframe.keyframe_id} to {time_seconds:g}s; asset preserved"
+        )
+        self._set_status("Keyframe timing updated; replan before further generation")
         self.projectChanged.emit()
 
     @Slot(int, int, int, float, float, float, float, str)

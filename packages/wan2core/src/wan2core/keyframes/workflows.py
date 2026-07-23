@@ -287,6 +287,53 @@ def revise_timeline_keyframe(
     )
 
 
+def retime_timeline_keyframe(
+    project: Wan2LabProject,
+    *,
+    keyframe_id: str,
+    time_ms: int,
+) -> Wan2LabProject:
+    """Move timeline metadata while preserving the immutable keyframe asset and history."""
+
+    if not 0 <= time_ms <= project.timeline.duration_ms:
+        raise ValueError("keyframe time is outside the timeline")
+    if any(
+        item.keyframe_id != keyframe_id and item.time_ms == time_ms
+        for item in project.keyframes
+    ):
+        raise ValueError("only one keyframe may occupy an exact timeline time")
+    found = False
+    keyframes = []
+    for keyframe in project.keyframes:
+        if keyframe.keyframe_id == keyframe_id:
+            found = True
+            keyframes.append(keyframe.model_copy(update={"time_ms": time_ms}))
+        else:
+            keyframes.append(keyframe)
+    if not found:
+        raise KeyError(keyframe_id)
+    ordered = tuple(sorted(keyframes, key=lambda item: item.time_ms))
+    timeline = project.timeline.model_copy(
+        update={"keyframe_ids": tuple(item.keyframe_id for item in ordered)}
+    )
+    updated = Wan2LabProject.model_validate(
+        project.model_copy(
+            update={
+                "keyframes": ordered,
+                "timeline": timeline,
+                "segment_plan": None,
+            }
+        ).model_dump()
+    )
+    return Wan2LabProject.model_validate(
+        invalidate_segments(
+            updated,
+            tuple(item.segment_id for item in updated.segments),
+            reason="authored keyframe timing changed and requires segment replanning",
+        ).model_dump()
+    )
+
+
 def _append_asset(existing: tuple[AssetRef, ...], item: AssetRef) -> tuple[AssetRef, ...]:
     if any(current.asset_id == item.asset_id for current in existing):
         raise ValueError(f"asset ID already exists: {item.asset_id}")

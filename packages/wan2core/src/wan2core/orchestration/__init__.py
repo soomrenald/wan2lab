@@ -44,6 +44,22 @@ class WanStudioSession:
             default_segment_budget_ms=self.project.project_settings.default_segment_duration_ms,
             continuation_policy=self.project.project_settings.default_continuation_policy,
         )
+        reserved_segment_ids = {
+            revision.segment_id for revision in self.project.segment_revisions
+        }
+        allocated_segment_ids = set(reserved_segment_ids)
+        remapped_planned_segments = []
+        for planned in plan.segments:
+            segment_id = planned.segment_id
+            suffix = 2
+            while segment_id in allocated_segment_ids:
+                segment_id = f"{planned.segment_id}-plan-{suffix}"
+                suffix += 1
+            allocated_segment_ids.add(segment_id)
+            remapped_planned_segments.append(
+                planned.model_copy(update={"segment_id": segment_id})
+            )
+        plan = plan.model_copy(update={"segments": tuple(remapped_planned_segments)})
         segments = tuple(
             Segment(
                 segment_id=item.segment_id,
@@ -66,7 +82,6 @@ class WanStudioSession:
                 update={
                     "segments": segments,
                     "segment_plan": plan,
-                    "segment_revisions": (),
                     "timeline": timeline,
                 }
             )
