@@ -7,12 +7,68 @@ from dataclasses import dataclass
 from threading import Event
 from typing import Callable
 
-from wan2core.backends import BackendCapabilities
+from wan2core.backends import (
+    BackendCapabilities,
+    FrameDurationBasis,
+    ModelVariantCapabilities,
+    MultiplePlusOffsetFrameCount,
+    Resolution,
+    WanMode,
+)
 from wan2core.segments import SegmentRequest
 from wan2core.workers import WorkerProgress, WorkerResult
 
 
 ProgressCallback = Callable[[WorkerProgress], None]
+
+
+def default_mock_capabilities() -> BackendCapabilities:
+    modes = frozenset(
+        {
+            WanMode.PROMPT,
+            WanMode.I2V,
+            WanMode.FIRST_LAST,
+            WanMode.ANIMATE,
+            WanMode.REPLACE,
+        }
+    )
+    return BackendCapabilities(
+        backend_id="mock-wan",
+        backend_version="1.0",
+        accelerator_vendors=frozenset({"cpu", "cuda", "rocm"}),
+        model_variants=(
+            ModelVariantCapabilities(
+                model_id="wan-test",
+                display_name="Deterministic mock Wan",
+                supported_modes=modes,
+                required_inputs_by_mode={
+                    WanMode.PROMPT: (),
+                    WanMode.I2V: ("start_image_asset_id",),
+                    WanMode.FIRST_LAST: ("start_image_asset_id", "end_image_asset_id"),
+                    WanMode.ANIMATE: (
+                        "reference_character_asset_id",
+                        "driving_video_asset_id",
+                    ),
+                    WanMode.REPLACE: (
+                        "reference_character_asset_id",
+                        "source_video_asset_id",
+                    ),
+                },
+                supported_resolutions=(Resolution(width=1280, height=720),),
+                default_resolution=Resolution(width=1280, height=720),
+                frame_count_rule=MultiplePlusOffsetFrameCount(multiple=4, offset=1),
+                duration_basis=FrameDurationBasis.INTERVALS,
+                default_frame_count=81,
+                min_frame_count=5,
+                max_frame_count=81,
+                default_generation_fps=16.0,
+                supported_generation_fps=(16.0,),
+                supported_precisions=("mock",),
+            ),
+        ),
+        runtime_features=frozenset({"deterministic", "no_gpu", "model_residency"}),
+        package_versions={"wan2core": "0.1.0"},
+    )
 
 
 class MockGenerationCancelled(RuntimeError):
@@ -136,4 +192,5 @@ __all__ = [
     "CancellationToken",
     "MockGenerationCancelled",
     "MockWanBackend",
+    "default_mock_capabilities",
 ]
