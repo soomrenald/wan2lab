@@ -27,6 +27,7 @@ def object_info() -> dict[str, object]:
             }
         ),
         "WanVideoVAELoader": node(),
+        "LoadWanVideoT5TextEncoder": node(),
         "WanVideoTextEncode": node(),
         "WanVideoSampler": node(
             {

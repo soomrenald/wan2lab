@@ -170,6 +170,58 @@ ApplicationWindow {
                         : "No compatible Wan model discovered"
                     color: "#aeb9cb"
                 }
+                ComboBox {
+                    id: wanModel
+                    Layout.fillWidth: true
+                    model: studio.backendModels
+                    enabled: count > 0
+                    displayText: count > 0 ? currentText : "Wan model"
+                }
+                ComboBox {
+                    id: wanVae
+                    Layout.fillWidth: true
+                    model: studio.backendVaeModels
+                    enabled: count > 0
+                    displayText: count > 0 ? currentText : "Wan VAE"
+                }
+                ComboBox {
+                    id: wanTextEncoder
+                    Layout.fillWidth: true
+                    model: studio.backendTextEncoderModels
+                    enabled: count > 0
+                    displayText: count > 0 ? currentText : "Wan text encoder"
+                }
+                RowLayout {
+                    ComboBox {
+                        id: wanPrecision
+                        Layout.fillWidth: true
+                        model: ["bf16", "fp16", "fp32", "fp16_fast"]
+                    }
+                    ComboBox {
+                        id: wanQuantization
+                        Layout.fillWidth: true
+                        model: ["disabled", "fp8_e4m3fn", "fp8_e4m3fn_scaled", "fp8_e5m2"]
+                    }
+                }
+                RowLayout {
+                    ComboBox {
+                        id: wanOffload
+                        Layout.fillWidth: true
+                        model: ["offload_device", "main_device"]
+                    }
+                    Button {
+                        text: "Load"
+                        enabled: wanModel.count > 0 && wanVae.count > 0 && wanTextEncoder.count > 0
+                        onClicked: studio.loadLocalWanModel(
+                            wanModel.currentIndex,
+                            wanVae.currentText,
+                            wanTextEncoder.currentText,
+                            wanPrecision.currentText,
+                            wanQuantization.currentText,
+                            wanOffload.currentText
+                        )
+                    }
+                }
                 Item { Layout.fillHeight: true }
             }
         }

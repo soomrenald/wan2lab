@@ -3,11 +3,19 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 from PIL import Image
 from PySide6.QtCore import QUrl
 
-from wan2core.backends import ParameterDescriptor, ParameterGroup, ParameterType, WanMode
+from wan2core.backends import (
+    BackendCapabilities,
+    ParameterDescriptor,
+    ParameterGroup,
+    ParameterType,
+    WanMode,
+)
+from wan2core.backends.mock import default_mock_capabilities
 from wan2core.segments import SegmentState
 from wan2core.workers import CapabilitiesEvent
 from wan2lab.controller import DesktopController
@@ -85,10 +93,12 @@ class DesktopControllerTests(unittest.TestCase):
             group=ParameterGroup.COMMON,
             backend_key="steps",
         )
+        capability_payload = default_mock_capabilities().model_dump(mode="json")
+        capability_payload["parameter_descriptors"] = [descriptor.model_dump(mode="json")]
         controller._handle_worker_event(  # noqa: SLF001 - exercise the Qt event boundary
             CapabilitiesEvent(
                 command_id="inspect-test",
-                capabilities={"parameter_descriptors": [descriptor.model_dump(mode="json")]},
+                capabilities=capability_payload,
             )
         )
         controller.setSegmentBackendParameter(0, "steps", "28")
@@ -103,6 +113,49 @@ class DesktopControllerTests(unittest.TestCase):
         self.assertEqual(revision.source_request.negative_prompt, "flicker")
         self.assertEqual(revision.source_request.parameters["steps"], 28)
         self.assertTrue(any("prompt" in item for item in controller.timelineBlocks))
+
+    def test_explicit_discovered_components_are_sent_to_isolated_worker(self) -> None:
+        controller = DesktopController()
+        controller._wan_worker.send = Mock()  # type: ignore[method-assign]  # noqa: SLF001
+        base = default_mock_capabilities()
+        model = base.model_variants[0].model_copy(
+            update={
+                "supported_precisions": ("bf16",),
+                "supported_quantizations": ("disabled",),
+                "supported_offload_modes": ("offload_device",),
+            }
+        )
+        capabilities = BackendCapabilities(
+            backend_id="comfy-wan",
+            backend_version="1",
+            accelerator_vendors=frozenset({"cuda"}),
+            model_variants=(model,),
+        )
+        payload = capabilities.model_dump(mode="json")
+        payload["component_models"] = {
+            "vae": ["wan.vae"],
+            "text_encoder": ["umt5.safetensors"],
+        }
+        controller._handle_worker_event(  # noqa: SLF001
+            CapabilitiesEvent(command_id="inspect", capabilities=payload)
+        )
+
+        controller.loadLocalWanModel(
+            0,
+            "wan.vae",
+            "umt5.safetensors",
+            "bf16",
+            "disabled",
+            "offload_device",
+        )
+
+        request = controller._wan_worker.send.call_args.args[0]  # type: ignore[union-attr]  # noqa: SLF001
+        self.assertEqual(request.component_model_ids["vae"], "wan.vae")
+        self.assertEqual(request.component_model_ids["text_encoder"], "umt5.safetensors")
+        self.assertEqual(
+            controller.session.project.project_settings.default_wan_backend_id,
+            "comfy-wan",
+        )
 
     def test_output_fps_and_project_file_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

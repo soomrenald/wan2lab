@@ -69,9 +69,20 @@ class ComfyWorkerService:
     def inspect(self, command_id: str) -> CapabilitiesEvent:
         self._refresh()
         assert self.capabilities is not None
+        payload = self.capabilities.model_dump(mode="json")
+        payload["component_models"] = {
+            "vae": list(_node_choices(self.object_info, "WanVideoVAELoader", "model_name")),
+            "text_encoder": list(
+                _node_choices(
+                    self.object_info,
+                    "LoadWanVideoT5TextEncoder",
+                    "model_name",
+                )
+            ),
+        }
         return CapabilitiesEvent(
             command_id=command_id,
-            capabilities=self.capabilities.model_dump(mode="json"),
+            capabilities=payload,
         )
 
     def discover(self, command_id: str) -> ModelsEvent:

@@ -87,6 +87,7 @@ class ComfyUIClient:
 class WrapperNodes:
     model_loader: str = "WanVideoModelLoader"
     vae_loader: str = "WanVideoVAELoader"
+    text_encoder_loader: str = "LoadWanVideoT5TextEncoder"
     text_encoder: str = "WanVideoTextEncode"
     sampler: str = "WanVideoSampler"
     decoder: str = "WanVideoDecode"
@@ -111,6 +112,7 @@ def inspect_comfyui_wan(
     common = {
         nodes.model_loader,
         nodes.vae_loader,
+        nodes.text_encoder_loader,
         nodes.text_encoder,
         nodes.sampler,
         nodes.decoder,

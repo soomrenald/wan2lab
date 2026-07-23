@@ -14,7 +14,7 @@ from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from k2core import __version__ as k2core_version
 from wan2core import __version__ as wan2core_version
 from wan2core.assets import AssetKind, AssetRef
-from wan2core.backends import WanMode
+from wan2core.backends import BackendCapabilities, WanMode
 from wan2core.backends.mock import MockWanBackend, default_mock_capabilities
 from wan2core.characters import (
     AppearanceProfile,
@@ -51,9 +51,11 @@ from wan2core.segments import SegmentState
 from wan2core.timeline import Timeline
 from wan2core.provenance import ProvenanceRecord
 from wan2core.workers import (
+    AckEvent,
     CapabilitiesEvent,
     ErrorEvent,
     InspectCapabilitiesRequest,
+    LoadModelRequest,
     ModelsEvent,
     RuntimeStatusEvent,
 )
@@ -95,8 +97,13 @@ class DesktopController(QObject):
         self._wan_worker.transportError.connect(self._handle_worker_transport_error)
         self._backend_status = "Local ComfyUI backend not inspected"
         self._backend_models: list[str] = []
+        self._backend_model_descriptors: list[dict[str, object]] = []
         self._backend_parameters: list[str] = []
         self._backend_parameter_descriptors: list[dict[str, object]] = []
+        self._backend_vae_models: list[str] = []
+        self._backend_text_encoder_models: list[str] = []
+        self._inspected_capabilities: BackendCapabilities | None = None
+        self._selected_wan_model_id: str | None = None
         self._export_runner = ExportProcessRunner(self)
         self._export_runner.progress.connect(self._handle_export_progress)
         self._export_runner.completed.connect(self._complete_export)
@@ -214,6 +221,14 @@ class DesktopController(QObject):
         return list(self._backend_models)
 
     @Property("QStringList", notify=statusChanged)
+    def backendVaeModels(self) -> list[str]:  # noqa: N802
+        return list(self._backend_vae_models)
+
+    @Property("QStringList", notify=statusChanged)
+    def backendTextEncoderModels(self) -> list[str]:  # noqa: N802
+        return list(self._backend_text_encoder_models)
+
+    @Property("QStringList", notify=statusChanged)
     def backendParameters(self) -> list[str]:  # noqa: N802
         return list(self._backend_parameters)
 
@@ -259,6 +274,60 @@ class DesktopController(QObject):
                 backend_id=BACKEND_ID,
             )
         )
+
+    @Slot(int, str, str, str, str, str)
+    def loadLocalWanModel(  # noqa: N802
+        self,
+        model_index: int,
+        vae: str,
+        text_encoder: str,
+        precision: str,
+        quantization: str,
+        offload_mode: str,
+    ) -> None:
+        if self._inspected_capabilities is None:
+            self._set_status("Inspect the local Wan backend before loading a model")
+            return
+        if not 0 <= model_index < len(self._inspected_capabilities.model_variants):
+            self._set_status("Select a discovered Wan model")
+            return
+        try:
+            model = self._inspected_capabilities.model_variants[model_index]
+            if vae not in self._backend_vae_models:
+                raise ValueError("select an installed Wan VAE")
+            if text_encoder not in self._backend_text_encoder_models:
+                raise ValueError("select an installed Wan text encoder")
+            if precision not in model.supported_precisions:
+                raise ValueError("selected precision is unsupported")
+            if quantization not in model.supported_quantizations:
+                raise ValueError("selected quantization is unsupported")
+            if offload_mode not in model.supported_offload_modes:
+                raise ValueError("selected offload mode is unsupported")
+            request = LoadModelRequest(
+                command_id=f"load-{uuid4().hex}",
+                backend_id=self._inspected_capabilities.backend_id,
+                model_id=model.model_id,
+                precision=precision,
+                quantization=quantization,
+                offload_mode=offload_mode,
+                component_model_ids={"vae": vae, "text_encoder": text_encoder},
+            )
+        except Exception as error:
+            self._set_status(f"Wan model selection failed: {error}")
+            return
+        self._selected_wan_model_id = model.model_id
+        settings = self._session.project.project_settings.model_copy(
+            update={
+                "default_wan_backend_id": self._inspected_capabilities.backend_id,
+                "default_wan_model_id": model.model_id,
+            }
+        )
+        self._session.project = Wan2LabProject.model_validate(
+            self._session.project.model_copy(update={"project_settings": settings}).model_dump()
+        )
+        self._wan_worker.send(request)
+        self._set_status(f"Loading {model.display_name} through the isolated worker…")
+        self.projectChanged.emit()
 
     @Slot()
     def closeWorker(self) -> None:  # noqa: N802
@@ -854,6 +923,18 @@ class DesktopController(QObject):
         if isinstance(event, CapabilitiesEvent):
             models = event.capabilities.get("model_variants", ())
             parameters = event.capabilities.get("parameter_descriptors", ())
+            components = event.capabilities.get("component_models", {})
+            normalized_capabilities = {
+                key: value
+                for key, value in event.capabilities.items()
+                if key != "component_models"
+            }
+            self._inspected_capabilities = BackendCapabilities.model_validate(
+                normalized_capabilities
+            )
+            self._backend_model_descriptors = [
+                dict(item) for item in models if isinstance(item, dict)
+            ]
             self._backend_models = [
                 str(item.get("display_name", item.get("model_id", "unknown")))
                 for item in models
@@ -866,6 +947,13 @@ class DesktopController(QObject):
             ]
             self._backend_parameter_descriptors = [
                 dict(item) for item in parameters if isinstance(item, dict)
+            ]
+            component_mapping = components if isinstance(components, dict) else {}
+            self._backend_vae_models = [
+                str(item) for item in component_mapping.get("vae", ())
+            ]
+            self._backend_text_encoder_models = [
+                str(item) for item in component_mapping.get("text_encoder", ())
             ]
             vendor = ", ".join(event.capabilities.get("accelerator_vendors", ()))
             wrapper = event.capabilities.get("wrapper_version", "unknown")
@@ -881,6 +969,9 @@ class DesktopController(QObject):
         elif isinstance(event, ErrorEvent):
             self._backend_status = event.error.message
             self._append_event(f"Wan worker: {event.error.message}")
+        elif isinstance(event, AckEvent):
+            self._backend_status = event.message
+            self._append_event(f"Wan worker: {event.message}")
         self.statusChanged.emit()
 
     @Slot(str)

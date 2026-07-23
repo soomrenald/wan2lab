@@ -124,6 +124,13 @@ class WorkerServiceTests(unittest.TestCase):
             events.append,
         )
         self.assertEqual(capabilities_event.kind.value, "capabilities")
+        self.assertEqual(
+            capabilities_event.capabilities["component_models"],
+            {
+                "vae": ["wan_2.1_vae.safetensors"],
+                "text_encoder": ["umt5_xxl_fp16.safetensors"],
+            },
+        )
         self.assertTrue(result.result.result_asset_id.startswith("comfy-video-"))
         self.assertEqual(
             result.result.metadata["output_storage_keys"],
