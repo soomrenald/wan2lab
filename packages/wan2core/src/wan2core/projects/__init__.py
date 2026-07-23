@@ -140,6 +140,42 @@ class Wan2LabProject(DomainModel):
                 revision = revision_by_id.get(revision_id)
                 if revision is None or revision.segment_id != segment.segment_id:
                     raise ValueError("segment revision linkage is inconsistent")
+        for revision in self.segment_revisions:
+            referenced_assets = {
+                *revision.frame_asset_ids,
+                *revision.replacement_frame_map.values(),
+                *(
+                    (revision.result_asset_id,)
+                    if revision.result_asset_id is not None
+                    else ()
+                ),
+                *(
+                    (revision.start_frame_asset_id,)
+                    if revision.start_frame_asset_id is not None
+                    else ()
+                ),
+                *(
+                    (revision.end_frame_asset_id,)
+                    if revision.end_frame_asset_id is not None
+                    else ()
+                ),
+            }
+            if referenced_assets - asset_ids:
+                raise ValueError("segment revision references a missing asset")
+            if revision.provenance_id is not None and revision.provenance_id not in provenance_ids:
+                raise ValueError("segment revision references missing provenance")
+        for edit in self.frame_edit_records:
+            if edit.segment_revision_id not in revision_by_id:
+                raise ValueError("frame edit references a missing segment revision")
+            edit_assets = {
+                edit.original_frame_asset_id,
+                edit.replacement_frame_asset_id,
+                *((edit.mask_asset_id,) if edit.mask_asset_id is not None else ()),
+            }
+            if edit_assets - asset_ids:
+                raise ValueError("frame edit references a missing asset")
+            if edit.provenance_id not in provenance_ids:
+                raise ValueError("frame edit references missing provenance")
         return self
 
 

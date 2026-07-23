@@ -168,6 +168,7 @@ def complete_modification(
     result_asset_id: Identifier,
     replacement_frame_map: dict[int, Identifier],
     provenance_id: Identifier,
+    propagate_boundary_indices: tuple[int, ...] = (),
 ) -> tuple[Segment, SegmentRevision, SegmentRevision]:
     _require_current(
         segment,
@@ -181,12 +182,27 @@ def complete_modification(
             "superseded_reason": "modified into a new immutable revision",
         }
     )
+    invalid_boundary_indices = set(propagate_boundary_indices) - {0, source_revision.source_request.frame_count - 1}
+    if invalid_boundary_indices:
+        raise ValueError("only first or last frame edits may propagate as segment boundaries")
+    missing_propagations = set(propagate_boundary_indices) - set(replacement_frame_map)
+    if missing_propagations:
+        raise ValueError("propagated boundaries require replacement frames")
+    start_frame_asset_id = source_revision.start_frame_asset_id
+    end_frame_asset_id = source_revision.end_frame_asset_id
+    if 0 in propagate_boundary_indices:
+        start_frame_asset_id = replacement_frame_map[0]
+    last_index = source_revision.source_request.frame_count - 1
+    if last_index in propagate_boundary_indices:
+        end_frame_asset_id = replacement_frame_map[last_index]
     revised = source_revision.model_copy(
         update={
             "revision_id": revision_id,
             "revision_number": len(segment.revision_ids) + 1,
             "result_asset_id": result_asset_id,
             "replacement_frame_map": replacement_frame_map,
+            "start_frame_asset_id": start_frame_asset_id,
+            "end_frame_asset_id": end_frame_asset_id,
             "review_state": RevisionReviewState.READY_FOR_REVIEW,
             "parent_revision_id": source_revision.revision_id,
             "superseded_reason": None,
@@ -240,4 +256,3 @@ __all__ = [
     "reject_revision",
     "start_generation",
 ]
-

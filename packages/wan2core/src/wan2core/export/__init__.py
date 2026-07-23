@@ -120,6 +120,8 @@ def build_export_plan(
                 stage=f"normalize_segment_{index}",
                 arguments=(
                     ffmpeg_executable,
+                    "-loglevel",
+                    "error",
                     "-y",
                     "-i",
                     source_path,
@@ -141,6 +143,8 @@ def build_export_plan(
             stage="concatenate",
             arguments=(
                 ffmpeg_executable,
+                "-loglevel",
+                "error",
                 "-y",
                 "-f",
                 "concat",
