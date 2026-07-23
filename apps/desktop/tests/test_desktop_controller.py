@@ -1063,6 +1063,8 @@ class DesktopControllerTests(unittest.TestCase):
             0.7,
         )
         self.assertEqual(controller.backendParameterDescriptors[0]["value"], 28)
+        self.assertEqual(controller.backendCommonParameterDescriptors[0]["key"], "steps")
+        self.assertEqual(controller.backendAdvancedParameterDescriptors, [])
         planned = controller.session.project.segment_plan.segments[0]
         self.assertEqual(planned.generation_fps, 8.0)
         self.assertEqual(planned.frame_count, segment.frame_count)

@@ -1370,7 +1370,7 @@ ApplicationWindow {
                 }
                 Label {
                     text: studio.backendParameterDescriptors.length > 0
-                        ? "Backend parameters"
+                        ? "Backend parameters for this model and mode"
                         : "Inspect backend to discover parameters"
                     color: "#aeb9cb"
                 }
@@ -1402,8 +1402,13 @@ ApplicationWindow {
                         : "Frame count is derived from backend rules"
                     color: "#8f9bb0"
                 }
+                Label {
+                    visible: studio.backendCommonParameterDescriptors.length > 0
+                    text: "Common backend controls"
+                    color: "#aeb9cb"
+                }
                 Repeater {
-                    model: studio.backendParameterDescriptors
+                    model: studio.backendCommonParameterDescriptors
                     delegate: RowLayout {
                         required property var modelData
                         Layout.fillWidth: true
@@ -1413,14 +1418,73 @@ ApplicationWindow {
                             text: modelData.display_name
                             color: "#aeb9cb"
                         }
-                        TextField {
+                        StackLayout {
                             Layout.fillWidth: true
-                            text: String(modelData.value)
-                            onEditingFinished: studio.setSegmentBackendParameter(
-                                selectedSegment.value,
-                                String(modelData.key),
-                                text
-                            )
+                            currentIndex: modelData.parameter_type === "enum"
+                                || modelData.parameter_type === "boolean" ? 1 : 0
+                            TextField {
+                                text: String(modelData.value)
+                                onEditingFinished: studio.setSegmentBackendParameter(
+                                    selectedSegment.value,
+                                    String(modelData.key),
+                                    text
+                                )
+                            }
+                            ComboBox {
+                                model: modelData.parameter_type === "boolean"
+                                    ? ["false", "true"] : modelData.choices
+                                Component.onCompleted: currentIndex = Math.max(
+                                    0, find(String(modelData.value))
+                                )
+                                onActivated: studio.setSegmentBackendParameter(
+                                    selectedSegment.value,
+                                    String(modelData.key),
+                                    currentText
+                                )
+                            }
+                        }
+                    }
+                }
+                Label {
+                    visible: studio.backendAdvancedParameterDescriptors.length > 0
+                    text: "Advanced backend controls"
+                    color: "#aeb9cb"
+                }
+                Repeater {
+                    model: studio.backendAdvancedParameterDescriptors
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        Label {
+                            Layout.preferredWidth: 115
+                            elide: Text.ElideRight
+                            text: modelData.display_name
+                            color: "#8f9bb0"
+                        }
+                        StackLayout {
+                            Layout.fillWidth: true
+                            currentIndex: modelData.parameter_type === "enum"
+                                || modelData.parameter_type === "boolean" ? 1 : 0
+                            TextField {
+                                text: String(modelData.value)
+                                onEditingFinished: studio.setSegmentBackendParameter(
+                                    selectedSegment.value,
+                                    String(modelData.key),
+                                    text
+                                )
+                            }
+                            ComboBox {
+                                model: modelData.parameter_type === "boolean"
+                                    ? ["false", "true"] : modelData.choices
+                                Component.onCompleted: currentIndex = Math.max(
+                                    0, find(String(modelData.value))
+                                )
+                                onActivated: studio.setSegmentBackendParameter(
+                                    selectedSegment.value,
+                                    String(modelData.key),
+                                    currentText
+                                )
+                            }
                         }
                     }
                 }

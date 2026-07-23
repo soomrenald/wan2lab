@@ -953,6 +953,22 @@ class DesktopController(QObject):
             in {str(mode) for mode in item.get("applicable_modes", ())}
         ]
 
+    @Property("QVariantList", notify=projectChanged)
+    def backendCommonParameterDescriptors(self) -> list[dict[str, object]]:  # noqa: N802
+        return [
+            item
+            for item in self.backendParameterDescriptors
+            if item.get("group") == "common"
+        ]
+
+    @Property("QVariantList", notify=projectChanged)
+    def backendAdvancedParameterDescriptors(self) -> list[dict[str, object]]:  # noqa: N802
+        return [
+            item
+            for item in self.backendParameterDescriptors
+            if item.get("group") == "advanced"
+        ]
+
     @Property("QStringList", notify=projectChanged)
     def timelineBlocks(self) -> list[str]:  # noqa: N802
         blocks = [
