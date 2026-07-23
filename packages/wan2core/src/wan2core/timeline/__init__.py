@@ -73,6 +73,12 @@ def plan_segments(
     if missing:
         raise ValueError(f"timeline references missing keyframes: {', '.join(missing)}")
     selected = sorted((by_id[keyframe_id] for keyframe_id in timeline.keyframe_ids), key=lambda item: item.time_ms)
+    unapproved = [item.keyframe_id for item in selected if not item.approved or not item.locked]
+    if unapproved:
+        raise ValueError(
+            "timeline contains keyframes that are not approved and locked: "
+            + ", ".join(unapproved)
+        )
     if any(keyframe.time_ms > timeline.duration_ms for keyframe in selected):
         raise ValueError("keyframe time exceeds timeline duration")
     times = [keyframe.time_ms for keyframe in selected]

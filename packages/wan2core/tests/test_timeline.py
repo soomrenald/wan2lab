@@ -23,6 +23,26 @@ def keyframe(index: int, time_ms: int) -> Keyframe:
 
 
 class TimelinePlannerTests(unittest.TestCase):
+    def test_unapproved_keyframe_cannot_drive_wan_planning(self) -> None:
+        draft = Keyframe(
+            keyframe_id="draft-keyframe",
+            time_ms=0,
+            image_asset_id="draft-image",
+            source_type=KeyframeSource.KREA_GENERATED,
+            provenance_id="draft-provenance",
+        )
+        with self.assertRaisesRegex(ValueError, "not approved and locked"):
+            plan_segments(
+                Timeline(
+                    duration_ms=5_000,
+                    output_fps=24,
+                    keyframe_ids=(draft.keyframe_id,),
+                ),
+                (draft,),
+                backend_capabilities(),
+                model_id="wan-test",
+            )
+
     def test_eighteen_seconds_with_three_second_anchors_is_six_segments(self) -> None:
         keyframes = tuple(keyframe(index, index * 3_000) for index in range(7))
         timeline = Timeline(
@@ -95,4 +115,3 @@ class TimelinePlannerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

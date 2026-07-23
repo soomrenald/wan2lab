@@ -31,8 +31,20 @@ from wan2core.editing.workflows import (
     plan_frame_extraction,
     plan_frame_revision_assembly,
 )
-from wan2core.keyframes import Keyframe, KeyframeSource
-from wan2core.keyframes.generation import CharacterSheetImageRequest
+from wan2core.keyframes import (
+    CharacterRegionAssignment,
+    Keyframe,
+    KeyframeSource,
+    Rectangle,
+)
+from wan2core.keyframes.composition import (
+    KeyframeCompositionRequest,
+    compile_keyframe_composition,
+)
+from wan2core.keyframes.generation import (
+    CharacterSheetImageRequest,
+    ComposedKeyframeRequest,
+)
 from wan2core.keyframes.workflows import add_timeline_keyframe, register_pose_view_entry
 from wan2core.mannequin import JointPose, Quaternion
 from wan2core.mannequin.workflows import (
@@ -147,6 +159,7 @@ class DesktopController(QObject):
         self._krea_loaded = False
         self._krea_load_command_id: str | None = None
         self._pending_krea_jobs: dict[str, dict[str, object]] = {}
+        self._draft_keyframe_regions: list[CharacterRegionAssignment] = []
         self._export_runner = ExportProcessRunner(self)
         self._export_runner.progress.connect(self._handle_export_progress)
         self._export_runner.completed.connect(self._complete_export)
@@ -226,6 +239,14 @@ class DesktopController(QObject):
         return [
             f"{keyframe.time_ms / 1000:g}s · {keyframe.source_type.value}"
             for keyframe in self._session.project.keyframes
+        ]
+
+    @Property("QStringList", notify=projectChanged)
+    def keyframeRegionLabels(self) -> list[str]:  # noqa: N802
+        return [
+            f"{item.name}: {item.rectangle.x0:g},{item.rectangle.y0:g}–"
+            f"{item.rectangle.x1:g},{item.rectangle.y1:g}"
+            for item in self._draft_keyframe_regions
         ]
 
     @Property("QStringList", notify=projectChanged)
@@ -330,6 +351,7 @@ class DesktopController(QObject):
         self._asset_store = self._store_for_project(self._session.project.project_id)
         self._project_name = "Untitled Wan2Lab Project"
         self._events.clear()
+        self._draft_keyframe_regions.clear()
         self._mannequin_preview_url = QUrl()
         self._set_status("New project ready")
         self.projectChanged.emit()
@@ -385,13 +407,25 @@ class DesktopController(QObject):
         entry_name: str,
         pose_prompt: str,
     ) -> None:
+        self.generateCharacterSheetEntryForSheet(0, entry_name, pose_prompt)
+
+    @Slot(int, str, str)
+    def generateCharacterSheetEntryForSheet(  # noqa: N802
+        self,
+        sheet_index: int,
+        entry_name: str,
+        pose_prompt: str,
+    ) -> None:
         if not self._krea_loaded:
             self._set_status("Load the local Krea backend before generating a sheet entry")
             return
         if not self._session.project.character_sheets:
             self._set_status("Create a character before generating a sheet entry")
             return
-        sheet = self._session.project.character_sheets[0]
+        if not 0 <= sheet_index < len(self._session.project.character_sheets):
+            self._set_status("Select an existing character sheet")
+            return
+        sheet = self._session.project.character_sheets[sheet_index]
         identity = next(
             item
             for item in self._session.project.characters
@@ -679,8 +713,20 @@ class DesktopController(QObject):
 
     @Slot(QUrl, str)
     def importSheetEntry(self, source_url: QUrl, name: str) -> None:  # noqa: N802
+        self.importSheetEntryForSheet(0, source_url, name)
+
+    @Slot(int, QUrl, str)
+    def importSheetEntryForSheet(  # noqa: N802
+        self,
+        sheet_index: int,
+        source_url: QUrl,
+        name: str,
+    ) -> None:
         if not self._session.project.character_sheets:
             self._set_status("Create a character before importing a sheet entry")
+            return
+        if not 0 <= sheet_index < len(self._session.project.character_sheets):
+            self._set_status("Select an existing character sheet")
             return
         try:
             source = Path(source_url.toLocalFile())
@@ -688,7 +734,7 @@ class DesktopController(QObject):
                 source, media_type=image_media_type(source)
             )
             asset = self._wan_asset(record, AssetKind.IMAGE)
-            sheet = self._session.project.character_sheets[0]
+            sheet = self._session.project.character_sheets[sheet_index]
             provenance = ProvenanceRecord(
                 provenance_id=f"provenance-{uuid4().hex}",
                 operation="import_character_sheet_entry",
@@ -752,6 +798,158 @@ class DesktopController(QObject):
             return
         self._append_event(f"Imported keyframe at {time_seconds:g}s")
         self._set_status("Keyframe imported and placed at exact timeline time")
+        self.projectChanged.emit()
+
+    @Slot(int, int, float, float, float, float, str)
+    def addKeyframeRegion(  # noqa: N802
+        self,
+        sheet_index: int,
+        entry_index: int,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        prompt: str,
+    ) -> None:
+        if not 0 <= sheet_index < len(self._session.project.character_sheets):
+            self._set_status("Select an existing character sheet")
+            return
+        sheet = self._session.project.character_sheets[sheet_index]
+        if not 0 <= entry_index < len(sheet.entries):
+            self._set_status("Select an existing pose/view entry")
+            return
+        try:
+            rectangle = Rectangle(x0=x0, y0=y0, x1=x1, y1=y1)
+            settings = self._session.project.project_settings
+            if rectangle.x1 > settings.width or rectangle.y1 > settings.height:
+                raise ValueError("region rectangle exceeds the project canvas")
+            entry = sheet.entries[entry_index]
+            assignment = CharacterRegionAssignment(
+                region_id=f"keyframe-region-{uuid4().hex}",
+                name=f"{sheet.name} · {entry.name}",
+                rectangle=rectangle,
+                identity_id=sheet.identity_id,
+                appearance_id=sheet.appearance_id,
+                pose_view_entry_id=entry.entry_id,
+                prompt=prompt.strip(),
+                priority=len(self._draft_keyframe_regions),
+            )
+        except Exception as error:
+            self._set_status(f"Keyframe region failed: {error}")
+            return
+        self._draft_keyframe_regions.append(assignment)
+        self._set_status("Character region added to the draft keyframe")
+        self.projectChanged.emit()
+
+    @Slot()
+    def clearKeyframeRegions(self) -> None:  # noqa: N802
+        self._draft_keyframe_regions.clear()
+        self._set_status("Draft keyframe regions cleared")
+        self.projectChanged.emit()
+
+    @Slot(float, str, str, str)
+    def generateRegionalKeyframe(  # noqa: N802
+        self,
+        time_seconds: float,
+        scene_prompt: str,
+        environment_prompt: str,
+        lighting_prompt: str,
+    ) -> None:
+        if not self._krea_loaded:
+            self._set_status("Load the local Krea backend before generating a keyframe")
+            return
+        if not self._draft_keyframe_regions:
+            self._set_status("Add at least one character region before generating a keyframe")
+            return
+        settings = self._session.project.project_settings
+        try:
+            composition_request = KeyframeCompositionRequest(
+                width=settings.width,
+                height=settings.height,
+                scene_prompt=scene_prompt.strip(),
+                environment_prompt=environment_prompt.strip(),
+                lighting_prompt=lighting_prompt.strip(),
+                region_assignments=tuple(self._draft_keyframe_regions),
+                mannequin_scene_id=(
+                    self._session.project.mannequin_scenes[-1].scene_id
+                    if self._session.project.mannequin_scenes
+                    else None
+                ),
+            )
+            composition = compile_keyframe_composition(
+                self._session.project,
+                composition_request,
+            )
+            source_asset_id = None
+            conditioning_path = None
+            if self._session.project.mannequin_scenes:
+                scene = self._session.project.mannequin_scenes[-1]
+                if len(scene.guide_asset_ids) >= 3:
+                    guides = dict(zip(GuideKind, scene.guide_asset_ids[-3:], strict=True))
+                    conditioning = plan_krea_conditioning(
+                        scene=scene,
+                        capabilities=KreaMannequinCapabilities(supports_i2i=True),
+                        guide_assets=guides,
+                    )
+                    source_asset_id = conditioning.guide_asset_id
+                    conditioning_path = conditioning.path.value
+            request = ComposedKeyframeRequest(
+                composition=composition,
+                seed=len(self._session.project.keyframes) + 1,
+                source_asset_id=source_asset_id,
+                mannequin_guide_asset_id=source_asset_id,
+                conditioning_path=conditioning_path,
+            )
+            required_asset_ids = {
+                *(item.asset_id for item in composition.adapter_routes),
+                *((source_asset_id,) if source_asset_id is not None else ()),
+            }
+            assets = {item.asset_id: item for item in self._session.project.assets}
+            asset_paths = {
+                asset_id: str(self._asset_store.resolve_ref(assets[asset_id]))
+                for asset_id in required_asset_ids
+            }
+            time_ms = round(time_seconds * 1000)
+            if not 0 <= time_ms <= self._session.project.timeline.duration_ms:
+                raise ValueError("keyframe time is outside the timeline")
+        except Exception as error:
+            self._set_status(f"Keyframe generation failed: {error}")
+            return
+        command_id = self._krea_worker.send(
+            "generate_baseline",
+            {
+                "request": request.to_k2_request(),
+                "asset_paths": asset_paths,
+            },
+        )
+        self._pending_krea_jobs[command_id] = {
+            "operation": "regional_keyframe",
+            "time_ms": time_ms,
+            "scene_prompt": composition_request.scene_prompt,
+            "environment_prompt": composition_request.environment_prompt,
+            "lighting_prompt": composition_request.lighting_prompt,
+            "region_assignments": tuple(self._draft_keyframe_regions),
+            "mannequin_scene_id": composition_request.mannequin_scene_id,
+            "request": request.model_dump(mode="json"),
+            "input_asset_ids": tuple(sorted(required_asset_ids)),
+        }
+        self._set_status("Generating regional keyframe with Krea…")
+
+    @Slot(int)
+    def approveKeyframe(self, keyframe_index: int) -> None:  # noqa: N802
+        if not 0 <= keyframe_index < len(self._session.project.keyframes):
+            self._set_status("Select an existing keyframe")
+            return
+        keyframes = tuple(
+            item.model_copy(update={"approved": True, "locked": True})
+            if index == keyframe_index
+            else item
+            for index, item in enumerate(self._session.project.keyframes)
+        )
+        self._session.project = Wan2LabProject.model_validate(
+            self._session.project.model_copy(update={"keyframes": keyframes}).model_dump()
+        )
+        self._set_status("Keyframe approved and locked for Wan planning")
         self.projectChanged.emit()
 
     @Slot()
@@ -1213,6 +1411,7 @@ class DesktopController(QObject):
         )
         self._project_name = Path(path).stem
         self._events.clear()
+        self._draft_keyframe_regions.clear()
         self._refresh_mannequin_preview()
         self._set_status(f"Opened {path}")
         self.projectChanged.emit()
@@ -1524,37 +1723,70 @@ class DesktopController(QObject):
                 },
             )
             asset = self._wan_asset(record, AssetKind.IMAGE)
+            operation = str(context["operation"])
             provenance = ProvenanceRecord(
                 provenance_id=f"provenance-{uuid4().hex}",
-                operation="krea_generate_character_sheet_entry",
+                operation=f"krea_generate_{operation}",
                 created_at=datetime.now(UTC),
                 model_identifiers=("krea2",),
                 backend_id="krea-comfyui",
                 parameters={"request": context["request"]},
+                input_asset_ids=tuple(context.get("input_asset_ids", ())),
                 output_asset_ids=(asset.asset_id,),
                 runtime={"worker_payload": payload.get("metadata", {})},
             )
-            entry = PoseViewEntry(
-                entry_id=f"entry-{uuid4().hex}",
-                name=str(context["entry_name"]),
-                image_asset_id=asset.asset_id,
-                identity_id=str(context["identity_id"]),
-                appearance_id=str(context["appearance_id"]),
-                source_type=PoseViewSource.GENERATED,
-                provenance_id=provenance.provenance_id,
-            )
-            self._session.project = register_pose_view_entry(
-                self._session.project,
-                sheet_id=str(context["sheet_id"]),
-                entry=entry,
-                asset=asset,
-                provenance=provenance,
-            )
+            if operation == "character_sheet_entry":
+                entry = PoseViewEntry(
+                    entry_id=f"entry-{uuid4().hex}",
+                    name=str(context["entry_name"]),
+                    image_asset_id=asset.asset_id,
+                    identity_id=str(context["identity_id"]),
+                    appearance_id=str(context["appearance_id"]),
+                    source_type=PoseViewSource.GENERATED,
+                    provenance_id=provenance.provenance_id,
+                )
+                self._session.project = register_pose_view_entry(
+                    self._session.project,
+                    sheet_id=str(context["sheet_id"]),
+                    entry=entry,
+                    asset=asset,
+                    provenance=provenance,
+                )
+                completed_label = f"character-sheet entry {entry.name}"
+                status = "Generated entry saved as an immutable draft for review"
+            elif operation == "regional_keyframe":
+                keyframe = Keyframe(
+                    keyframe_id=f"keyframe-{uuid4().hex}",
+                    time_ms=int(context["time_ms"]),
+                    image_asset_id=asset.asset_id,
+                    source_type=KeyframeSource.KREA_GENERATED,
+                    scene_prompt=str(context["scene_prompt"]),
+                    environment_prompt=str(context["environment_prompt"]),
+                    lighting_prompt=str(context["lighting_prompt"]),
+                    region_assignments=tuple(context["region_assignments"]),
+                    mannequin_scene_id=(
+                        str(context["mannequin_scene_id"])
+                        if context["mannequin_scene_id"] is not None
+                        else None
+                    ),
+                    provenance_id=provenance.provenance_id,
+                )
+                self._session.project = add_timeline_keyframe(
+                    self._session.project,
+                    keyframe=keyframe,
+                    asset=asset,
+                    provenance=provenance,
+                )
+                self._draft_keyframe_regions.clear()
+                completed_label = f"regional keyframe at {keyframe.time_ms / 1000:g}s"
+                status = "Generated keyframe saved as a draft; approve it before Wan planning"
+            else:
+                raise ValueError(f"unknown pending Krea operation: {operation}")
         except Exception as error:
             self._set_status(f"Krea result registration failed: {error}")
             return
-        self._append_event(f"Generated character-sheet entry {entry.name} with Krea")
-        self._set_status("Generated entry saved as an immutable draft for review")
+        self._append_event(f"Generated {completed_label} with Krea")
+        self._set_status(status)
         self.projectChanged.emit()
 
     @Slot(str)

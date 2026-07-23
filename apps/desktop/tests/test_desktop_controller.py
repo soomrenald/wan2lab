@@ -102,6 +102,57 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(len(controller.session.project.assets), 1)
             self.assertIn("immutable draft", controller.status.lower())
 
+    def test_multi_character_regional_keyframe_requires_explicit_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result_root = root / "krea-results"
+            controller = DesktopController(
+                asset_base=root / "projects",
+                krea_result_root=result_root,
+            )
+            controller.addCharacter("Avery", "Avery identity", "Travel", "blue jacket")
+            controller.addCharacter("Blake", "Blake identity", "Formal", "black suit")
+            for index, color in enumerate(("blue", "black")):
+                source = root / f"source-{index}.png"
+                Image.new("RGB", (256, 256), color).save(source)
+                controller.importSheetEntryForSheet(
+                    index,
+                    QUrl.fromLocalFile(str(source)),
+                    "front",
+                )
+            controller._krea_loaded = True  # noqa: SLF001
+            controller._krea_worker.send = Mock(return_value="krea-keyframe")  # type: ignore[method-assign]  # noqa: SLF001
+            controller.addKeyframeRegion(0, 0, 0, 0, 640, 720, "walking")
+            controller.addKeyframeRegion(1, 0, 640, 0, 1280, 720, "turning")
+            controller.generateRegionalKeyframe(
+                0.0,
+                "city street",
+                "wet pavement",
+                "golden hour",
+            )
+            request_payload = controller._krea_worker.send.call_args.args[1]  # type: ignore[union-attr]  # noqa: SLF001
+            result = result_root / "regional.png"
+            result.parent.mkdir(parents=True)
+            Image.new("RGB", (1280, 720), "purple").save(result)
+            controller._handle_krea_event(  # noqa: SLF001
+                {
+                    "command_id": "krea-keyframe",
+                    "state": "complete",
+                    "message": "complete",
+                    "payload": {"asset_paths": [str(result)], "metadata": {}},
+                }
+            )
+
+            keyframe = controller.session.project.keyframes[0]
+            self.assertEqual(len(request_payload["request"]["regions"]), 2)
+            self.assertEqual(keyframe.environment_prompt, "wet pavement")
+            self.assertFalse(keyframe.approved)
+            controller.planMockTimeline()
+            self.assertIn("not approved", controller.status.lower())
+            controller.approveKeyframe(0)
+            controller.planMockTimeline()
+            self.assertGreater(controller.segmentCount, 0)
+
     def test_reject_and_regenerate_create_a_new_reviewable_revision(self) -> None:
         controller = DesktopController()
         controller.planMockTimeline()

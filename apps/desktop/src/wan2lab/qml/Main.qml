@@ -17,7 +17,11 @@ ApplicationWindow {
         id: sheetImageDialog
         title: "Import character-sheet image"
         nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
-        onAccepted: studio.importSheetEntry(selectedFile, sheetEntryName.text)
+        onAccepted: studio.importSheetEntryForSheet(
+            sheetEntrySheet.value,
+            selectedFile,
+            sheetEntryName.text
+        )
     }
 
     FileDialog {
@@ -120,8 +124,12 @@ ApplicationWindow {
             Layout.preferredWidth: 285
             Layout.fillHeight: true
             background: Rectangle { color: "#191f29"; radius: 8 }
-            ColumnLayout {
+            ScrollView {
                 anchors.fill: parent
+                clip: true
+                contentWidth: availableWidth
+                ColumnLayout {
+                width: parent.width
                 Label { text: "Project & Assets"; font.bold: true }
                 Label { text: "Character identity"; color: "#aeb9cb" }
                 TextField { id: characterName; Layout.fillWidth: true; placeholderText: "Character name" }
@@ -140,6 +148,11 @@ ApplicationWindow {
                 }
                 Label { text: studio.characterNames.join(" · "); color: "#8dd7c4"; wrapMode: Text.Wrap }
                 RowLayout {
+                    SpinBox {
+                        id: sheetEntrySheet
+                        from: 0
+                        to: Math.max(0, studio.characterNames.length - 1)
+                    }
                     TextField {
                         id: sheetEntryName
                         Layout.fillWidth: true
@@ -155,7 +168,8 @@ ApplicationWindow {
                     }
                     Button {
                         text: "Generate"
-                        onClicked: studio.generateCharacterSheetEntry(
+                        onClicked: studio.generateCharacterSheetEntryForSheet(
+                            sheetEntrySheet.value,
                             sheetEntryName.text,
                             sheetPosePrompt.text
                         )
@@ -175,6 +189,70 @@ ApplicationWindow {
                     Button { text: "Import"; onClicked: keyframeImageDialog.open() }
                 }
                 Label { text: studio.keyframeLabels.join("\n"); color: "#aeb9cb"; wrapMode: Text.Wrap }
+                RowLayout {
+                    SpinBox { id: regionSheet; from: 0; to: 999; value: 0 }
+                    SpinBox { id: regionEntry; from: 0; to: 999; value: 0 }
+                    TextField {
+                        id: regionPrompt
+                        Layout.fillWidth: true
+                        placeholderText: "Region prompt"
+                    }
+                }
+                RowLayout {
+                    SpinBox { id: regionX0; from: 0; to: 4096; value: 0 }
+                    SpinBox { id: regionY0; from: 0; to: 4096; value: 0 }
+                    SpinBox { id: regionX1; from: 1; to: 4096; value: 640 }
+                    SpinBox { id: regionY1; from: 1; to: 4096; value: 720 }
+                }
+                RowLayout {
+                    Button {
+                        text: "Add region"
+                        onClicked: studio.addKeyframeRegion(
+                            regionSheet.value,
+                            regionEntry.value,
+                            regionX0.value,
+                            regionY0.value,
+                            regionX1.value,
+                            regionY1.value,
+                            regionPrompt.text
+                        )
+                    }
+                    Button { text: "Clear"; onClicked: studio.clearKeyframeRegions() }
+                    Label { text: studio.keyframeRegionLabels.length + " region(s)"; color: "#8dd7c4" }
+                }
+                TextField {
+                    id: keyframeScenePrompt
+                    Layout.fillWidth: true
+                    placeholderText: "Scene prompt"
+                }
+                RowLayout {
+                    TextField {
+                        id: keyframeEnvironmentPrompt
+                        Layout.fillWidth: true
+                        placeholderText: "Environment"
+                    }
+                    TextField {
+                        id: keyframeLightingPrompt
+                        Layout.fillWidth: true
+                        placeholderText: "Lighting"
+                    }
+                }
+                RowLayout {
+                    Button {
+                        text: "Generate regional keyframe"
+                        onClicked: studio.generateRegionalKeyframe(
+                            Number(keyframeTime.text),
+                            keyframeScenePrompt.text,
+                            keyframeEnvironmentPrompt.text,
+                            keyframeLightingPrompt.text
+                        )
+                    }
+                    SpinBox { id: keyframeReviewIndex; from: 0; to: 999; value: 0 }
+                    Button {
+                        text: "Approve keyframe"
+                        onClicked: studio.approveKeyframe(keyframeReviewIndex.value)
+                    }
+                }
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
                 Label { text: "Runtime"; font.bold: true }
                 Label {
@@ -273,6 +351,7 @@ ApplicationWindow {
                     }
                 }
                 Item { Layout.fillHeight: true }
+                }
             }
         }
 
