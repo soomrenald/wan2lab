@@ -145,6 +145,56 @@ mannequin raising a hand. The orange mannequin remains mostly stationary, so
 the requested synchronized action is not fully demonstrated. This is a review
 candidate, not an automatic semantic or visual-quality acceptance.
 
+## Full-duration thirty-step review candidate
+
+At the project owner's request, the same prompt and conditioning image were
+rendered again at the model's full 121-frame duration with a different seed:
+
+```bash
+/home/wolfhard/krea_region_project/.venv/bin/python \
+  scripts/wan2_2_smoke.py \
+  --mode i2v \
+  --start-image wan2lab/krea-wan-handoff.png \
+  --frames 121 \
+  --steps 30 \
+  --vae-tile-size 128 \
+  --vae-tile-stride 64 \
+  --seed 20260729 \
+  --prompt "The blue and orange wooden artist mannequins slowly raise one hand in a friendly synchronized wave, subtle natural joint motion, locked camera, stable studio background." \
+  --negative-prompt "flicker, distortion, warped limbs, extra limbs, camera movement, text, watermark" \
+  --output-prefix wan2lab/hardware/krea_to_wan2_2_i2v_121f_30step_seed20260729 \
+  --release
+```
+
+Evidence:
+
+- Prompt ID: `b8a56d14-806d-45fc-bb5f-c4bc85a093da`
+- Path:
+  `output/wan2lab/hardware/krea_to_wan2_2_i2v_121f_30step_seed20260729_00001.mp4`
+- H.264/yuv420p, 1280x704, 24 FPS, 121 frames, 5.041667 seconds
+- 780,725 bytes
+- SHA-256:
+  `3a555d614b9ac0ba798ce57be8c6695cfd42d0c698733a207466ddc0030b41e3`
+- ComfyUI execution time: 2 hours 42 minutes 22 seconds
+- Sampling: 2 hours 25 minutes 17 seconds, 9.259 GB peak allocated,
+  10.564 GB peak reserved
+- VAE decode: 45 tiles in 16 minutes 7 seconds
+
+FFmpeg decoded all 121 frames without error. The nine-frame contact sheet is
+stored at
+`/home/wolfhard/.cache/wan2lab/review/wan2lab-121f-seed20260729-contact-sheet.png`
+(744,359 bytes, SHA-256
+`24b27fceac6d60283b89eb3c06262daeb216fbb212fc3882182abaa54ffe686c`).
+
+The contact sheet shows both mannequins raising one hand during the clip, with
+the blue mannequin initiating first and the orange mannequin joining later.
+The studio composition and subject colors remain stable across the sampled
+frames. This remains a human-review candidate; file validity and contact-sheet
+inspection do not automatically approve semantic or visual quality.
+
+After completion, explicit ComfyUI model release returned HTTP 200 with an
+empty successful response and restored 16,351,494,144 free VRAM.
+
 ## Constrained-memory behavior
 
 An initial 1280x704 Krea attempt stopped safely after denoising step 1/4 when
