@@ -16,7 +16,7 @@ from wan2core.backends import (
     WanMode,
 )
 from wan2core.backends.mock import default_mock_capabilities
-from wan2core.editing import FrameEditOperation
+from wan2core.editing import BatchFrameSelection, FrameEditOperation
 from wan2core.keyframes import Rectangle
 from wan2core.segments import SegmentState
 from wan2core.workers import AckEvent, CapabilitiesEvent, ResultEvent, WorkerResult
@@ -284,6 +284,50 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(
                 project.segment_revisions[1].start_frame_asset_id,
                 project.frame_edit_records[0].replacement_frame_asset_id,
+            )
+            self.assertIn("mandatory review", controller.status.lower())
+
+    def test_completed_batch_modification_commits_one_reviewable_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.planMockTimeline()
+            controller.generateNextMockSegment()
+            source_revision = controller.session.project.segment_revisions[0]
+            size = (
+                source_revision.source_request.width,
+                source_revision.source_request.height,
+            )
+            originals = (root / "original-0.png", root / "original-2.png")
+            replacements = (root / "replacement-0.png", root / "replacement-2.png")
+            for path in originals:
+                Image.new("RGB", size, "blue").save(path)
+            for path in replacements:
+                Image.new("RGB", size, "red").save(path)
+            revised = root / "revised.mp4"
+            revised.write_bytes(b"immutable batch-revised video")
+            controller._active_batch_frame_edit = {  # noqa: SLF001
+                "segment_id": source_revision.segment_id,
+                "revision_id": source_revision.revision_id,
+                "source_video_asset_id": source_revision.result_asset_id,
+                "selection": BatchFrameSelection(frame_indices=(0, 2)),
+                "prompt": "repair identity consistency",
+            }
+
+            controller._complete_batch_frame_modification(  # noqa: SLF001
+                tuple(str(path) for path in originals),
+                tuple(str(path) for path in replacements),
+                str(revised),
+            )
+
+            project = controller.session.project
+            self.assertEqual(len(project.segment_revisions), 2)
+            self.assertEqual(project.segment_revisions[0].review_state.value, "superseded")
+            self.assertEqual(project.segment_revisions[1].review_state.value, "ready_for_review")
+            self.assertEqual(len(project.frame_edit_records), 2)
+            self.assertEqual(
+                {record.frame_index for record in project.frame_edit_records},
+                {0, 2},
             )
             self.assertIn("mandatory review", controller.status.lower())
 

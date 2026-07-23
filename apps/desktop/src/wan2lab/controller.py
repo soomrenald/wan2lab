@@ -27,7 +27,12 @@ from wan2core.characters import (
     StyleDuplicationEntry,
 )
 from wan2core.export import ExportPlan, ExportState, build_export_plan
-from wan2core.editing import BoundaryPropagation, FrameEditOperation, FrameEditRecord
+from wan2core.editing import (
+    BatchFrameSelection,
+    BoundaryPropagation,
+    FrameEditOperation,
+    FrameEditRecord,
+)
 from wan2core.editing.workflows import (
     NormalizedFrameEditRequest,
     commit_frame_edit_revision,
@@ -97,7 +102,11 @@ from wan2core.workers import (
 from wan2lab.backends.comfyui import BACKEND_ID
 from wan2lab.assets import LocalAssetStore, LocalComfyAssetBridge, image_media_type
 from wan2lab.export_runner import ExportProcessRunner
-from wan2lab.frame_runner import FrameExtractionProcessRunner, FrameModificationProcessRunner
+from wan2lab.frame_runner import (
+    BatchFrameModificationProcessRunner,
+    FrameExtractionProcessRunner,
+    FrameModificationProcessRunner,
+)
 from wan2lab.krea_worker_client import KreaWorkerProcess
 from wan2lab.mannequin import render_mannequin_guides
 from wan2lab.worker_client import WanWorkerProcess
@@ -182,9 +191,16 @@ class DesktopController(QObject):
         self._frame_runner.failed.connect(self._fail_frame_modification)
         self._active_frame_edit: dict[str, object] | None = None
         self._frame_extraction_runner = FrameExtractionProcessRunner(self)
-        self._frame_extraction_runner.completed.connect(self._start_krea_frame_edit)
-        self._frame_extraction_runner.failed.connect(self._fail_krea_frame_edit)
+        self._frame_extraction_runner.completed.connect(self._handle_krea_source_extracted)
+        self._frame_extraction_runner.failed.connect(
+            self._handle_krea_source_extraction_failed
+        )
         self._pending_krea_frame_edit: dict[str, object] | None = None
+        self._batch_frame_runner = BatchFrameModificationProcessRunner(self)
+        self._batch_frame_runner.progress.connect(self._handle_frame_progress)
+        self._batch_frame_runner.completed.connect(self._complete_batch_frame_modification)
+        self._batch_frame_runner.failed.connect(self._fail_batch_frame_modification)
+        self._active_batch_frame_edit: dict[str, object] | None = None
 
     @Property(str, notify=projectChanged)
     def projectName(self) -> str:  # noqa: N802 - Qt property naming
@@ -223,6 +239,8 @@ class DesktopController(QObject):
             self._frame_runner.running
             or self._frame_extraction_runner.running
             or self._pending_krea_frame_edit is not None
+            or self._batch_frame_runner.running
+            or self._active_batch_frame_edit is not None
         )
 
     @Property(str, notify=statusChanged)
@@ -628,6 +646,7 @@ class DesktopController(QObject):
         self._krea_worker.close()
         self._export_runner.cancel()
         self._frame_runner.cancel()
+        self._batch_frame_runner.cancel()
         self._frame_extraction_runner.cancel()
 
     @Slot(str)
@@ -1469,6 +1488,19 @@ class DesktopController(QObject):
         self._set_status("Extracting exact source frame for Krea…")
 
     @Slot(str)
+    def _handle_krea_source_extracted(self, source_path: str) -> None:
+        if self._active_batch_frame_edit is not None:
+            self._start_batch_krea_edit(source_path)
+        else:
+            self._start_krea_frame_edit(source_path)
+
+    @Slot(str)
+    def _handle_krea_source_extraction_failed(self, message: str) -> None:
+        if self._active_batch_frame_edit is not None:
+            self._fail_batch_frame_modification(message)
+        else:
+            self._fail_krea_frame_edit(message)
+
     def _start_krea_frame_edit(self, source_path: str) -> None:
         context = self._pending_krea_frame_edit
         if context is None:
@@ -1496,6 +1528,166 @@ class DesktopController(QObject):
         }
         self._set_status("Krea is generating the immutable replacement frame…")
 
+    @Slot(int, str, str)
+    def generateBatchFrameEditsWithKrea(  # noqa: N802
+        self,
+        segment_index: int,
+        frame_indices: str,
+        prompt: str,
+    ) -> None:
+        if not self._krea_loaded:
+            self._set_status("Load Krea before generating batch frame repairs")
+            return
+        if self.frameModificationRunning:
+            self._set_status("A frame modification is already running")
+            return
+        try:
+            values = tuple(
+                sorted(
+                    {
+                        int(item.strip())
+                        for item in frame_indices.split(",")
+                        if item.strip()
+                    }
+                )
+            )
+            selection = BatchFrameSelection(frame_indices=values)
+            segment = self._session.project.segments[segment_index]
+            if segment.state is not SegmentState.READY_FOR_REVIEW or not segment.revision_ids:
+                raise ValueError("only a reviewable segment can be batch modified")
+            revision = next(
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == segment.revision_ids[-1]
+            )
+            if any(item >= revision.source_request.frame_count for item in values):
+                raise ValueError("a selected frame index is outside the revision")
+            source_asset = next(
+                item
+                for item in self._session.project.assets
+                if item.asset_id == revision.result_asset_id
+            )
+            source_video = self._asset_store.resolve_ref(source_asset)
+        except Exception as error:
+            self._set_status(f"Batch frame edit could not start: {error}")
+            return
+        self._active_batch_frame_edit = {
+            "segment_id": segment.segment_id,
+            "segment_index": segment_index,
+            "revision_id": revision.revision_id,
+            "source_video_asset_id": source_asset.asset_id,
+            "source_video": source_video,
+            "selection": selection,
+            "pending_indices": list(selection.frame_indices),
+            "replacement_paths": {},
+            "prompt": prompt.strip(),
+            "work": (
+                self._asset_base
+                / self._session.project.project_id
+                / ".frame-work"
+                / uuid4().hex
+            ),
+        }
+        self._start_next_batch_krea_edit()
+        self._set_status(f"Starting Krea batch repair for {len(values)} frame(s)…")
+
+    def _start_next_batch_krea_edit(self) -> None:
+        context = self._active_batch_frame_edit
+        if context is None:
+            return
+        pending = context["pending_indices"]
+        if not isinstance(pending, list):
+            self._fail_batch_frame_modification("Invalid batch frame queue")
+            return
+        if not pending:
+            self._start_batch_frame_assembly()
+            return
+        frame_index = int(pending.pop(0))
+        context["current_index"] = frame_index
+        revision = next(
+            item
+            for item in self._session.project.segment_revisions
+            if item.revision_id == context["revision_id"]
+        )
+        extraction = plan_frame_extraction(
+            ffmpeg_executable=self._session.project.project_settings.ffmpeg_executable,
+            source_video_path=str(context["source_video"]),
+            frame_index=frame_index,
+            frame_count=revision.source_request.frame_count,
+            output_path=str(Path(context["work"]) / f"krea-source-{frame_index:08d}.png"),
+        )
+        self._frame_extraction_runner.start(extraction)
+
+    def _start_batch_krea_edit(self, source_path: str) -> None:
+        context = self._active_batch_frame_edit
+        if context is None:
+            return
+        frame_index = int(context["current_index"])
+        request = NormalizedFrameEditRequest(
+            source_frame_asset_id="krea-source-frame",
+            operation_type=FrameEditOperation.IMAGE_EDIT,
+            prompt=str(context["prompt"]),
+        )
+        command_id = self._krea_worker.send(
+            "edit_image",
+            {
+                "request": request.to_k2_request(),
+                "asset_paths": {"krea-source-frame": source_path},
+            },
+        )
+        self._pending_krea_jobs[command_id] = {
+            "operation": "batch_frame_edit_replacement",
+            "frame_index": frame_index,
+            "request": request.model_dump(mode="json"),
+        }
+        self._set_status(f"Krea batch repair: frame {frame_index}")
+
+    def _start_batch_frame_assembly(self) -> None:
+        context = self._active_batch_frame_edit
+        if context is None:
+            return
+        try:
+            revision = next(
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == context["revision_id"]
+            )
+            selection = context["selection"]
+            replacements = context["replacement_paths"]
+            work = Path(context["work"])
+            extraction_plans = tuple(
+                plan_frame_extraction(
+                    ffmpeg_executable=self._session.project.project_settings.ffmpeg_executable,
+                    source_video_path=str(context["source_video"]),
+                    frame_index=index,
+                    frame_count=revision.source_request.frame_count,
+                    output_path=str(work / f"original-{index:08d}.png"),
+                )
+                for index in selection.frame_indices
+            )
+            staged_paths = {
+                index: str(work / f"replacement-{index:08d}.png")
+                for index in selection.frame_indices
+            }
+            assembly = plan_frame_revision_assembly(
+                ffmpeg_executable=self._session.project.project_settings.ffmpeg_executable,
+                source_video_path=str(context["source_video"]),
+                replacement_paths=staged_paths,
+                generation_fps=revision.source_request.generation_fps,
+                frame_count=revision.source_request.frame_count,
+                output_path=str(work / f"{revision.revision_id}-batch-modified.mp4"),
+                work_directory=str(work / "sequence"),
+            )
+            self._batch_frame_runner.start(
+                extraction_plans,
+                assembly,
+                replacement_sources=tuple(
+                    Path(replacements[index]) for index in selection.frame_indices
+                ),
+            )
+        except Exception as error:
+            self._fail_batch_frame_modification(f"Batch assembly could not start: {error}")
+
     @Slot(str)
     def _fail_krea_frame_edit(self, message: str) -> None:
         self._pending_krea_frame_edit = None
@@ -1511,6 +1703,20 @@ class DesktopController(QObject):
             if command_id is not None:
                 self._krea_worker.send("cancel", {"command_id": str(command_id)})
                 self._set_status("Cancelling Krea frame edit…")
+        elif self._active_batch_frame_edit is not None:
+            active_command = next(
+                (
+                    command_id
+                    for command_id, context in self._pending_krea_jobs.items()
+                    if context.get("operation") == "batch_frame_edit_replacement"
+                ),
+                None,
+            )
+            if active_command is not None:
+                self._krea_worker.send("cancel", {"command_id": active_command})
+                self._set_status("Cancelling Krea batch frame edit…")
+            else:
+                self._batch_frame_runner.cancel()
         else:
             self._frame_runner.cancel()
 
@@ -1989,6 +2195,11 @@ class DesktopController(QObject):
                 and failed_context.get("operation") == "frame_edit_replacement"
             ):
                 self._pending_krea_frame_edit = None
+            if (
+                failed_context is not None
+                and failed_context.get("operation") == "batch_frame_edit_replacement"
+            ):
+                self._active_batch_frame_edit = None
             if command_id == self._krea_load_command_id:
                 self._krea_load_command_id = None
                 self._krea_loaded = False
@@ -2031,6 +2242,16 @@ class DesktopController(QObject):
                         ],
                     }
                 )
+                return
+            if operation == "batch_frame_edit_replacement":
+                batch = self._active_batch_frame_edit
+                if batch is None:
+                    raise RuntimeError("batch frame edit was cancelled after a worker result")
+                replacements = batch["replacement_paths"]
+                if not isinstance(replacements, dict):
+                    raise RuntimeError("invalid batch replacement accumulator")
+                replacements[int(context["frame_index"])] = str(source)
+                self._start_next_batch_krea_edit()
                 return
             record = self._asset_store.register_generated(
                 source,
@@ -2160,6 +2381,8 @@ class DesktopController(QObject):
         self._krea_loaded = False
         self._krea_load_command_id = None
         self._pending_krea_jobs.clear()
+        self._pending_krea_frame_edit = None
+        self._active_batch_frame_edit = None
         self._style_duplications.clear()
         self._append_event(message)
         self._set_status(message)
@@ -2324,6 +2547,168 @@ class DesktopController(QObject):
     @Slot(str)
     def _fail_frame_modification(self, message: str) -> None:
         self._active_frame_edit = None
+        self._append_event(message)
+        self._set_status(message)
+
+    @Slot(object, object, str)
+    def _complete_batch_frame_modification(
+        self,
+        original_paths,
+        replacement_paths,
+        revised_path: str,
+    ) -> None:
+        context = self._active_batch_frame_edit
+        self._active_batch_frame_edit = None
+        if context is None:
+            self._set_status("Batch frame modification completed without an active edit")
+            return
+        try:
+            source_revision_id = str(context["revision_id"])
+            source_video_asset_id = str(context["source_video_asset_id"])
+            selection = context["selection"]
+            source_revision = next(
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == source_revision_id
+            )
+            originals = []
+            replacements = []
+            edit_records = []
+            extraction_provenance = []
+            edit_provenance = []
+            for frame_index, original_path, replacement_path in zip(
+                selection.frame_indices,
+                original_paths,
+                replacement_paths,
+                strict=True,
+            ):
+                original_record = self._asset_store.register_generated(
+                    Path(original_path),
+                    media_type="image/png",
+                    parent_asset_ids=(source_video_asset_id,),
+                    metadata={"frame_index": frame_index, "operation": "extract_frame"},
+                )
+                original_asset = self._wan_asset(original_record, AssetKind.IMAGE)
+                replacement_record = self._asset_store.create_derived(
+                    Path(replacement_path),
+                    parent_asset_ids=(original_asset.asset_id,),
+                    media_type="image/png",
+                    metadata={"frame_index": frame_index, "operation": "krea_batch_edit"},
+                )
+                replacement_asset = self._wan_asset(replacement_record, AssetKind.IMAGE)
+                extract_id = f"provenance-{uuid4().hex}"
+                edit_id = f"provenance-{uuid4().hex}"
+                originals.append(original_asset)
+                replacements.append(replacement_asset)
+                extraction_provenance.append(
+                    ProvenanceRecord(
+                        provenance_id=extract_id,
+                        operation="extract_frame",
+                        created_at=datetime.now(UTC),
+                        input_asset_ids=(source_video_asset_id,),
+                        output_asset_ids=(original_asset.asset_id,),
+                        parameters={"frame_index": frame_index},
+                    )
+                )
+                edit_provenance.append(
+                    ProvenanceRecord(
+                        provenance_id=edit_id,
+                        operation="krea_batch_frame_edit",
+                        created_at=datetime.now(UTC),
+                        model_identifiers=("krea2",),
+                        backend_id="krea-comfyui",
+                        prompts={"prompt": str(context["prompt"])},
+                        input_asset_ids=(original_asset.asset_id,),
+                        output_asset_ids=(replacement_asset.asset_id,),
+                        parameters={"frame_index": frame_index},
+                    )
+                )
+                edit_records.append(
+                    FrameEditRecord(
+                        edit_id=f"frame-edit-{uuid4().hex}",
+                        segment_revision_id=source_revision_id,
+                        original_frame_asset_id=original_asset.asset_id,
+                        replacement_frame_asset_id=replacement_asset.asset_id,
+                        frame_index=frame_index,
+                        operation_type=FrameEditOperation.IMAGE_EDIT,
+                        prompt=str(context["prompt"]),
+                        provenance_id=edit_id,
+                    )
+                )
+            revised_record = self._asset_store.register_generated(
+                Path(revised_path),
+                media_type="video/mp4",
+                parent_asset_ids=(
+                    source_video_asset_id,
+                    *(item.asset_id for item in replacements),
+                ),
+                metadata={"operation": "assemble_batch_frame_revision"},
+            )
+            revised_asset = AssetRef(
+                asset_id=revised_record.asset_id,
+                kind=AssetKind.VIDEO,
+                storage_path=revised_record.relative_path,
+                sha256=revised_record.sha256,
+                width=source_revision.source_request.width,
+                height=source_revision.source_request.height,
+                frame_count=source_revision.source_request.frame_count,
+                duration_ms=(
+                    source_revision.source_request.end_ms
+                    - source_revision.source_request.start_ms
+                ),
+                parent_asset_ids=revised_record.parent_asset_ids,
+                immutable_source=False,
+            )
+            assembly_id = f"provenance-{uuid4().hex}"
+            assembly_provenance = ProvenanceRecord(
+                provenance_id=assembly_id,
+                operation="assemble_batch_frame_revision",
+                created_at=datetime.now(UTC),
+                input_asset_ids=(
+                    source_video_asset_id,
+                    *(item.asset_id for item in replacements),
+                ),
+                output_asset_ids=(revised_asset.asset_id,),
+                parameters={
+                    "frame_indices": list(selection.frame_indices),
+                    "generation_fps": source_revision.source_request.generation_fps,
+                },
+                runtime={"ffmpeg": self._session.project.project_settings.ffmpeg_executable},
+            )
+            project_with_originals = Wan2LabProject.model_validate(
+                self._session.project.model_copy(
+                    update={
+                        "assets": (*self._session.project.assets, *originals),
+                        "generation_records": (
+                            *self._session.project.generation_records,
+                            *extraction_provenance,
+                        ),
+                    }
+                ).model_dump()
+            )
+            self._session.project = commit_frame_edit_revision(
+                project_with_originals,
+                segment_id=str(context["segment_id"]),
+                source_revision_id=source_revision_id,
+                edit_records=tuple(edit_records),
+                replacement_assets=tuple(replacements),
+                revised_video_asset=revised_asset,
+                provenance=(*edit_provenance, assembly_provenance),
+                assembly_provenance_id=assembly_id,
+                new_revision_id=f"{source_revision.segment_id}-revision-{uuid4().hex}",
+            )
+        except Exception as error:
+            self._set_status(f"Batch frame modification registration failed: {error}")
+            return
+        self._append_event(
+            f"Batch-edited {len(selection.frame_indices)} frames as one immutable revision"
+        )
+        self._set_status("Batch-modified segment ready for mandatory review")
+        self.projectChanged.emit()
+
+    @Slot(str)
+    def _fail_batch_frame_modification(self, message: str) -> None:
+        self._active_batch_frame_edit = None
         self._append_event(message)
         self._set_status(message)
 

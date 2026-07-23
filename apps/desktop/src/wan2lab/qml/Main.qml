@@ -621,6 +621,22 @@ ApplicationWindow {
                         )
                     }
                 }
+                RowLayout {
+                    TextField {
+                        id: batchFrameIndices
+                        Layout.fillWidth: true
+                        placeholderText: "Batch frames, e.g. 4,8,12"
+                    }
+                    Button {
+                        text: "Krea batch repair"
+                        enabled: !studio.frameModificationRunning && studio.kreaLoaded
+                        onClicked: studio.generateBatchFrameEditsWithKrea(
+                            selectedSegment.value,
+                            batchFrameIndices.text,
+                            replacementPrompt.text
+                        )
+                    }
+                }
                 Button {
                     Layout.fillWidth: true
                     text: studio.frameModificationRunning
