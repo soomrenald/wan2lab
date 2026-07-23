@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import UTC, datetime
 
@@ -20,7 +21,14 @@ from wan2core.characters import (
     duplicate_sheet_style,
 )
 from wan2core.mannequin import Camera, MannequinInstance, MannequinScene, MannequinSource, Vector3
-from wan2core.projects import ProjectSettings, Wan2LabProject, load_project_document, project_document
+from wan2core.projects import (
+    PROJECT_SCHEMA_VERSION,
+    ProjectSettings,
+    Wan2LabProject,
+    load_project_document,
+    migrate_project_data,
+    project_document,
+)
 from wan2core.provenance import ProvenanceRecord
 from wan2core.timeline import Timeline
 
@@ -156,6 +164,39 @@ class DomainModelTests(unittest.TestCase):
         decoded = load_project_document(encoded)
         self.assertEqual(decoded, project)
         self.assertEqual(decoded.timeline.duration_ms, 18_000)
+
+    def test_schema_one_project_migrates_without_mutating_source_data(self) -> None:
+        legacy = {
+            "schema_version": 1,
+            "project_id": "legacy-project",
+            "project_settings": {
+                "default_wan_backend_id": "mock-wan",
+                "default_wan_model_id": "wan-test",
+            },
+            "timeline": {"duration_ms": 5_000, "output_fps": 24.0},
+        }
+
+        migrated = migrate_project_data(legacy)
+        project = load_project_document(json.dumps(legacy))
+
+        self.assertEqual(legacy["schema_version"], 1)
+        self.assertNotIn("mannequin_poses", legacy)
+        self.assertEqual(migrated["schema_version"], PROJECT_SCHEMA_VERSION)
+        self.assertEqual(migrated["mannequin_poses"], [])
+        self.assertEqual(project.schema_version, PROJECT_SCHEMA_VERSION)
+        self.assertEqual(project.mannequin_poses, ())
+        self.assertIsNone(project.segment_plan)
+
+    def test_project_loader_rejects_future_schema(self) -> None:
+        document = (
+            '{"schema_version": 999, "project_id": "future", '
+            '"project_settings": {"default_wan_backend_id": "mock-wan", '
+            '"default_wan_model_id": "wan-test"}, '
+            '"timeline": {"duration_ms": 5000, "output_fps": 24}}'
+        )
+
+        with self.assertRaisesRegex(ValueError, "newer than supported"):
+            load_project_document(document)
 
 
 if __name__ == "__main__":

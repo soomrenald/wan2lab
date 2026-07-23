@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+import json
 from pathlib import Path
 import tempfile
+from typing import Callable
 
 from pydantic import Field, field_validator, model_validator
 
@@ -21,7 +24,60 @@ from wan2core.segments import ContinuationPolicy, Segment, SegmentRevision
 from wan2core.timeline import SegmentPlan, Timeline
 
 
-PROJECT_SCHEMA_VERSION = 1
+PROJECT_SCHEMA_VERSION = 2
+
+
+ProjectDocument = dict[str, object]
+ProjectMigration = Callable[[ProjectDocument], ProjectDocument]
+
+
+def _migrate_v1_to_v2(document: ProjectDocument) -> ProjectDocument:
+    """Add domain collections introduced after the initial project contract."""
+
+    migrated = deepcopy(document)
+    migrated["schema_version"] = 2
+    for field_name, default in (
+        ("mannequin_poses", []),
+        ("segment_plan", None),
+        ("identity_warnings", []),
+        ("checkpoint_proposals", []),
+    ):
+        migrated.setdefault(field_name, default)
+    return migrated
+
+
+_PROJECT_MIGRATIONS: dict[int, ProjectMigration] = {
+    1: _migrate_v1_to_v2,
+}
+
+
+def migrate_project_data(document: dict[str, object]) -> ProjectDocument:
+    """Return a current, validated-ready copy of a historical project mapping."""
+
+    migrated = deepcopy(document)
+    raw_version = migrated.get("schema_version", 1)
+    if isinstance(raw_version, bool) or not isinstance(raw_version, int):
+        raise ValueError("Wan2Lab project schema_version must be an integer")
+    if raw_version < 1:
+        raise ValueError(f"unsupported Wan2Lab project schema: {raw_version}")
+    if raw_version > PROJECT_SCHEMA_VERSION:
+        raise ValueError(
+            "Wan2Lab project schema "
+            f"{raw_version} is newer than supported schema {PROJECT_SCHEMA_VERSION}"
+        )
+    version = raw_version
+    while version < PROJECT_SCHEMA_VERSION:
+        migration = _PROJECT_MIGRATIONS.get(version)
+        if migration is None:
+            raise ValueError(
+                f"no Wan2Lab project migration from schema {version} is available"
+            )
+        migrated = migration(migrated)
+        next_version = migrated.get("schema_version")
+        if not isinstance(next_version, int) or next_version <= version:
+            raise RuntimeError(f"project migration from schema {version} did not advance")
+        version = next_version
+    return migrated
 
 
 class ProjectSettings(DomainModel):
@@ -261,7 +317,10 @@ def project_document(project: Wan2LabProject) -> str:
 
 
 def load_project_document(document: str | bytes) -> Wan2LabProject:
-    return Wan2LabProject.model_validate_json(document)
+    decoded = json.loads(document)
+    if not isinstance(decoded, dict):
+        raise ValueError("Wan2Lab project document must contain a JSON object")
+    return Wan2LabProject.model_validate(migrate_project_data(decoded))
 
 
 def save_project(project: Wan2LabProject, path: Path) -> None:
@@ -295,6 +354,7 @@ __all__ = [
     "Wan2LabProject",
     "load_project",
     "load_project_document",
+    "migrate_project_data",
     "project_document",
     "save_project",
 ]
