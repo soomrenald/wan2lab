@@ -183,6 +183,7 @@ class DesktopController(QObject):
         self._events: list[str] = []
         self._mannequin_preview_url = QUrl()
         self._mannequin_preview_revision = 0
+        self._preview_keyframe_index = 0
         self._wan_worker = WanWorkerProcess(self)
         self._wan_worker.eventReceived.connect(self._handle_worker_event)
         self._wan_worker.transportError.connect(self._handle_worker_transport_error)
@@ -522,6 +523,37 @@ class DesktopController(QObject):
         return self._mannequin_preview_url
 
     @Property(QUrl, notify=projectChanged)
+    def keyframePreviewUrl(self) -> QUrl:  # noqa: N802
+        if not self._session.project.keyframes:
+            return QUrl()
+        keyframe = self._session.project.keyframes[
+            min(self._preview_keyframe_index, len(self._session.project.keyframes) - 1)
+        ]
+        try:
+            asset = next(
+                item
+                for item in self._session.project.assets
+                if item.asset_id == keyframe.image_asset_id
+            )
+            path = self._asset_store.resolve_ref(asset)
+        except (KeyError, FileNotFoundError, StopIteration, ValueError):
+            return QUrl()
+        return QUrl.fromLocalFile(str(path))
+
+    @Property(str, notify=projectChanged)
+    def keyframePreviewMetadata(self) -> str:  # noqa: N802
+        if not self._session.project.keyframes:
+            return "No keyframe selected"
+        keyframe = self._session.project.keyframes[
+            min(self._preview_keyframe_index, len(self._session.project.keyframes) - 1)
+        ]
+        state = "approved / locked" if keyframe.approved and keyframe.locked else "draft review"
+        return (
+            f"{keyframe.time_ms / 1000:g}s · {keyframe.source_type.value} · {state} · "
+            f"{len(keyframe.region_assignments)} region(s)"
+        )
+
+    @Property(QUrl, notify=projectChanged)
     def reviewVideoUrl(self) -> QUrl:  # noqa: N802
         revision = self._selected_review_revision()
         if revision is None or revision.result_asset_id is None:
@@ -798,6 +830,7 @@ class DesktopController(QObject):
         self._face_batch_draft = None
         self._pending_checkpoint_application = None
         self._mannequin_preview_url = QUrl()
+        self._preview_keyframe_index = 0
         self._set_status("New project ready")
         self.projectChanged.emit()
         self.eventLogChanged.emit()
@@ -3862,6 +3895,7 @@ class DesktopController(QObject):
         self._project_name = Path(path).stem
         self._review_segment_index = 0
         self._review_revision_id = None
+        self._preview_keyframe_index = 0
         self._events.clear()
         self._draft_keyframe_regions.clear()
         self._face_batch_draft = None
@@ -3885,6 +3919,17 @@ class DesktopController(QObject):
                 len(self._session.project.segments) - 1,
             )
         self._review_revision_id = None
+        self.projectChanged.emit()
+
+    @Slot(int)
+    def selectPreviewKeyframe(self, keyframe_index: int) -> None:  # noqa: N802
+        if not self._session.project.keyframes:
+            self._preview_keyframe_index = 0
+        else:
+            self._preview_keyframe_index = min(
+                max(0, keyframe_index),
+                len(self._session.project.keyframes) - 1,
+            )
         self.projectChanged.emit()
 
     @Slot(int)

@@ -953,17 +953,39 @@ ApplicationWindow {
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 12
-                    Label {
-                        text: studio.mannequinPreviewUrl.toString().length > 0
-                            ? "Integrated Mannequin Viewport"
-                            : "Video / Keyframe Preview"
-                        font.pixelSize: 22
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: previewMode.currentText === "Review"
+                                ? "Segment Review"
+                                : previewMode.currentText === "Keyframe"
+                                    ? "Keyframe Preview"
+                                    : "Integrated Mannequin Viewport"
+                            font.pixelSize: 22
+                        }
+                        Item { Layout.fillWidth: true }
+                        ComboBox {
+                            id: previewMode
+                            model: ["Review", "Keyframe", "Mannequin"]
+                        }
+                        SpinBox {
+                            id: previewKeyframe
+                            visible: previewMode.currentText === "Keyframe"
+                            enabled: studio.keyframeLabels.length > 0
+                            from: 0
+                            to: Math.max(0, studio.keyframeLabels.length - 1)
+                            onValueModified: studio.selectPreviewKeyframe(value)
+                        }
                     }
                     Image {
+                        id: stillPreview
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        visible: source.toString().length > 0
-                        source: studio.mannequinPreviewUrl
+                        visible: previewMode.currentText !== "Review"
+                            && source.toString().length > 0
+                        source: previewMode.currentText === "Keyframe"
+                            ? studio.keyframePreviewUrl
+                            : studio.mannequinPreviewUrl
                         fillMode: Image.PreserveAspectFit
                         cache: false
                     }
@@ -977,16 +999,28 @@ ApplicationWindow {
                         id: reviewVideoOutput
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        visible: studio.mannequinPreviewUrl.toString().length === 0
+                        visible: previewMode.currentText === "Review"
                             && studio.reviewVideoUrl.toString().length > 0
                         fillMode: VideoOutput.PreserveAspectFit
                     }
                     Label {
                         Layout.alignment: Qt.AlignHCenter
-                        visible: studio.mannequinPreviewUrl.toString().length === 0
-                            && studio.reviewVideoUrl.toString().length === 0
-                        text: "Generate a segment to open its immutable review video"
+                        visible: (previewMode.currentText === "Review"
+                            && studio.reviewVideoUrl.toString().length === 0)
+                            || (previewMode.currentText !== "Review"
+                                && stillPreview.source.toString().length === 0)
+                        text: previewMode.currentText === "Review"
+                            ? "Generate a segment to open its immutable review video"
+                            : previewMode.currentText === "Keyframe"
+                                ? "Import or generate a keyframe to preview it"
+                                : "Create a mannequin scene to open its viewport"
                         color: "#7f8ca0"
+                    }
+                    Label {
+                        visible: previewMode.currentText === "Keyframe"
+                            && studio.keyframePreviewUrl.toString().length > 0
+                        text: studio.keyframePreviewMetadata
+                        color: "#8dd7c4"
                     }
                     RowLayout {
                         visible: reviewVideoOutput.visible

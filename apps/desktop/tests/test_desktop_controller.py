@@ -537,6 +537,8 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(moved.time_ms, 4_250)
             self.assertIsNone(controller.session.project.segment_plan)
             self.assertIsNone(controller.session.segment_plan)
+            self.assertTrue(controller.keyframePreviewUrl.isLocalFile())
+            self.assertIn("4.25s", controller.keyframePreviewMetadata)
 
     def test_reject_and_regenerate_create_a_new_reviewable_revision(self) -> None:
         controller = DesktopController()
