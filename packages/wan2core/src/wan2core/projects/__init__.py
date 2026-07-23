@@ -43,6 +43,24 @@ def _migrate_v1_to_v2(document: ProjectDocument) -> ProjectDocument:
         ("checkpoint_proposals", []),
     ):
         migrated.setdefault(field_name, default)
+    plan = migrated.get("segment_plan")
+    segments = migrated.get("segments")
+    if isinstance(plan, dict) and isinstance(segments, list):
+        planned_items = plan.get("segments")
+        if isinstance(planned_items, list):
+            planned_by_id = {
+                item.get("segment_id"): item
+                for item in planned_items
+                if isinstance(item, dict)
+            }
+            for segment in segments:
+                if not isinstance(segment, dict):
+                    continue
+                planned = planned_by_id.get(segment.get("segment_id"))
+                if not isinstance(planned, dict):
+                    continue
+                segment.setdefault("generation_fps", planned.get("generation_fps"))
+                segment.setdefault("frame_count", planned.get("frame_count"))
     return migrated
 
 
@@ -237,6 +255,25 @@ class Wan2LabProject(DomainModel):
                 item.segment_id for item in self.segments
             ):
                 raise ValueError("persisted segment plan differs from project segments")
+            for planned, segment in zip(
+                self.segment_plan.segments,
+                self.segments,
+                strict=True,
+            ):
+                if (
+                    planned.start_ms != segment.start_ms
+                    or planned.end_ms != segment.end_ms
+                    or planned.mode is not segment.mode
+                    or planned.backend_id != segment.backend_id
+                    or planned.model_id != segment.model_id
+                    or planned.generation_fps != segment.generation_fps
+                    or planned.frame_count != segment.frame_count
+                    or planned.continuation_policy is not segment.continuation_policy
+                    or planned.output_fps != self.timeline.output_fps
+                ):
+                    raise ValueError(
+                        f"persisted segment plan metadata differs from {segment.segment_id}"
+                    )
         for segment in self.segments:
             if segment.action_spec_id is not None and segment.action_spec_id not in action_ids:
                 raise ValueError("segment references a missing action spec")

@@ -88,8 +88,25 @@ def change_output_fps(project: Wan2LabProject, output_fps: float) -> Wan2LabProj
         export.model_copy(update={"state": ExportState.STALE, "stale_reason": reason})
         for export in project.exports
     )
+    segment_plan = (
+        project.segment_plan.model_copy(
+            update={
+                "segments": tuple(
+                    item.model_copy(update={"output_fps": output_fps})
+                    for item in project.segment_plan.segments
+                )
+            }
+        )
+        if project.segment_plan is not None
+        else None
+    )
     return project.model_copy(
-        update={"project_settings": settings, "timeline": timeline, "exports": exports}
+        update={
+            "project_settings": settings,
+            "timeline": timeline,
+            "segment_plan": segment_plan,
+            "exports": exports,
+        }
     )
 
 

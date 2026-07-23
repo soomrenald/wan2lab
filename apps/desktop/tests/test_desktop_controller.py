@@ -1059,6 +1059,10 @@ class DesktopControllerTests(unittest.TestCase):
             0.7,
         )
         self.assertEqual(controller.backendParameterDescriptors[0]["value"], 28)
+        planned = controller.session.project.segment_plan.segments[0]
+        self.assertEqual(planned.generation_fps, 8.0)
+        self.assertEqual(planned.frame_count, segment.frame_count)
+        self.assertEqual(controller.session.segment_plan, controller.session.project.segment_plan)
 
     def test_mode_specific_assets_and_continuation_flow_into_animate_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1106,6 +1110,12 @@ class DesktopControllerTests(unittest.TestCase):
             request = controller.session.project.segment_revisions[0].source_request
             self.assertEqual(
                 segment.continuation_policy.value,
+                "corrected_continuation",
+            )
+            planned = controller.session.project.segment_plan.segments[0]
+            self.assertEqual(planned.mode, WanMode.ANIMATE)
+            self.assertEqual(
+                planned.continuation_policy.value,
                 "corrected_continuation",
             )
             self.assertEqual(

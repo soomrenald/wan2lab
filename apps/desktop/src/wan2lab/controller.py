@@ -3693,6 +3693,7 @@ class DesktopController(QObject):
                 source_frame_asset_id=checkpoint_asset.asset_id,
                 provenance=link_provenance,
             )
+            self._session.segment_plan = None
         except Exception as error:
             self._set_status(f"Checkpoint application failed: {error}")
             return
@@ -3987,8 +3988,9 @@ class DesktopController(QObject):
                 segment if index == segment_index else item
                 for index, item in enumerate(self._session.project.segments)
             )
-            updated = Wan2LabProject.model_validate(
-                self._session.project.model_copy(update={"segments": segments}).model_dump()
+            updated = self._sync_segment_plan(
+                self._session.project.model_copy(update={"segments": segments}),
+                segment,
             )
             self._session.project = self._invalidate_generated_segment(
                 updated,
@@ -4131,8 +4133,9 @@ class DesktopController(QObject):
                 else item
                 for index, item in enumerate(self._session.project.segments)
             )
-            updated = Wan2LabProject.model_validate(
-                self._session.project.model_copy(update={"segments": segments}).model_dump()
+            updated = self._sync_segment_plan(
+                self._session.project.model_copy(update={"segments": segments}),
+                segments[segment_index],
             )
             self._session.project = self._invalidate_generated_segment(
                 updated,
@@ -4308,8 +4311,9 @@ class DesktopController(QObject):
                 segment if index == segment_index else item
                 for index, item in enumerate(self._session.project.segments)
             )
-            updated = Wan2LabProject.model_validate(
-                self._session.project.model_copy(update={"segments": segments}).model_dump()
+            updated = self._sync_segment_plan(
+                self._session.project.model_copy(update={"segments": segments}),
+                segment,
             )
             self._session.project = self._invalidate_generated_segment(
                 updated,
@@ -4339,6 +4343,45 @@ class DesktopController(QObject):
                 f"{model.display_name} supports at most {maximum} reference "
                 f"character{'s' if maximum != 1 else ''} in {mode.value} mode"
             )
+
+    def _sync_segment_plan(
+        self,
+        project: Wan2LabProject,
+        segment,
+    ) -> Wan2LabProject:
+        plan = project.segment_plan
+        if plan is None:
+            return Wan2LabProject.model_validate(project.model_dump())
+        capabilities = self._inspected_capabilities or self._capabilities
+        model = capabilities.model(segment.model_id)
+        generation_fps = segment.generation_fps or model.default_generation_fps
+        frame_count = segment.frame_count or model.resolve_frame_count(
+            segment.end_ms - segment.start_ms,
+            generation_fps,
+            segment.frame_rounding,
+        )
+        planned_segments = tuple(
+            item.model_copy(
+                update={
+                    "mode": segment.mode,
+                    "generation_fps": generation_fps,
+                    "frame_count": frame_count,
+                    "actual_duration_ms": model.frame_duration_ms(
+                        frame_count,
+                        generation_fps,
+                    ),
+                    "continuation_policy": segment.continuation_policy,
+                }
+            )
+            if item.segment_id == segment.segment_id
+            else item
+            for item in plan.segments
+        )
+        synchronized = plan.model_copy(update={"segments": planned_segments})
+        self._session.segment_plan = synchronized
+        return Wan2LabProject.model_validate(
+            project.model_copy(update={"segment_plan": synchronized}).model_dump()
+        )
 
     @Slot(QUrl)
     def exportApprovedVideo(self, url: QUrl) -> None:  # noqa: N802

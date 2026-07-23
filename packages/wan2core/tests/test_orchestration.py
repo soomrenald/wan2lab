@@ -57,7 +57,6 @@ class OrchestrationTests(unittest.TestCase):
         )
         segment = session.project.segments[0].model_copy(
             update={
-                "mode": WanMode.I2V,
                 "start_image_asset_id": boundary.asset_id,
             }
         )

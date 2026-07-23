@@ -158,6 +158,7 @@ def apply_approved_checkpoint(
         update={
             "keyframes": keyframes,
             "timeline": timeline,
+            "segment_plan": None,
             "generation_records": (*project.generation_records, provenance),
         }
     )
