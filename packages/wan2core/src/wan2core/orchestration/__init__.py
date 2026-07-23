@@ -426,6 +426,14 @@ class WanStudioSession:
 
     def _request_for(self, segment: Segment, planned) -> SegmentRequest:
         keyframes = {item.keyframe_id: item for item in self.project.keyframes}
+        action = next(
+            (
+                item
+                for item in self.project.actions
+                if item.action_id == segment.action_spec_id
+            ),
+            None,
+        )
         start_asset = (
             keyframes[segment.start_keyframe_id].image_asset_id
             if segment.start_keyframe_id is not None
@@ -453,6 +461,7 @@ class WanStudioSession:
             prompt=segment.prompt,
             negative_prompt=segment.negative_prompt,
             action_spec_id=segment.action_spec_id,
+            action_spec=action,
             character_identity_ids=segment.character_identity_ids,
             parameters=segment.parameters,
         )

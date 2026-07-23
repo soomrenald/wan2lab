@@ -13,6 +13,7 @@ from PIL import Image
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 
 from k2core import __version__ as k2core_version
+from wan2core.actions import ActionSpec
 from wan2core import __version__ as wan2core_version
 from wan2core.assets import AssetKind, AssetRef
 from wan2core.backends import BackendCapabilities, WanMode
@@ -2526,6 +2527,72 @@ class DesktopController(QObject):
             return
         self._append_event(f"Updated segment {segment.segment_id} inspector settings")
         self._set_status("Segment prompt and mode updated")
+        self.projectChanged.emit()
+
+    @Slot(int, str, str, str, str, str, str, str, float)
+    def setSegmentAction(  # noqa: N802
+        self,
+        segment_index: int,
+        motion_instruction: str,
+        starting_pose_ref: str,
+        ending_pose_ref: str,
+        character_trajectory: str,
+        camera_trajectory: str,
+        contact_constraints: str,
+        speed_easing: str,
+        pose_accuracy_preference: float,
+    ) -> None:
+        try:
+            segment = self._session.project.segments[segment_index]
+            action_id = segment.action_spec_id or f"action-{uuid4().hex}"
+            existing = next(
+                (
+                    item
+                    for item in self._session.project.actions
+                    if item.action_id == action_id
+                ),
+                None,
+            )
+            action = ActionSpec(
+                action_id=action_id,
+                motion_instruction=motion_instruction.strip(),
+                starting_pose_ref=starting_pose_ref.strip() or None,
+                ending_pose_ref=ending_pose_ref.strip() or None,
+                character_trajectory=character_trajectory.strip(),
+                camera_trajectory=camera_trajectory.strip(),
+                contact_constraints=tuple(
+                    item.strip()
+                    for item in contact_constraints.split(",")
+                    if item.strip()
+                ),
+                speed_easing=speed_easing.strip(),
+                driving_video_asset_id=(
+                    existing.driving_video_asset_id if existing is not None else None
+                ),
+                pose_accuracy_preference=pose_accuracy_preference,
+            )
+            actions = tuple(
+                action if item.action_id == action_id else item
+                for item in self._session.project.actions
+            )
+            if existing is None:
+                actions = (*actions, action)
+            segments = tuple(
+                segment.model_copy(update={"action_spec_id": action.action_id})
+                if index == segment_index
+                else item
+                for index, item in enumerate(self._session.project.segments)
+            )
+            self._session.project = Wan2LabProject.model_validate(
+                self._session.project.model_copy(
+                    update={"actions": actions, "segments": segments}
+                ).model_dump()
+            )
+        except Exception as error:
+            self._set_status(f"Action update failed: {error}")
+            return
+        self._append_event(f"Updated structured action for {segment.segment_id}")
+        self._set_status("Structured action saved; supported controls will bind at generation")
         self.projectChanged.emit()
 
     @Slot(int, str, str)

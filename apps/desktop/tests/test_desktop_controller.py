@@ -683,6 +683,17 @@ class DesktopControllerTests(unittest.TestCase):
         controller = DesktopController()
         controller.planMockTimeline()
         controller.updateSegmentInspector(0, "prompt", "camera orbit", "flicker")
+        controller.setSegmentAction(
+            0,
+            "walk toward the window",
+            "pose-start",
+            "pose-end",
+            "left to right",
+            "slow orbit",
+            "hand remains on railing",
+            "ease in",
+            0.7,
+        )
         descriptor = ParameterDescriptor(
             key="steps",
             display_name="Steps",
@@ -713,6 +724,12 @@ class DesktopControllerTests(unittest.TestCase):
         self.assertEqual(revision.source_request.prompt, "camera orbit")
         self.assertEqual(revision.source_request.negative_prompt, "flicker")
         self.assertEqual(revision.source_request.parameters["steps"], 28)
+        self.assertEqual(
+            revision.source_request.action_spec.motion_instruction,
+            "walk toward the window",
+        )
+        self.assertEqual(revision.source_request.action_spec_id, segment.action_spec_id)
+        self.assertEqual(len(controller.session.project.actions), 1)
         self.assertTrue(any("prompt" in item for item in controller.timelineBlocks))
 
     def test_explicit_discovered_components_are_sent_to_isolated_worker(self) -> None:

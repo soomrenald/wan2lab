@@ -98,6 +98,7 @@ class Wan2LabProject(DomainModel):
         identity_ids = set(collections["character IDs"])
         appearance_by_id = {item.appearance_id: item for item in self.appearance_profiles}
         asset_ids = set(collections["asset IDs"])
+        action_ids = set(collections["action IDs"])
         keyframe_ids = set(collections["keyframe IDs"])
         segment_ids = set(collections["segment IDs"])
         revision_by_id = {item.revision_id: item for item in self.segment_revisions}
@@ -156,6 +157,8 @@ class Wan2LabProject(DomainModel):
             ):
                 raise ValueError("persisted segment plan differs from project segments")
         for segment in self.segments:
+            if segment.action_spec_id is not None and segment.action_spec_id not in action_ids:
+                raise ValueError("segment references a missing action spec")
             if segment.start_keyframe_id and segment.start_keyframe_id not in keyframe_ids:
                 raise ValueError("segment references a missing start keyframe")
             if segment.end_keyframe_id and segment.end_keyframe_id not in keyframe_ids:

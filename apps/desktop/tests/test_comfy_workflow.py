@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from wan2core.actions import ActionSpec
 from wan2core.backends import WanMode
 from wan2core.segments import SegmentRequest
 from wan2lab.backends.comfy_workflow import (
@@ -122,7 +123,21 @@ class ComfyWorkflowTests(unittest.TestCase):
     def test_prompt_graph_is_api_format_and_resolves_backend_parameters(self) -> None:
         workflow_builder = builder()
         plan = workflow_builder.build(
-            request(workflow_builder, WanMode.PROMPT, "t2v", parameters={"steps": 24}),
+            request(
+                workflow_builder,
+                WanMode.PROMPT,
+                "t2v",
+                parameters={"steps": 24},
+                action_spec_id="action-1",
+                action_spec=ActionSpec(
+                    action_id="action-1",
+                    motion_instruction="walk slowly toward the window",
+                    camera_trajectory="gentle clockwise orbit",
+                    contact_constraints=("left hand remains on railing",),
+                    speed_easing="ease in and settle",
+                    starting_pose_ref="pose-start",
+                ),
+            ),
             asset_inputs={},
             filename_prefix="wan2lab/segment-1/revision-1",
             seed=44,
@@ -131,6 +146,13 @@ class ComfyWorkflowTests(unittest.TestCase):
         self.assertEqual(plan.workflow["6"]["inputs"]["steps"], 24)
         self.assertEqual(plan.workflow["6"]["inputs"]["seed"], 44)
         self.assertEqual(plan.workflow["4"]["inputs"]["negative_prompt"], "flicker")
+        positive = plan.workflow["4"]["inputs"]["positive_prompt"]
+        self.assertIn("walk slowly toward the window", positive)
+        self.assertIn("gentle clockwise orbit", positive)
+        self.assertEqual(
+            plan.resolved_parameters["action_controls"]["starting_pose_ref"],
+            "pose-start",
+        )
         self.assertEqual(plan.output_node_id, "8")
 
     def test_first_last_graph_binds_individual_immutable_assets(self) -> None:

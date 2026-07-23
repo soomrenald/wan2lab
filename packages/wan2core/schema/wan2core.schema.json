@@ -2971,6 +2971,17 @@
       "SegmentRequest": {
         "additionalProperties": false,
         "properties": {
+          "action_spec": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ActionSpec"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "action_spec_id": {
             "anyOf": [
               {
@@ -3686,6 +3697,99 @@
   },
   "segment_request": {
     "$defs": {
+      "ActionSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Action Id",
+            "type": "string"
+          },
+          "camera_trajectory": {
+            "default": "",
+            "title": "Camera Trajectory",
+            "type": "string"
+          },
+          "character_trajectory": {
+            "default": "",
+            "title": "Character Trajectory",
+            "type": "string"
+          },
+          "contact_constraints": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Contact Constraints",
+            "type": "array"
+          },
+          "driving_video_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Driving Video Asset Id"
+          },
+          "ending_pose_ref": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ending Pose Ref"
+          },
+          "motion_instruction": {
+            "default": "",
+            "title": "Motion Instruction",
+            "type": "string"
+          },
+          "pose_accuracy_preference": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Pose Accuracy Preference",
+            "type": "number"
+          },
+          "speed_easing": {
+            "default": "",
+            "title": "Speed Easing",
+            "type": "string"
+          },
+          "starting_pose_ref": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Starting Pose Ref"
+          }
+        },
+        "required": [
+          "action_id"
+        ],
+        "title": "ActionSpec",
+        "type": "object"
+      },
       "FrameRounding": {
         "enum": [
           "nearest",
@@ -3709,6 +3813,17 @@
     },
     "additionalProperties": false,
     "properties": {
+      "action_spec": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ActionSpec"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
       "action_spec_id": {
         "anyOf": [
           {
@@ -4317,6 +4432,99 @@
   },
   "worker_request": {
     "$defs": {
+      "ActionSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Action Id",
+            "type": "string"
+          },
+          "camera_trajectory": {
+            "default": "",
+            "title": "Camera Trajectory",
+            "type": "string"
+          },
+          "character_trajectory": {
+            "default": "",
+            "title": "Character Trajectory",
+            "type": "string"
+          },
+          "contact_constraints": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Contact Constraints",
+            "type": "array"
+          },
+          "driving_video_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Driving Video Asset Id"
+          },
+          "ending_pose_ref": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ending Pose Ref"
+          },
+          "motion_instruction": {
+            "default": "",
+            "title": "Motion Instruction",
+            "type": "string"
+          },
+          "pose_accuracy_preference": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Pose Accuracy Preference",
+            "type": "number"
+          },
+          "speed_easing": {
+            "default": "",
+            "title": "Speed Easing",
+            "type": "string"
+          },
+          "starting_pose_ref": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Starting Pose Ref"
+          }
+        },
+        "required": [
+          "action_id"
+        ],
+        "title": "ActionSpec",
+        "type": "object"
+      },
       "CancelRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4650,6 +4858,17 @@
       "SegmentRequest": {
         "additionalProperties": false,
         "properties": {
+          "action_spec": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ActionSpec"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "action_spec_id": {
             "anyOf": [
               {

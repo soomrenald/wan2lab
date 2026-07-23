@@ -7,6 +7,7 @@ import re
 from typing import Mapping
 
 from wan2core.backends import BackendCapabilities, WanMode
+from wan2core.actions import compile_action_prompt
 from wan2core.segments import SegmentRequest
 
 
@@ -83,10 +84,22 @@ class ComfyWanWorkflowBuilder:
             raise WorkflowBindingError("request generation FPS is not supported by the model")
         self._validate_asset_inputs(request, asset_inputs)
         parameters = self._resolve_parameters(request)
+        effective_prompt, action_controls = compile_action_prompt(
+            request.prompt,
+            request.action_spec,
+        )
+        if request.action_spec is not None:
+            parameters["action_controls"] = {
+                "prompt_controls": list(action_controls),
+                "starting_pose_ref": request.action_spec.starting_pose_ref,
+                "ending_pose_ref": request.action_spec.ending_pose_ref,
+                "driving_video_asset_id": request.action_spec.driving_video_asset_id,
+            }
+        effective_request = request.model_copy(update={"prompt": effective_prompt})
         prefix = _safe_prefix(filename_prefix)
         if request.mode in {WanMode.PROMPT, WanMode.I2V, WanMode.FIRST_LAST}:
             workflow = self._standard_workflow(
-                request,
+                effective_request,
                 selection=selection,
                 asset_inputs=asset_inputs,
                 filename_prefix=prefix,
@@ -114,7 +127,7 @@ class ComfyWanWorkflowBuilder:
                 f"{', '.join(sorted(missing))}"
             )
         context = _template_context(
-            request,
+            effective_request,
             selection=selection,
             asset_inputs=asset_inputs,
             filename_prefix=prefix,

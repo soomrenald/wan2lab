@@ -7,6 +7,7 @@ from enum import StrEnum
 from pydantic import Field, model_validator
 
 from wan2core.backends import FrameRounding, WanMode
+from wan2core.actions import ActionSpec
 from wan2core.base import DomainModel, Identifier, Milliseconds, require_unique
 
 
@@ -65,6 +66,7 @@ class SegmentRequest(DomainModel):
     prompt: str = ""
     negative_prompt: str = ""
     action_spec_id: Identifier | None = None
+    action_spec: ActionSpec | None = None
     character_identity_ids: tuple[Identifier, ...] = ()
     parameters: dict[str, object] = Field(default_factory=dict)
 
@@ -83,6 +85,8 @@ class SegmentRequest(DomainModel):
         if missing:
             raise ValueError(f"{self.mode.value} request is missing: {', '.join(missing)}")
         require_unique(self.character_identity_ids, "segment character identity IDs")
+        if self.action_spec is not None and self.action_spec.action_id != self.action_spec_id:
+            raise ValueError("embedded action spec must match action_spec_id")
         return self
 
 

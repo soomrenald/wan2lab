@@ -622,8 +622,12 @@ ApplicationWindow {
             Layout.preferredWidth: 310
             Layout.fillHeight: true
             background: Rectangle { color: "#191f29"; radius: 8 }
-            ColumnLayout {
+            ScrollView {
                 anchors.fill: parent
+                clip: true
+                contentWidth: availableWidth
+                ColumnLayout {
+                width: parent.width
                 Label { text: "Context Inspector"; font.bold: true }
                 RowLayout {
                     Label { text: "Segment"; color: "#aeb9cb" }
@@ -660,6 +664,77 @@ ApplicationWindow {
                         segmentPrompt.text,
                         segmentNegativePrompt.text
                     )
+                }
+                Label { text: "Structured action"; color: "#aeb9cb" }
+                TextField {
+                    id: actionMotion
+                    Layout.fillWidth: true
+                    placeholderText: "Motion instruction"
+                }
+                RowLayout {
+                    TextField {
+                        id: actionStartPose
+                        Layout.fillWidth: true
+                        placeholderText: "Starting pose ref ID"
+                    }
+                    TextField {
+                        id: actionEndPose
+                        Layout.fillWidth: true
+                        placeholderText: "Ending pose ref ID"
+                    }
+                }
+                TextField {
+                    id: actionCharacterTrajectory
+                    Layout.fillWidth: true
+                    placeholderText: "Character path / trajectory"
+                }
+                TextField {
+                    id: actionCameraTrajectory
+                    Layout.fillWidth: true
+                    placeholderText: "Camera trajectory"
+                }
+                TextField {
+                    id: actionContacts
+                    Layout.fillWidth: true
+                    placeholderText: "Contact constraints, comma-separated"
+                }
+                TextField {
+                    id: actionSpeed
+                    Layout.fillWidth: true
+                    placeholderText: "Motion speed / easing"
+                }
+                Label {
+                    text: "Pose accuracy preference: " + actionPoseAccuracy.value.toFixed(2)
+                    color: "#aeb9cb"
+                }
+                Slider {
+                    id: actionPoseAccuracy
+                    Layout.fillWidth: true
+                    from: 0
+                    to: 1
+                    value: 0.5
+                }
+                Button {
+                    Layout.fillWidth: true
+                    text: "Save action controls"
+                    enabled: studio.segmentCount > 0
+                    onClicked: studio.setSegmentAction(
+                        selectedSegment.value,
+                        actionMotion.text,
+                        actionStartPose.text,
+                        actionEndPose.text,
+                        actionCharacterTrajectory.text,
+                        actionCameraTrajectory.text,
+                        actionContacts.text,
+                        actionSpeed.text,
+                        actionPoseAccuracy.value
+                    )
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Textual motion controls bind into Wan conditioning. Pose reference IDs remain visible in metadata unless the selected wrapper exposes a typed pose input."
+                    color: "#8f9bb0"
                 }
                 Label {
                     text: studio.backendParameterDescriptors.length > 0
@@ -974,7 +1049,7 @@ ApplicationWindow {
                 Label { text: "Activity"; font.bold: true }
                 ListView {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    Layout.preferredHeight: 180
                     clip: true
                     model: studio.eventLog
                     delegate: Label {
@@ -987,6 +1062,7 @@ ApplicationWindow {
                         bottomPadding: 3
                     }
                 }
+            }
             }
         }
     }
