@@ -1025,8 +1025,26 @@ class DesktopControllerTests(unittest.TestCase):
             Image.new("RGB", (128, 128), "purple").save(reference)
             driving.write_bytes(b"immutable driving video")
             controller = DesktopController(asset_base=root / "projects")
+            controller.addCharacter(
+                "Avery",
+                "averyface",
+                "Travel clothes",
+                "blue jacket",
+            )
             controller.planMockTimeline()
             controller.updateSegmentInspector(0, "animate", "turn and wave", "flicker")
+            controller.setSegmentCharacterAssignment(0, 0, True)
+            controller.setSegmentAction(
+                0,
+                "turn and wave",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "steady",
+                0.5,
+            )
             controller.setSegmentContinuationPolicy(0, "corrected_continuation")
             controller.importSegmentAsset(
                 0,
@@ -1052,6 +1070,13 @@ class DesktopControllerTests(unittest.TestCase):
                 segment.reference_character_asset_id,
             )
             self.assertEqual(request.driving_video_asset_id, segment.driving_video_asset_id)
+            self.assertEqual(
+                request.character_identity_ids,
+                (controller.session.project.characters[0].identity_id,),
+            )
+            action = controller.session.project.actions[0]
+            self.assertEqual(action.driving_video_asset_id, segment.driving_video_asset_id)
+            self.assertTrue(controller.selectedSegmentCharacterAssignments[0]["assigned"])
             self.assertIn("character=", controller.segmentInputSummary)
             input_ids = {
                 segment.reference_character_asset_id,
@@ -1064,6 +1089,23 @@ class DesktopControllerTests(unittest.TestCase):
                     if item.asset_id in input_ids
                 )
             )
+
+    def test_single_character_modes_reject_multiple_identity_assignments(self) -> None:
+        controller = DesktopController()
+        controller.addCharacter("Avery", "averyface", "Blue", "blue jacket")
+        controller.addCharacter("Blake", "blakeface", "Green", "green coat")
+        controller.planMockTimeline()
+        controller.updateSegmentInspector(0, "animate", "walk together", "")
+
+        controller.setSegmentCharacterAssignment(0, 0, True)
+        controller.setSegmentCharacterAssignment(0, 1, True)
+
+        segment = controller.session.project.segments[0]
+        self.assertEqual(
+            segment.character_identity_ids,
+            (controller.session.project.characters[0].identity_id,),
+        )
+        self.assertIn("at most 1 reference character", controller.status)
 
     def test_explicit_discovered_components_are_sent_to_isolated_worker(self) -> None:
         controller = DesktopController()

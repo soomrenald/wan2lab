@@ -240,6 +240,8 @@ class Wan2LabProject(DomainModel):
         for segment in self.segments:
             if segment.action_spec_id is not None and segment.action_spec_id not in action_ids:
                 raise ValueError("segment references a missing action spec")
+            if set(segment.character_identity_ids) - identity_ids:
+                raise ValueError("segment references a missing character identity")
             segment_assets = {
                 item
                 for item in (
@@ -262,6 +264,12 @@ class Wan2LabProject(DomainModel):
                 revision = revision_by_id.get(revision_id)
                 if revision is None or revision.segment_id != segment.segment_id:
                     raise ValueError("segment revision linkage is inconsistent")
+        for action in self.actions:
+            if (
+                action.driving_video_asset_id is not None
+                and action.driving_video_asset_id not in asset_ids
+            ):
+                raise ValueError("action spec references a missing driving-video asset")
         for revision in self.segment_revisions:
             referenced_assets = {
                 *revision.frame_asset_ids,

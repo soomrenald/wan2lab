@@ -776,6 +776,20 @@ class DesktopController(QObject):
             "pose_accuracy_preference": action.pose_accuracy_preference,
         }
 
+    @Property("QVariantList", notify=projectChanged)
+    def selectedSegmentCharacterAssignments(self) -> list[dict[str, object]]:  # noqa: N802
+        segment = self._selected_segment()
+        selected = set(segment.character_identity_ids) if segment is not None else set()
+        return [
+            {
+                "identity_index": index,
+                "identity_id": identity.identity_id,
+                "name": identity.name,
+                "assigned": identity.identity_id in selected,
+            }
+            for index, identity in enumerate(self._session.project.characters)
+        ]
+
     @Property(str, notify=projectChanged)
     def mannequinConditioningPath(self) -> str:  # noqa: N802
         if not self._session.project.mannequin_scenes:
@@ -3639,6 +3653,11 @@ class DesktopController(QObject):
             model = capabilities.model(current.model_id)
             if selected_mode not in model.supported_modes:
                 raise ValueError(f"Mode {selected_mode.value} is not supported by the segment model")
+            self._validate_character_limit(
+                model,
+                selected_mode,
+                current.character_identity_ids,
+            )
             segment = current.model_copy(
                 update={
                     "mode": selected_mode,
@@ -3703,7 +3722,9 @@ class DesktopController(QObject):
                 ),
                 speed_easing=speed_easing.strip(),
                 driving_video_asset_id=(
-                    existing.driving_video_asset_id if existing is not None else None
+                    segment.driving_video_asset_id
+                    or segment.source_video_asset_id
+                    or (existing.driving_video_asset_id if existing is not None else None)
                 ),
                 pose_accuracy_preference=pose_accuracy_preference,
             )
@@ -3734,6 +3755,48 @@ class DesktopController(QObject):
             return
         self._append_event(f"Updated structured action for {segment.segment_id}")
         self._set_status("Structured action saved; supported controls will bind at generation")
+        self.projectChanged.emit()
+
+    @Slot(int, int, bool)
+    def setSegmentCharacterAssignment(  # noqa: N802
+        self,
+        segment_index: int,
+        identity_index: int,
+        assigned: bool,
+    ) -> None:
+        try:
+            segment = self._session.project.segments[segment_index]
+            identity = self._session.project.characters[identity_index]
+            selected = list(segment.character_identity_ids)
+            if assigned and identity.identity_id not in selected:
+                selected.append(identity.identity_id)
+            elif not assigned and identity.identity_id in selected:
+                selected.remove(identity.identity_id)
+            capabilities = self._inspected_capabilities or self._capabilities
+            model = capabilities.model(segment.model_id)
+            self._validate_character_limit(model, segment.mode, tuple(selected))
+            revised = segment.model_copy(
+                update={"character_identity_ids": tuple(selected)}
+            )
+            segments = tuple(
+                revised if index == segment_index else item
+                for index, item in enumerate(self._session.project.segments)
+            )
+            updated = Wan2LabProject.model_validate(
+                self._session.project.model_copy(update={"segments": segments}).model_dump()
+            )
+            self._session.project = self._invalidate_generated_segment(
+                updated,
+                segment.segment_id,
+                "segment character assignments changed",
+            )
+        except Exception as error:
+            self._set_status(f"Character assignment failed: {error}")
+            return
+        self._set_status(
+            f"{identity.name} {'assigned to' if assigned else 'removed from'} "
+            f"{segment.segment_id}"
+        )
         self.projectChanged.emit()
 
     @Slot(int, str)
@@ -3807,6 +3870,15 @@ class DesktopController(QObject):
                 else item
                 for index, item in enumerate(self._session.project.segments)
             )
+            actions = self._session.project.actions
+            action_id = segments[segment_index].action_spec_id
+            if role in {"driving_video", "source_video"} and action_id is not None:
+                actions = tuple(
+                    action.model_copy(update={"driving_video_asset_id": asset.asset_id})
+                    if action.action_id == action_id
+                    else action
+                    for action in actions
+                )
             updated = Wan2LabProject.model_validate(
                 self._session.project.model_copy(
                     update={
@@ -3815,6 +3887,7 @@ class DesktopController(QObject):
                             *self._session.project.generation_records,
                             provenance,
                         ),
+                        "actions": actions,
                         "segments": segments,
                     }
                 ).model_dump()
@@ -3934,6 +4007,20 @@ class DesktopController(QObject):
             f"({actual_duration / 1000:g}s actual)"
         )
         self.projectChanged.emit()
+
+    @staticmethod
+    def _validate_character_limit(model, mode: WanMode, identity_ids: tuple[str, ...]) -> None:
+        limits = tuple(
+            item.maximum_reference_characters
+            for item in model.adapter_compatibility
+            if item.mode is mode and item.maximum_reference_characters is not None
+        )
+        if limits and len(identity_ids) > min(limits):
+            maximum = min(limits)
+            raise ValueError(
+                f"{model.display_name} supports at most {maximum} reference "
+                f"character{'s' if maximum != 1 else ''} in {mode.value} mode"
+            )
 
     @Slot(QUrl)
     def exportApprovedVideo(self, url: QUrl) -> None:  # noqa: N802

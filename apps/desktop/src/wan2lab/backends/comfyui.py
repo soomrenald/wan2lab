@@ -11,6 +11,7 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from wan2core.backends import (
+    AdapterCompatibility,
     BackendCapabilities,
     FrameDurationBasis,
     ModelVariantCapabilities,
@@ -224,6 +225,11 @@ def _model_capabilities(
             )
         ),
         supported_offload_modes=("offload_device", "main_device"),
+        adapter_compatibility=tuple(
+            AdapterCompatibility(mode=mode, maximum_reference_characters=1)
+            for mode in (WanMode.ANIMATE, WanMode.REPLACE)
+            if mode in modes
+        ),
         estimated_memory_profiles={"safe_16gb": 16.0, "performance_24gb": 24.0},
         parameter_descriptors=applicable,
     )

@@ -8,6 +8,7 @@ from threading import Event
 from typing import Callable
 
 from wan2core.backends import (
+    AdapterCompatibility,
     BackendCapabilities,
     FrameDurationBasis,
     ModelVariantCapabilities,
@@ -64,6 +65,16 @@ def default_mock_capabilities() -> BackendCapabilities:
                 default_generation_fps=16.0,
                 supported_generation_fps=(16.0,),
                 supported_precisions=("mock",),
+                adapter_compatibility=(
+                    AdapterCompatibility(
+                        mode=WanMode.ANIMATE,
+                        maximum_reference_characters=1,
+                    ),
+                    AdapterCompatibility(
+                        mode=WanMode.REPLACE,
+                        maximum_reference_characters=1,
+                    ),
+                ),
             ),
         ),
         runtime_features=frozenset({"deterministic", "no_gpu", "model_residency"}),

@@ -1406,6 +1406,27 @@ ApplicationWindow {
                     }
                 }
                 Label { text: "Character assignments"; color: "#aeb9cb" }
+                Repeater {
+                    model: studio.selectedSegmentCharacterAssignments
+                    delegate: CheckBox {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        text: modelData.name
+                        checked: modelData.assigned
+                        onClicked: studio.setSegmentCharacterAssignment(
+                            selectedSegment.value,
+                            modelData.identity_index,
+                            checked
+                        )
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    visible: studio.selectedSegmentCharacterAssignments.length === 0
+                    text: "Create a character identity to assign it to this segment."
+                    color: "#8f9bb0"
+                }
                 Label { text: "Review and provenance"; color: "#aeb9cb" }
                 Label {
                     Layout.fillWidth: true
