@@ -21,6 +21,21 @@ ApplicationWindow {
         continuationPolicy.currentIndex = Math.max(
             0, continuationPolicy.find(studio.selectedSegmentContinuationPolicy)
         )
+        for (let index = 0; index < segmentAcceleration.count; ++index) {
+            if (segmentAcceleration.valueAt(index) === studio.selectedSegmentAccelerationMode) {
+                segmentAcceleration.currentIndex = index
+                break
+            }
+        }
+        wanAccelerationQuality.currentIndex = Math.max(
+            0, wanAccelerationQuality.find(studio.wanAccelerationQuality)
+        )
+        for (let index = 0; index < wanAccelerationMethod.count; ++index) {
+            if (wanAccelerationMethod.valueAt(index) === studio.wanAccelerationSelectedMethod) {
+                wanAccelerationMethod.currentIndex = index
+                break
+            }
+        }
         segmentPrompt.text = studio.selectedSegmentPrompt
         segmentNegativePrompt.text = studio.selectedSegmentNegativePrompt
         let action = studio.selectedSegmentAction
@@ -959,6 +974,69 @@ ApplicationWindow {
                     text: studio.wanModelCompatibility
                     color: "#8f9bb0"
                 }
+                Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
+                Label {
+                    text: "Accelerated Wan"
+                    font.bold: true
+                    color: "#8dd7c4"
+                }
+                CheckBox {
+                    id: wanAccelerationEnabled
+                    Layout.fillWidth: true
+                    text: "Use compatible acceleration (default)"
+                    checked: studio.wanAccelerationEnabled
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    ComboBox {
+                        id: wanAccelerationQuality
+                        Layout.fillWidth: true
+                        model: ["preview", "balanced", "quality"]
+                        Component.onCompleted: currentIndex = Math.max(
+                            0, find(studio.wanAccelerationQuality)
+                        )
+                    }
+                    ComboBox {
+                        id: wanAccelerationMethod
+                        Layout.fillWidth: true
+                        model: studio.wanAccelerationMethodOptions
+                        textRole: "label"
+                        valueRole: "method_id"
+                    }
+                    Button {
+                        text: "Apply"
+                        onClicked: studio.setWanAcceleration(
+                            wanAccelerationEnabled.checked,
+                            wanAccelerationQuality.currentText,
+                            String(wanAccelerationMethod.currentValue || "")
+                        )
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: studio.wanAccelerationSummary
+                    color: "#d6b76b"
+                }
+                Label {
+                    visible: studio.wanGpuRecommendations.length > 0
+                    text: "Recommended GPUs for this model/mode"
+                    font.bold: true
+                }
+                Repeater {
+                    model: studio.wanGpuRecommendations
+                    delegate: Label {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: modelData.tier + ": " + modelData.gpu + " · "
+                            + modelData.vram_gib + " GB"
+                            + (modelData.requires_quantization ? " · quantized" : "")
+                            + (modelData.requires_offload ? " · offload" : "")
+                            + "\n" + modelData.rationale
+                        color: "#8f9bb0"
+                    }
+                }
                 Item { Layout.fillHeight: true }
                 }
             }
@@ -1222,6 +1300,23 @@ ApplicationWindow {
                         selectedSegment.value,
                         currentText
                     )
+                }
+                ComboBox {
+                    id: segmentAcceleration
+                    Layout.fillWidth: true
+                    model: studio.segmentAccelerationOptions
+                    textRole: "label"
+                    valueRole: "value"
+                    onActivated: studio.setSegmentAcceleration(
+                        selectedSegment.value,
+                        String(currentValue)
+                    )
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: studio.wanAccelerationSummary
+                    color: "#d6b76b"
                 }
                 Label { text: "Mode inputs"; color: "#aeb9cb" }
                 GridLayout {

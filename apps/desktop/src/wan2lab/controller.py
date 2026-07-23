@@ -18,7 +18,17 @@ from k2core import __version__ as k2core_version
 from wan2core.actions import ActionSpec
 from wan2core import __version__ as wan2core_version
 from wan2core.assets import AssetKind, AssetRef
-from wan2core.backends import BackendCapabilities, FrameRounding, WanMode
+from wan2core.backends import (
+    BackendCapabilities,
+    FrameRounding,
+    SegmentAccelerationMode,
+    SegmentAccelerationPolicy,
+    WanAccelerationPolicy,
+    WanAccelerationQuality,
+    WanAccelerationSelection,
+    WanMode,
+    resolve_wan_acceleration,
+)
 from wan2core.backends.mock import MockWanBackend, default_mock_capabilities
 from wan2core.characters import (
     AdapterFamily,
@@ -80,6 +90,10 @@ from wan2core.identity.workflows import (
     confirm_warning_association,
     propose_checkpoint_from_warnings,
     register_identity_analysis,
+)
+from wan2core.hardware import (
+    WanWorkloadProfile,
+    approved_gpu_recommendation_catalog,
 )
 from wan2core.mannequin import (
     ContactConstraint,
@@ -757,6 +771,33 @@ class DesktopController(QObject):
             else ContinuationPolicy.AUTHORED_ANCHOR.value
         )
 
+    @Property(str, notify=projectChanged)
+    def selectedSegmentAccelerationMode(self) -> str:  # noqa: N802
+        segment = self._selected_segment()
+        if segment is None:
+            return SegmentAccelerationMode.INHERIT.value
+        if segment.acceleration.mode is SegmentAccelerationMode.SPECIFIC:
+            return f"specific:{segment.acceleration.method_id}"
+        return segment.acceleration.mode.value
+
+    @Property("QVariantList", notify=projectChanged)
+    def segmentAccelerationOptions(self) -> list[dict[str, str]]:  # noqa: N802
+        options = [
+            {"label": "Inherit project acceleration", "value": "inherit"},
+            {"label": "Enabled — automatic", "value": "enabled"},
+            {"label": "Disabled — base inference", "value": "disabled"},
+        ]
+        model = self._wan_model_control()
+        if model is not None:
+            options.extend(
+                {
+                    "label": f"Use {method.display_name}",
+                    "value": f"specific:{method.method_id}",
+                }
+                for method in model.acceleration_methods
+            )
+        return options
+
     @Property(float, notify=projectChanged)
     def selectedSegmentGenerationFps(self) -> float:  # noqa: N802
         segment = self._selected_segment()
@@ -888,6 +929,130 @@ class DesktopController(QObject):
             return None
         index = min(self._wan_model_control_index, len(capabilities.model_variants) - 1)
         return capabilities.model_variants[index]
+
+    @Property(bool, notify=projectChanged)
+    def wanAccelerationEnabled(self) -> bool:  # noqa: N802
+        return self._session.project.project_settings.wan_acceleration.enabled
+
+    @Property(str, notify=projectChanged)
+    def wanAccelerationQuality(self) -> str:  # noqa: N802
+        return self._session.project.project_settings.wan_acceleration.quality.value
+
+    @Property(str, notify=projectChanged)
+    def wanAccelerationSelectedMethod(self) -> str:  # noqa: N802
+        policy = self._session.project.project_settings.wan_acceleration
+        return policy.specific_method_id or ""
+
+    @Property("QVariantList", notify=projectChanged)
+    def wanAccelerationMethodOptions(self) -> list[dict[str, str]]:  # noqa: N802
+        model = self._wan_model_control()
+        methods = model.acceleration_methods if model is not None else ()
+        options = [
+            {
+                "label": "Auto — best installed compatible method",
+                "method_id": "",
+            },
+            *(
+                {
+                    "label": f"{method.display_name} · {method.kind.value}",
+                    "method_id": method.method_id,
+                }
+                for method in methods
+            ),
+        ]
+        selected = self.wanAccelerationSelectedMethod
+        if selected and selected not in {method.method_id for method in methods}:
+            options.append(
+                {
+                    "label": f"{selected} — unavailable",
+                    "method_id": selected,
+                }
+            )
+        return options
+
+    @Property(str, notify=projectChanged)
+    def wanAccelerationSummary(self) -> str:  # noqa: N802
+        policy = self._session.project.project_settings.wan_acceleration
+        if not policy.enabled:
+            return "Off by project policy; requests use base inference."
+        model = self._wan_model_control()
+        capabilities = self._inspected_capabilities
+        if model is None or capabilities is None:
+            return (
+                f"Enabled · {policy.selection.value}/{policy.quality.value}. "
+                "Inspect the backend to resolve an installed method."
+            )
+        segment = self._selected_segment()
+        mode = (
+            segment.mode
+            if segment is not None and segment.mode in model.supported_modes
+            else WanMode.PROMPT
+            if WanMode.PROMPT in model.supported_modes
+            else next(iter(sorted(model.supported_modes, key=lambda item: item.value)))
+        )
+        segment_policy = (
+            segment.acceleration
+            if segment is not None
+            else SegmentAccelerationPolicy()
+        )
+        vendor = next(iter(sorted(capabilities.accelerator_vendors)), "unknown")
+        resolution = resolve_wan_acceleration(
+            project_policy=policy,
+            segment_policy=segment_policy,
+            methods=model.acceleration_methods,
+            model_id=model.model_id,
+            model_family=model.model_family,
+            mode=mode,
+            accelerator_vendor=vendor,
+            installed_artifact_ids=frozenset(
+                artifact_id
+                for method in model.acceleration_methods
+                for artifact_id in method.required_artifact_ids
+            ),
+        )
+        if resolution.active:
+            return (
+                f"Active · {resolution.method_id} · {resolution.quality.value} · "
+                f"{mode.value}"
+            )
+        return f"Enabled, resolved to base inference · {resolution.fallback_reason}"
+
+    @Property("QVariantList", notify=projectChanged)
+    def wanGpuRecommendations(self) -> list[dict[str, object]]:  # noqa: N802
+        model = self._wan_model_control()
+        if model is None:
+            return []
+        segment = self._selected_segment()
+        mode = (
+            segment.mode
+            if segment is not None and segment.mode in model.supported_modes
+            else WanMode.PROMPT
+            if WanMode.PROMPT in model.supported_modes
+            else next(iter(sorted(model.supported_modes, key=lambda item: item.value)))
+        )
+        if model.model_family == WanWorkloadProfile.TI2V_5B.value:
+            workload = WanWorkloadProfile.TI2V_5B
+        elif mode in {WanMode.ANIMATE, WanMode.REPLACE}:
+            workload = WanWorkloadProfile.SPECIALIZED_14B
+        elif "14b" in model.model_family:
+            workload = WanWorkloadProfile.GENERAL_14B
+        else:
+            return []
+        recommendations = approved_gpu_recommendation_catalog().for_workload(
+            workload,
+            frozenset({mode}),
+        )
+        return [
+            {
+                "tier": recommendation.tier.value.replace("_", " ").title(),
+                "gpu": recommendation.display_name,
+                "vram_gib": recommendation.vram_gib,
+                "requires_quantization": recommendation.requires_quantization,
+                "requires_offload": recommendation.requires_offload,
+                "rationale": recommendation.rationale,
+            }
+            for recommendation in recommendations
+        ]
 
     @Property("QStringList", notify=projectChanged)
     def wanPrecisionOptions(self) -> list[str]:  # noqa: N802
@@ -1294,6 +1459,58 @@ class DesktopController(QObject):
         self._wan_model_control_index = model_index
         model = self._inspected_capabilities.model_variants[model_index]
         self._set_status(f"Selected {model.display_name}; compatible controls updated")
+        self.projectChanged.emit()
+
+    @Slot(bool, str, str)
+    def setWanAcceleration(  # noqa: N802
+        self,
+        enabled: bool,
+        quality: str,
+        method_id: str,
+    ) -> None:
+        try:
+            selected_method = method_id.strip() or None
+            current = self._session.project.project_settings
+            policy = WanAccelerationPolicy(
+                enabled=enabled,
+                selection=(
+                    WanAccelerationSelection.SPECIFIC
+                    if selected_method is not None
+                    else WanAccelerationSelection.AUTO
+                ),
+                quality=WanAccelerationQuality(quality),
+                preferred_method_ids=(
+                    current.wan_acceleration.preferred_method_ids
+                ),
+                specific_method_id=selected_method,
+            )
+            if policy == current.wan_acceleration:
+                return
+            settings = current.model_copy(update={"wan_acceleration": policy})
+            updated = Wan2LabProject.model_validate(
+                self._session.project.model_copy(
+                    update={"project_settings": settings}
+                ).model_dump()
+            )
+            inherited_generated = tuple(
+                segment.segment_id
+                for segment in updated.segments
+                if segment.revision_ids
+                and segment.acceleration.mode is SegmentAccelerationMode.INHERIT
+            )
+            self._session.project = invalidate_segments(
+                updated,
+                inherited_generated,
+                reason="project Wan acceleration policy changed",
+            )
+        except Exception as error:
+            self._set_status(f"Wan acceleration update failed: {error}")
+            return
+        self._append_event(
+            f"Wan acceleration {'enabled' if enabled else 'disabled'} "
+            f"({policy.selection.value}/{policy.quality.value})"
+        )
+        self._set_status(self.wanAccelerationSummary)
         self.projectChanged.emit()
 
     @Slot()
@@ -2927,6 +3144,9 @@ class DesktopController(QObject):
                 command_id=command_id,
                 job_id=job_id,
                 request=request,
+                acceleration_policy=(
+                    self._session.project.project_settings.wan_acceleration
+                ),
                 seed=seed,
                 asset_inputs=asset_inputs,
                 output_prefix=(
@@ -4199,6 +4419,43 @@ class DesktopController(QObject):
             self._set_status(f"Continuation policy update failed: {error}")
             return
         self._set_status(f"Continuation policy set to {selected.value}")
+        self.projectChanged.emit()
+
+    @Slot(int, str)
+    def setSegmentAcceleration(  # noqa: N802
+        self,
+        segment_index: int,
+        value: str,
+    ) -> None:
+        try:
+            if value.startswith("specific:"):
+                method_id = value.partition(":")[2]
+                policy = SegmentAccelerationPolicy(
+                    mode=SegmentAccelerationMode.SPECIFIC,
+                    method_id=method_id,
+                )
+            else:
+                policy = SegmentAccelerationPolicy(
+                    mode=SegmentAccelerationMode(value)
+                )
+            segment = self._session.project.segments[segment_index]
+            changed = segment.model_copy(update={"acceleration": policy})
+            segments = tuple(
+                changed if index == segment_index else item
+                for index, item in enumerate(self._session.project.segments)
+            )
+            updated = Wan2LabProject.model_validate(
+                self._session.project.model_copy(update={"segments": segments}).model_dump()
+            )
+            self._session.project = self._invalidate_generated_segment(
+                updated,
+                segment.segment_id,
+                "segment Wan acceleration policy changed",
+            )
+        except Exception as error:
+            self._set_status(f"Segment acceleration update failed: {error}")
+            return
+        self._set_status(f"Segment acceleration set to {value}")
         self.projectChanged.emit()
 
     @Slot(int, str, QUrl)

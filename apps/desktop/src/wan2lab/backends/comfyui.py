@@ -219,6 +219,16 @@ def _model_capabilities(
         and "ti2v" in normalized_name
         and "5b" in normalized_name
     )
+    model_family = (
+        "wan2.2-ti2v-5b"
+        if is_wan22_ti2v_5b
+        else "wan-14b-animate-replace"
+        if "14b" in normalized_name
+        and any(token in normalized_name for token in ("animate", "replace"))
+        else "wan-14b-general"
+        if "14b" in normalized_name
+        else "wan-other"
+    )
     model_id = "wan-" + re.sub(r"[^A-Za-z0-9._:-]+", "-", filename).strip("-")
     required = {
         WanMode.PROMPT: (),
@@ -279,6 +289,7 @@ def _model_capabilities(
     return ModelVariantCapabilities(
         model_id=model_id,
         display_name=filename,
+        model_family=model_family,
         supported_modes=frozenset(modes),
         required_inputs_by_mode={mode: required[mode] for mode in modes},
         optional_inputs_by_mode={

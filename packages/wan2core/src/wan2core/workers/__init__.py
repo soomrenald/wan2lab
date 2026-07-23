@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, TypeAdapter, model_validator
 
+from wan2core.backends import WanAccelerationPolicy
 from wan2core.base import DomainModel, Identifier
 from wan2core.segments import SegmentRequest
 
@@ -54,6 +55,9 @@ class GenerateSegmentRequest(DomainModel):
     command_id: Identifier
     job_id: Identifier
     request: SegmentRequest
+    acceleration_policy: WanAccelerationPolicy = Field(
+        default_factory=WanAccelerationPolicy
+    )
     seed: int = Field(ge=0, le=2_147_483_647)
     asset_inputs: dict[Identifier, str] = Field(default_factory=dict)
     output_prefix: str = Field(min_length=1)

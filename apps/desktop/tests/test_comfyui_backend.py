@@ -133,6 +133,15 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
         self.assertEqual(ti2v.supported_generation_fps, (24.0,))
         self.assertEqual(ti2v.default_frame_count, 121)
         self.assertEqual(ti2v.max_frame_count, 121)
+        self.assertEqual(ti2v.model_family, "wan2.2-ti2v-5b")
+        self.assertEqual(
+            by_name["wan2.2_animate_14B_fp16.safetensors"].model_family,
+            "wan-14b-animate-replace",
+        )
+        self.assertEqual(
+            by_name["wan2.2_i2v_14B_fp16.safetensors"].model_family,
+            "wan-14b-general",
+        )
         self.assertEqual(len(by_name["wan2.2_t2v_1.3B_fp16.safetensors"].supported_resolutions), 2)
         self.assertEqual(
             by_name["wan2.2_t2v_1.3B_fp16.safetensors"].supported_precisions,

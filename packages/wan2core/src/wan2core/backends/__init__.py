@@ -439,8 +439,7 @@ class ModelVariantCapabilities(DomainModel):
         ):
             raise ValueError("acceleration method declares a mode unsupported by the model")
         if any(
-            method.supported_model_ids
-            and self.model_id not in method.supported_model_ids
+            self.model_id not in method.supported_model_ids
             and (
                 not self.model_family
                 or self.model_family not in method.supported_model_families

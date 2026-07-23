@@ -9,7 +9,11 @@ from dataclasses import dataclass, field
 from threading import Event, Lock, Thread
 from typing import Callable, Mapping, TextIO
 
-from wan2core.backends import BackendCapabilities, WanMode
+from wan2core.backends import (
+    BackendCapabilities,
+    WanMode,
+    resolve_wan_acceleration,
+)
 from wan2core.workers import (
     AckEvent,
     CancelRequest,
@@ -184,6 +188,21 @@ class ComfyWorkerService:
         assert self.capabilities is not None
         if command.request.model_id not in self.selections:
             raise RuntimeError("load and validate the selected Wan model before generation")
+        model = self.capabilities.model(command.request.model_id)
+        acceleration = resolve_wan_acceleration(
+            project_policy=command.acceleration_policy,
+            segment_policy=command.request.acceleration,
+            methods=model.acceleration_methods,
+            model_id=model.model_id,
+            model_family=model.model_family,
+            mode=command.request.mode,
+            accelerator_vendor=accelerator_vendor(self.system_stats),
+            installed_artifact_ids=frozenset(
+                artifact_id
+                for method in model.acceleration_methods
+                for artifact_id in method.required_artifact_ids
+            ),
+        )
         builder = ComfyWanWorkflowBuilder(
             self.object_info,
             self.capabilities,
@@ -250,6 +269,7 @@ class ComfyWorkerService:
                         and self.system_stats.get("devices")
                         else {}
                     ),
+                    "wan_acceleration": acceleration.model_dump(mode="json"),
                 },
             ),
         )

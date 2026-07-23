@@ -5395,6 +5395,9 @@
       "GenerateSegmentRequest": {
         "additionalProperties": false,
         "properties": {
+          "acceleration_policy": {
+            "$ref": "#/$defs/WanAccelerationPolicy"
+          },
           "asset_inputs": {
             "patternProperties": {
               "^[A-Za-z0-9][A-Za-z0-9._:-]*$": {
@@ -5899,6 +5902,67 @@
         ],
         "title": "SegmentRequest",
         "type": "object"
+      },
+      "WanAccelerationPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "preferred_method_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Preferred Method Ids",
+            "type": "array"
+          },
+          "quality": {
+            "$ref": "#/$defs/WanAccelerationQuality",
+            "default": "balanced"
+          },
+          "selection": {
+            "$ref": "#/$defs/WanAccelerationSelection",
+            "default": "auto"
+          },
+          "specific_method_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Specific Method Id"
+          }
+        },
+        "title": "WanAccelerationPolicy",
+        "type": "object"
+      },
+      "WanAccelerationQuality": {
+        "enum": [
+          "preview",
+          "balanced",
+          "quality"
+        ],
+        "title": "WanAccelerationQuality",
+        "type": "string"
+      },
+      "WanAccelerationSelection": {
+        "enum": [
+          "auto",
+          "specific"
+        ],
+        "title": "WanAccelerationSelection",
+        "type": "string"
       },
       "WanMode": {
         "enum": [

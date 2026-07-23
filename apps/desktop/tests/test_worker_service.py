@@ -321,6 +321,11 @@ class WorkerServiceTests(unittest.TestCase):
         self.assertEqual(result.result.metadata["load_device"], "offload_device")
         self.assertEqual(result.result.metadata["accelerator_vendors"], ["cuda"])
         self.assertEqual(result.result.metadata["device"]["name"], "NVIDIA RTX")
+        self.assertFalse(result.result.metadata["wan_acceleration"]["active"])
+        self.assertIn(
+            "base inference",
+            result.result.metadata["wan_acceleration"]["fallback_reason"],
+        )
         self.assertEqual(events[-1].progress.stage, "complete")
 
     def test_stdio_inspection_emits_parseable_json_line(self) -> None:

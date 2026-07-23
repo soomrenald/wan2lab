@@ -36,6 +36,44 @@ from wan2lab.controller import DesktopController
 
 
 class DesktopControllerTests(unittest.TestCase):
+    def test_acceleration_is_primary_default_and_gpu_guidance_tracks_model(self) -> None:
+        controller = DesktopController()
+        base = default_mock_capabilities()
+        ti2v_model = base.model_variants[0].model_copy(
+            update={"model_family": "wan2.2-ti2v-5b"}
+        )
+        controller._inspected_capabilities = base.model_copy(  # noqa: SLF001
+            update={"model_variants": (ti2v_model,)}
+        )
+
+        self.assertTrue(controller.wanAccelerationEnabled)
+        self.assertEqual(controller.wanAccelerationQuality, "balanced")
+        recommendations = {
+            item["tier"]: item["gpu"] for item in controller.wanGpuRecommendations
+        }
+        self.assertEqual(recommendations["Value"], "NVIDIA RTX 4090")
+        self.assertEqual(recommendations["Speed"], "NVIDIA RTX 5090")
+        self.assertEqual(
+            recommendations["Full Memory"],
+            "NVIDIA RTX 6000 Ada",
+        )
+
+        controller.setWanAcceleration(False, "quality", "")
+
+        self.assertFalse(controller.wanAccelerationEnabled)
+        self.assertEqual(controller.wanAccelerationQuality, "quality")
+        self.assertIn("base inference", controller.wanAccelerationSummary)
+
+    def test_segment_acceleration_override_is_typed_and_persisted(self) -> None:
+        controller = DesktopController()
+        controller.planMockTimeline()
+
+        controller.setSegmentAcceleration(0, "disabled")
+
+        segment = controller.session.project.segments[0]
+        self.assertEqual(segment.acceleration.mode.value, "disabled")
+        self.assertEqual(controller.selectedSegmentAccelerationMode, "disabled")
+
     def test_detailed_identity_and_appearance_metadata_remain_separate(self) -> None:
         controller = DesktopController()
         controller.addCharacter("Avery", "Avery identity", "Travel", "blue jacket")

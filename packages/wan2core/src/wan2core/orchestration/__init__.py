@@ -7,7 +7,11 @@ from datetime import UTC, datetime
 from typing import Callable
 
 from wan2core.assets import AssetKind, AssetRef
-from wan2core.backends import BackendCapabilities, resolve_wan_acceleration
+from wan2core.backends import (
+    BackendCapabilities,
+    ResolvedWanAcceleration,
+    resolve_wan_acceleration,
+)
 from wan2core.backends.mock import CancellationToken, MockWanBackend
 from wan2core.projects import Wan2LabProject
 from wan2core.provenance import ProvenanceRecord
@@ -228,6 +232,15 @@ class WanStudioSession:
         if result.frame_asset_ids != tuple(item.asset_id for item in frame_assets):
             raise ValueError("worker frame IDs and registered frame assets differ")
         provenance_id = f"{revision.revision_id}-provenance"
+        raw_acceleration = result.metadata.get("wan_acceleration")
+        resolved_acceleration = (
+            ResolvedWanAcceleration.model_validate(raw_acceleration)
+            if isinstance(raw_acceleration, dict)
+            else revision.resolved_acceleration
+        )
+        revision = revision.model_copy(
+            update={"resolved_acceleration": resolved_acceleration}
+        )
         result_asset = result_asset.model_copy(
             update={
                 "creation_operation_id": provenance_id,
@@ -284,6 +297,11 @@ class WanStudioSession:
                     else None
                 ),
                 "character_identity_ids": request.character_identity_ids,
+                "wan_acceleration": (
+                    resolved_acceleration.model_dump(mode="json")
+                    if resolved_acceleration is not None
+                    else None
+                ),
             },
             prompts={
                 "prompt": request.prompt,
@@ -321,6 +339,7 @@ class WanStudioSession:
                     "load_device",
                     "accelerator_vendors",
                     "device",
+                    "wan_acceleration",
                 }
             },
         )
