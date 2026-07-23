@@ -100,6 +100,34 @@ def complete_generation(
     return segment.model_copy(update={"state": SegmentState.READY_FOR_REVIEW}), updated
 
 
+def finish_generation_failure(
+    segment: Segment,
+    revision: SegmentRevision,
+    *,
+    message: str,
+    cancelled: bool = False,
+) -> tuple[Segment, SegmentRevision]:
+    _require_current(
+        segment,
+        revision,
+        SegmentState.GENERATING,
+        RevisionReviewState.GENERATING,
+    )
+    if not message.strip():
+        raise ValueError("generation failure message must not be empty")
+    segment_state = SegmentState.CANCELLED if cancelled else SegmentState.ERROR
+    revision_state = RevisionReviewState.CANCELLED if cancelled else RevisionReviewState.ERROR
+    return (
+        segment.model_copy(update={"state": segment_state}),
+        revision.model_copy(
+            update={
+                "review_state": revision_state,
+                "errors": (*revision.errors, message.strip()),
+            }
+        ),
+    )
+
+
 def approve_revision(
     segment: Segment, revision: SegmentRevision
 ) -> tuple[Segment, SegmentRevision]:
@@ -251,6 +279,7 @@ __all__ = [
     "begin_modification",
     "complete_generation",
     "complete_modification",
+    "finish_generation_failure",
     "mark_segment_stale",
     "queue_revision",
     "reject_revision",

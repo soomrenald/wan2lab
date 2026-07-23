@@ -6,11 +6,56 @@ from wan2core.backends import WanMode
 from wan2core.backends.mock import MockWanBackend, default_mock_capabilities
 from wan2core.orchestration import ReviewGateBlocked, WanStudioSession
 from wan2core.projects import ProjectSettings, Wan2LabProject
-from wan2core.segments import SegmentState
+from wan2core.assets import AssetKind, AssetRef
+from wan2core.segments import RevisionReviewState, SegmentState
 from wan2core.timeline import Timeline
+from wan2core.workers import WorkerResult
 
 
 class OrchestrationTests(unittest.TestCase):
+    def test_external_worker_lifecycle_registers_assets_and_failure_state(self) -> None:
+        project = Wan2LabProject(
+            project_id="project-worker",
+            project_settings=ProjectSettings(
+                default_wan_backend_id="mock-wan",
+                default_wan_model_id="wan-test",
+            ),
+            timeline=Timeline(duration_ms=8_000, output_fps=24.0),
+        )
+        session = WanStudioSession(project)
+        session.plan(default_mock_capabilities(), model_id="wan-test")
+        _job_id, revision = session.queue_next_generation(seed=9)
+        result = WorkerResult(job_id="segment-1-job-1", result_asset_id="video-1")
+        video = AssetRef(
+            asset_id="video-1",
+            kind=AssetKind.VIDEO,
+            storage_path="objects/video-1.mp4",
+            sha256="1" * 64,
+            width=1280,
+            height=720,
+            frame_count=revision.source_request.frame_count,
+            duration_ms=revision.source_request.end_ms - revision.source_request.start_ms,
+        )
+        completed = session.complete_worker_generation(
+            revision_id=revision.revision_id,
+            result=result,
+            result_asset=video,
+            backend_version="test-worker",
+        )
+        self.assertEqual(completed.review_state, RevisionReviewState.READY_FOR_REVIEW)
+        self.assertEqual(session.project.assets, (video,))
+        self.assertEqual(session.project.generation_records[0].seed, 9)
+
+        session.reject_current("retry")
+        _job_id, retry = session.queue_rejected_generation(seed=10)
+        failed = session.fail_worker_generation(
+            revision_id=retry.revision_id,
+            message="out of memory",
+        )
+        self.assertEqual(failed.review_state, RevisionReviewState.ERROR)
+        self.assertEqual(session.project.segments[0].state, SegmentState.ERROR)
+        self.assertEqual(failed.parent_revision_id, revision.revision_id)
+
     def test_mock_end_to_end_stops_at_every_review_gate(self) -> None:
         project = Wan2LabProject(
             project_id="project-1",

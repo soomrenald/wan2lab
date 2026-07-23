@@ -14,13 +14,14 @@ from wan2core.provenance import ProvenanceRecord
 from wan2core.review import (
     approve_revision,
     complete_generation,
+    finish_generation_failure,
     queue_revision,
     reject_revision,
     start_generation,
 )
 from wan2core.segments import Segment, SegmentRequest, SegmentRevision, SegmentState
 from wan2core.timeline import SegmentPlan, plan_segments
-from wan2core.workers import WorkerProgress
+from wan2core.workers import WorkerProgress, WorkerResult
 
 
 class ReviewGateBlocked(RuntimeError):
@@ -112,6 +113,171 @@ class WanStudioSession:
             progress=progress,
             cancellation=cancellation,
         )
+
+    def queue_next_generation(self, *, seed: int) -> tuple[str, SegmentRevision]:
+        if self.segment_plan is None:
+            raise RuntimeError("timeline must be planned before generation")
+        blocking = next(
+            (
+                segment
+                for segment in self.project.segments
+                if segment.state
+                in {
+                    SegmentState.QUEUED,
+                    SegmentState.GENERATING,
+                    SegmentState.READY_FOR_REVIEW,
+                    SegmentState.MODIFYING,
+                    SegmentState.REJECTED,
+                }
+            ),
+            None,
+        )
+        if blocking is not None:
+            raise ReviewGateBlocked(
+                f"segment {blocking.segment_id} requires review before downstream generation"
+            )
+        segment = next(
+            (item for item in self.project.segments if item.state is SegmentState.DRAFT),
+            None,
+        )
+        if segment is None:
+            raise StopIteration("no draft segment remains")
+        return self._queue_external_revision(segment, seed=seed)
+
+    def queue_rejected_generation(self, *, seed: int) -> tuple[str, SegmentRevision]:
+        if self.segment_plan is None:
+            raise RuntimeError("timeline must be planned before generation")
+        segment = next(
+            (item for item in self.project.segments if item.state is SegmentState.REJECTED),
+            None,
+        )
+        if segment is None:
+            raise ReviewGateBlocked("no rejected segment is ready to regenerate")
+        return self._queue_external_revision(
+            segment,
+            seed=seed,
+            parent_revision_id=self._latest_revision(segment).revision_id,
+        )
+
+    def complete_worker_generation(
+        self,
+        *,
+        revision_id: str,
+        result: WorkerResult,
+        result_asset: AssetRef,
+        frame_assets: tuple[AssetRef, ...] = (),
+        backend_version: str | None = None,
+    ) -> SegmentRevision:
+        revision = next(
+            (item for item in self.project.segment_revisions if item.revision_id == revision_id),
+            None,
+        )
+        if revision is None:
+            raise KeyError(f"unknown revision: {revision_id}")
+        segment = next(
+            item for item in self.project.segments if item.segment_id == revision.segment_id
+        )
+        if result.result_asset_id != result_asset.asset_id:
+            raise ValueError("worker result and registered result asset differ")
+        if result.frame_asset_ids != tuple(item.asset_id for item in frame_assets):
+            raise ValueError("worker frame IDs and registered frame assets differ")
+        provenance_id = f"{revision.revision_id}-provenance"
+        segment, revision = complete_generation(
+            segment,
+            revision,
+            result_asset_id=result_asset.asset_id,
+            frame_asset_ids=result.frame_asset_ids,
+            start_frame_asset_id=(frame_assets[0].asset_id if frame_assets else None),
+            end_frame_asset_id=(frame_assets[-1].asset_id if frame_assets else None),
+            resolved_parameters=dict(result.metadata.get("resolved_parameters", {})),
+            generation_metadata=result.metadata,
+            provenance_id=provenance_id,
+        )
+        request = revision.source_request
+        provenance = ProvenanceRecord(
+            provenance_id=provenance_id,
+            operation="generate_segment",
+            created_at=datetime.now(UTC),
+            model_identifiers=(request.model_id,),
+            backend_id=request.backend_id,
+            backend_version=backend_version or "",
+            parameters=revision.resolved_parameters,
+            prompts={
+                "prompt": request.prompt,
+                "negative_prompt": request.negative_prompt,
+            },
+            seed=revision.seed,
+            input_asset_ids=tuple(
+                item
+                for item in (request.start_image_asset_id, request.end_image_asset_id)
+                if item is not None
+            ),
+            output_asset_ids=(result_asset.asset_id, *result.frame_asset_ids),
+            runtime={
+                key: value
+                for key, value in result.metadata.items()
+                if key in {"prompt_id", "template_id", "template_version", "model_filename"}
+            },
+        )
+        self.project = self.project.model_copy(
+            update={
+                "assets": (*self.project.assets, result_asset, *frame_assets),
+                "generation_records": (*self.project.generation_records, provenance),
+            }
+        )
+        self._replace_segment_and_revision(segment, revision)
+        self.project = self._validated(self.project)
+        return revision
+
+    def fail_worker_generation(
+        self,
+        *,
+        revision_id: str,
+        message: str,
+        cancelled: bool = False,
+    ) -> SegmentRevision:
+        revision = next(
+            (item for item in self.project.segment_revisions if item.revision_id == revision_id),
+            None,
+        )
+        if revision is None:
+            raise KeyError(f"unknown revision: {revision_id}")
+        segment = next(
+            item for item in self.project.segments if item.segment_id == revision.segment_id
+        )
+        segment, revision = finish_generation_failure(
+            segment,
+            revision,
+            message=message,
+            cancelled=cancelled,
+        )
+        self._replace_segment_and_revision(segment, revision)
+        self.project = self._validated(self.project)
+        return revision
+
+    def _queue_external_revision(
+        self,
+        segment: Segment,
+        *,
+        seed: int,
+        parent_revision_id: str | None = None,
+    ) -> tuple[str, SegmentRevision]:
+        assert self.segment_plan is not None
+        planned = next(
+            item for item in self.segment_plan.segments if item.segment_id == segment.segment_id
+        )
+        request = self._request_for(segment, planned)
+        segment, revision = queue_revision(
+            segment,
+            revision_id=f"{segment.segment_id}-revision-{len(segment.revision_ids) + 1}",
+            request=request,
+            seed=seed,
+            parent_revision_id=parent_revision_id,
+        )
+        segment, revision = start_generation(segment, revision)
+        self._replace_segment_and_revision(segment, revision)
+        self.project = self._validated(self.project)
+        return f"{segment.segment_id}-job-{revision.revision_number}", revision
 
     def regenerate_rejected_with_mock(
         self,
