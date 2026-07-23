@@ -10,6 +10,61 @@ from PySide6.QtCore import QObject, QProcess, Signal, Slot
 from wan2core.editing.workflows import FrameExtractionPlan, FrameRevisionAssemblyPlan
 
 
+class FrameExtractionProcessRunner(QObject):
+    completed = Signal(str)
+    failed = Signal(str)
+    runningChanged = Signal(bool)
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._process = QProcess(self)
+        self._plan: FrameExtractionPlan | None = None
+        self._stderr = bytearray()
+        self._process.readyReadStandardError.connect(self._read_stderr)
+        self._process.finished.connect(self._finished)
+
+    @property
+    def running(self) -> bool:
+        return self._plan is not None
+
+    def start(self, plan: FrameExtractionPlan) -> None:
+        if self.running:
+            raise RuntimeError("a Krea source-frame extraction is already running")
+        Path(plan.output_path).parent.mkdir(parents=True, exist_ok=True)
+        self._plan = plan
+        self._stderr.clear()
+        self.runningChanged.emit(True)
+        self._process.start(plan.arguments[0], list(plan.arguments[1:]))
+
+    @Slot()
+    def cancel(self) -> None:
+        if not self.running:
+            return
+        self._process.kill()
+        self._plan = None
+        self.runningChanged.emit(False)
+        self.failed.emit("Krea source-frame extraction cancelled")
+
+    def _finished(self, exit_code: int, _status) -> None:
+        plan = self._plan
+        if plan is None:
+            return
+        self._plan = None
+        self.runningChanged.emit(False)
+        if exit_code != 0:
+            message = self._stderr.decode("utf-8", errors="replace").strip()[-4_000:]
+            self.failed.emit(f"FFmpeg frame extraction failed ({exit_code}): {message}")
+            return
+        output = Path(plan.output_path)
+        if not output.is_file() or output.stat().st_size == 0:
+            self.failed.emit("FFmpeg completed without extracting the Krea source frame")
+            return
+        self.completed.emit(str(output))
+
+    def _read_stderr(self) -> None:
+        self._stderr.extend(bytes(self._process.readAllStandardError()))
+
+
 class FrameModificationProcessRunner(QObject):
     progress = Signal(str, int, int)
     completed = Signal(str, str, str)
@@ -123,4 +178,4 @@ class FrameModificationProcessRunner(QObject):
         self._stderr.extend(bytes(self._process.readAllStandardError()))
 
 
-__all__ = ["FrameModificationProcessRunner"]
+__all__ = ["FrameExtractionProcessRunner", "FrameModificationProcessRunner"]

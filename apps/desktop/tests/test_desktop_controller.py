@@ -16,6 +16,8 @@ from wan2core.backends import (
     WanMode,
 )
 from wan2core.backends.mock import default_mock_capabilities
+from wan2core.editing import FrameEditOperation
+from wan2core.keyframes import Rectangle
 from wan2core.segments import SegmentState
 from wan2core.workers import AckEvent, CapabilitiesEvent, ResultEvent, WorkerResult
 from wan2lab.controller import DesktopController
@@ -284,6 +286,80 @@ class DesktopControllerTests(unittest.TestCase):
                 project.frame_edit_records[0].replacement_frame_asset_id,
             )
             self.assertIn("mandatory review", controller.status.lower())
+
+    def test_confirmed_krea_face_result_starts_typed_revision_assembly(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result_root = root / "krea-results"
+            controller = DesktopController(
+                asset_base=root / "projects",
+                krea_result_root=result_root,
+            )
+            controller.planMockTimeline()
+            controller.generateNextMockSegment()
+            revision = controller.session.project.segment_revisions[0]
+            source_file = root / "source.mp4"
+            source_file.write_bytes(b"source video")
+            stored = controller._asset_store.register_generated(  # noqa: SLF001
+                source_file,
+                media_type="video/mp4",
+            )
+            assets = tuple(
+                item.model_copy(
+                    update={
+                        "storage_path": stored.relative_path,
+                        "sha256": stored.sha256,
+                    }
+                )
+                if item.asset_id == revision.result_asset_id
+                else item
+                for item in controller.session.project.assets
+            )
+            controller.session.project = controller.session.project.model_copy(
+                update={"assets": assets}
+            )
+            region = Rectangle(x0=400, y0=120, x1=880, y1=600)
+            frame_context = {
+                "segment_index": 0,
+                "segment_id": revision.segment_id,
+                "revision_id": revision.revision_id,
+                "source_video_asset_id": revision.result_asset_id,
+                "frame_index": 0,
+                "prompt": "repair face",
+                "propagate": True,
+                "operation_type": FrameEditOperation.FACE_REFINEMENT,
+                "region": region,
+                "user_confirmed_face_region": True,
+            }
+            controller._pending_krea_frame_edit = frame_context  # noqa: SLF001
+            controller._pending_krea_jobs["face-job"] = {  # noqa: SLF001
+                "operation": "frame_edit_replacement",
+                "frame_context": frame_context,
+                "request": {},
+            }
+            controller._frame_runner.start = Mock()  # type: ignore[method-assign]  # noqa: SLF001
+            result = result_root / "face.png"
+            result.parent.mkdir(parents=True)
+            Image.new("RGB", (1280, 720), "orange").save(result)
+
+            controller._handle_krea_event(  # noqa: SLF001
+                {
+                    "command_id": "face-job",
+                    "state": "complete",
+                    "message": "complete",
+                    "payload": {"asset_paths": [str(result)]},
+                }
+            )
+
+            context = controller._active_frame_edit  # noqa: SLF001
+            self.assertIsNotNone(context)
+            self.assertEqual(
+                context["operation_type"],
+                FrameEditOperation.FACE_REFINEMENT,
+            )
+            self.assertEqual(context["region"], region)
+            self.assertTrue(context["user_confirmed_face_region"])
+            controller._frame_runner.start.assert_called_once()  # type: ignore[union-attr]  # noqa: SLF001
 
     def test_segment_inspector_values_flow_into_generation_request(self) -> None:
         controller = DesktopController()

@@ -583,6 +583,44 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     placeholderText: "Frame modification note / prompt"
                 }
+                RowLayout {
+                    SpinBox { id: faceX0; from: 0; to: 4096; value: 400 }
+                    SpinBox { id: faceY0; from: 0; to: 4096; value: 120 }
+                    SpinBox { id: faceX1; from: 1; to: 4096; value: 880 }
+                    SpinBox { id: faceY1; from: 1; to: 4096; value: 600 }
+                }
+                RowLayout {
+                    Button {
+                        text: "Krea edit frame"
+                        enabled: !studio.frameModificationRunning && studio.kreaLoaded
+                        onClicked: studio.generateFrameEditWithKrea(
+                            selectedSegment.value,
+                            replacementFrameIndex.value,
+                            replacementPrompt.text,
+                            faceX0.value,
+                            faceY0.value,
+                            faceX1.value,
+                            faceY1.value,
+                            false,
+                            propagateBoundary.checked
+                        )
+                    }
+                    Button {
+                        text: "Confirm region & refine face"
+                        enabled: !studio.frameModificationRunning && studio.kreaLoaded
+                        onClicked: studio.generateFrameEditWithKrea(
+                            selectedSegment.value,
+                            replacementFrameIndex.value,
+                            replacementPrompt.text,
+                            faceX0.value,
+                            faceY0.value,
+                            faceX1.value,
+                            faceY1.value,
+                            true,
+                            propagateBoundary.checked
+                        )
+                    }
+                }
                 Button {
                     Layout.fillWidth: true
                     text: studio.frameModificationRunning

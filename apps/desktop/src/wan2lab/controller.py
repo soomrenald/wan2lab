@@ -29,6 +29,7 @@ from wan2core.characters import (
 from wan2core.export import ExportPlan, ExportState, build_export_plan
 from wan2core.editing import BoundaryPropagation, FrameEditOperation, FrameEditRecord
 from wan2core.editing.workflows import (
+    NormalizedFrameEditRequest,
     commit_frame_edit_revision,
     plan_frame_extraction,
     plan_frame_revision_assembly,
@@ -96,7 +97,7 @@ from wan2core.workers import (
 from wan2lab.backends.comfyui import BACKEND_ID
 from wan2lab.assets import LocalAssetStore, LocalComfyAssetBridge, image_media_type
 from wan2lab.export_runner import ExportProcessRunner
-from wan2lab.frame_runner import FrameModificationProcessRunner
+from wan2lab.frame_runner import FrameExtractionProcessRunner, FrameModificationProcessRunner
 from wan2lab.krea_worker_client import KreaWorkerProcess
 from wan2lab.mannequin import render_mannequin_guides
 from wan2lab.worker_client import WanWorkerProcess
@@ -180,6 +181,10 @@ class DesktopController(QObject):
         self._frame_runner.completed.connect(self._complete_frame_modification)
         self._frame_runner.failed.connect(self._fail_frame_modification)
         self._active_frame_edit: dict[str, object] | None = None
+        self._frame_extraction_runner = FrameExtractionProcessRunner(self)
+        self._frame_extraction_runner.completed.connect(self._start_krea_frame_edit)
+        self._frame_extraction_runner.failed.connect(self._fail_krea_frame_edit)
+        self._pending_krea_frame_edit: dict[str, object] | None = None
 
     @Property(str, notify=projectChanged)
     def projectName(self) -> str:  # noqa: N802 - Qt property naming
@@ -214,7 +219,11 @@ class DesktopController(QObject):
 
     @Property(bool, notify=statusChanged)
     def frameModificationRunning(self) -> bool:  # noqa: N802
-        return self._frame_runner.running
+        return (
+            self._frame_runner.running
+            or self._frame_extraction_runner.running
+            or self._pending_krea_frame_edit is not None
+        )
 
     @Property(str, notify=statusChanged)
     def generationBackendLabel(self) -> str:  # noqa: N802
@@ -353,7 +362,7 @@ class DesktopController(QObject):
 
     @Slot(float)
     def newProject(self, duration_seconds: float = 18.0) -> None:  # noqa: N802
-        if self._active_wan_commands or self._frame_runner.running:
+        if self._active_wan_commands or self.frameModificationRunning:
             self._set_status("Cancel active generation or modification before creating a project")
             return
         duration_ms = max(1_000, round(duration_seconds * 1000))
@@ -619,6 +628,7 @@ class DesktopController(QObject):
         self._krea_worker.close()
         self._export_runner.cancel()
         self._frame_runner.cancel()
+        self._frame_extraction_runner.cancel()
 
     @Slot(str)
     def createMannequinScene(self, name: str) -> None:  # noqa: N802
@@ -1353,6 +1363,9 @@ class DesktopController(QObject):
                 "frame_index": frame_index,
                 "prompt": prompt.strip(),
                 "propagate": propagate_boundary,
+                "operation_type": FrameEditOperation.IMAGE_EDIT,
+                "region": None,
+                "user_confirmed_face_region": False,
             }
             self._frame_runner.start(
                 extraction,
@@ -1368,9 +1381,138 @@ class DesktopController(QObject):
         )
         self._set_status("Extracting and rebuilding the modified segment…")
 
+    @Slot(int, int, str, float, float, float, float, bool, bool)
+    def generateFrameEditWithKrea(  # noqa: N802
+        self,
+        segment_index: int,
+        frame_index: int,
+        prompt: str,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        face_refinement: bool,
+        propagate_boundary: bool,
+    ) -> None:
+        if not self._krea_loaded:
+            self._set_status("Load Krea before generating a frame replacement")
+            return
+        if self.frameModificationRunning:
+            self._set_status("A frame modification is already running")
+            return
+        try:
+            segment = self._session.project.segments[segment_index]
+            if segment.state is not SegmentState.READY_FOR_REVIEW or not segment.revision_ids:
+                raise ValueError("only a reviewable segment can be modified")
+            revision = next(
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == segment.revision_ids[-1]
+            )
+            if not 0 <= frame_index < revision.source_request.frame_count:
+                raise ValueError("frame index is outside the selected revision")
+            if (
+                propagate_boundary
+                and frame_index not in {0, revision.source_request.frame_count - 1}
+            ):
+                raise ValueError("only first or last frame edits can propagate")
+            region = Rectangle(x0=x0, y0=y0, x1=x1, y1=y1) if face_refinement else None
+            operation = (
+                FrameEditOperation.FACE_REFINEMENT
+                if face_refinement
+                else FrameEditOperation.IMAGE_EDIT
+            )
+            request = NormalizedFrameEditRequest(
+                source_frame_asset_id="krea-source-frame",
+                operation_type=operation,
+                prompt=prompt.strip(),
+                region=region,
+                user_confirmed_face_region=face_refinement,
+            )
+            source_asset = next(
+                item
+                for item in self._session.project.assets
+                if item.asset_id == revision.result_asset_id
+            )
+            source_video = self._asset_store.resolve_ref(source_asset)
+            work = (
+                self._asset_base
+                / self._session.project.project_id
+                / ".frame-work"
+                / uuid4().hex
+            )
+            extraction = plan_frame_extraction(
+                ffmpeg_executable=self._session.project.project_settings.ffmpeg_executable,
+                source_video_path=str(source_video),
+                frame_index=frame_index,
+                frame_count=revision.source_request.frame_count,
+                output_path=str(work / "krea-source.png"),
+            )
+            self._pending_krea_frame_edit = {
+                "segment_index": segment_index,
+                "segment_id": segment.segment_id,
+                "revision_id": revision.revision_id,
+                "source_video_asset_id": source_asset.asset_id,
+                "frame_index": frame_index,
+                "prompt": prompt.strip(),
+                "propagate": propagate_boundary,
+                "operation_type": operation,
+                "region": region,
+                "user_confirmed_face_region": face_refinement,
+                "request": request,
+            }
+            self._frame_extraction_runner.start(extraction)
+        except Exception as error:
+            self._pending_krea_frame_edit = None
+            self._set_status(f"Krea frame edit could not start: {error}")
+            return
+        self._set_status("Extracting exact source frame for Krea…")
+
+    @Slot(str)
+    def _start_krea_frame_edit(self, source_path: str) -> None:
+        context = self._pending_krea_frame_edit
+        if context is None:
+            self._set_status("Krea source frame extracted without an active edit")
+            return
+        request = context["request"]
+        command_kind = (
+            "refine_faces"
+            if context["operation_type"] is FrameEditOperation.FACE_REFINEMENT
+            else "edit_image"
+        )
+        command_id = self._krea_worker.send(
+            command_kind,
+            {
+                "request": request.to_k2_request(),
+                "asset_paths": {"krea-source-frame": source_path},
+            },
+        )
+        context["command_id"] = command_id
+        self._pending_krea_jobs[command_id] = {
+            "operation": "frame_edit_replacement",
+            "frame_context": context,
+            "request": request.model_dump(mode="json"),
+            "input_asset_ids": (),
+        }
+        self._set_status("Krea is generating the immutable replacement frame…")
+
+    @Slot(str)
+    def _fail_krea_frame_edit(self, message: str) -> None:
+        self._pending_krea_frame_edit = None
+        self._append_event(message)
+        self._set_status(message)
+
     @Slot()
     def cancelFrameModification(self) -> None:  # noqa: N802
-        self._frame_runner.cancel()
+        if self._frame_extraction_runner.running:
+            self._frame_extraction_runner.cancel()
+        elif self._pending_krea_frame_edit is not None:
+            command_id = self._pending_krea_frame_edit.get("command_id")
+            if command_id is not None:
+                self._krea_worker.send("cancel", {"command_id": str(command_id)})
+                self._set_status("Cancelling Krea frame edit…")
+        else:
+            self._frame_runner.cancel()
 
     @Slot(str)
     def saveProject(self, path: str) -> None:  # noqa: N802
@@ -1543,7 +1685,7 @@ class DesktopController(QObject):
 
     @Slot(str)
     def openProject(self, path: str) -> None:  # noqa: N802
-        if self._active_wan_commands or self._frame_runner.running:
+        if self._active_wan_commands or self.frameModificationRunning:
             self._set_status("Cancel active generation or modification before opening a project")
             return
         try:
@@ -1842,6 +1984,11 @@ class DesktopController(QObject):
             failed_context = self._pending_krea_jobs.pop(command_id, None)
             if failed_context is not None and failed_context.get("group_id") is not None:
                 self._style_duplications.pop(str(failed_context["group_id"]), None)
+            if (
+                failed_context is not None
+                and failed_context.get("operation") == "frame_edit_replacement"
+            ):
+                self._pending_krea_frame_edit = None
             if command_id == self._krea_load_command_id:
                 self._krea_load_command_id = None
                 self._krea_loaded = False
@@ -1862,6 +2009,29 @@ class DesktopController(QObject):
             source = Path(str(raw_paths[0])).expanduser().resolve()
             if self._krea_result_root not in source.parents or not source.is_file():
                 raise ValueError("Krea worker returned an output outside its result root")
+            operation = str(context["operation"])
+            if operation == "frame_edit_replacement":
+                frame_context = context["frame_context"]
+                self._pending_krea_frame_edit = None
+                self.modifyFrame(
+                    int(frame_context["segment_index"]),
+                    int(frame_context["frame_index"]),
+                    QUrl.fromLocalFile(str(source)),
+                    str(frame_context["prompt"]),
+                    bool(frame_context["propagate"]),
+                )
+                if self._active_frame_edit is None:
+                    raise RuntimeError("Krea replacement could not start revision assembly")
+                self._active_frame_edit.update(
+                    {
+                        "operation_type": frame_context["operation_type"],
+                        "region": frame_context["region"],
+                        "user_confirmed_face_region": frame_context[
+                            "user_confirmed_face_region"
+                        ],
+                    }
+                )
+                return
             record = self._asset_store.register_generated(
                 source,
                 media_type=image_media_type(source),
@@ -1872,7 +2042,6 @@ class DesktopController(QObject):
                 },
             )
             asset = self._wan_asset(record, AssetKind.IMAGE)
-            operation = str(context["operation"])
             provenance = ProvenanceRecord(
                 provenance_id=f"provenance-{uuid4().hex}",
                 operation=f"krea_generate_{operation}",
@@ -2068,8 +2237,15 @@ class DesktopController(QObject):
                 original_frame_asset_id=original_asset.asset_id,
                 replacement_frame_asset_id=replacement_asset.asset_id,
                 frame_index=frame_index,
-                operation_type=FrameEditOperation.IMAGE_EDIT,
+                operation_type=context.get(
+                    "operation_type",
+                    FrameEditOperation.IMAGE_EDIT,
+                ),
                 prompt=str(context["prompt"]),
+                region=context.get("region"),
+                user_confirmed_face_region=bool(
+                    context.get("user_confirmed_face_region", False)
+                ),
                 boundary_propagation=(
                     BoundaryPropagation.PROPAGATE_AS_ANCHOR
                     if bool(context["propagate"])
@@ -2088,7 +2264,11 @@ class DesktopController(QObject):
                 ),
                 ProvenanceRecord(
                     provenance_id=edit_provenance_id,
-                    operation="import_frame_replacement",
+                    operation=(
+                        "krea_refine_face"
+                        if edit.operation_type is FrameEditOperation.FACE_REFINEMENT
+                        else "import_or_generate_frame_replacement"
+                    ),
                     created_at=datetime.now(UTC),
                     prompts={"prompt": str(context["prompt"])},
                     input_asset_ids=(original_asset.asset_id,),
