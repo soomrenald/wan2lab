@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wan2core"
+version = "0.1.0"
+description = "Shared Wan2Lab project, timeline, review, editing, and export domain"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "k2core @ git+https://github.com/soomrenald/k2core.git@502e4e6ee746ae2f7477c7b86d7b333352dc4559",
+    "pydantic>=2.10,<3",
+]
+
+[project.urls]
+Repository = "https://github.com/soomrenald/wan2lab"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wan2core"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+

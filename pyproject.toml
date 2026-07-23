@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wan2lab"
+version = "0.1.0"
+description = "Review-gated local Wan video production studio"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "k2core @ git+https://github.com/soomrenald/k2core.git@502e4e6ee746ae2f7477c7b86d7b333352dc4559",
+    "pydantic>=2.10,<3",
+    "PySide6>=6.8,<7",
+    "wan2core==0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.9",
+]
+
+[project.scripts]
+wan2lab = "wan2lab.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["apps/desktop/src/wan2lab"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/wan2core/tests", "apps/desktop/tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
