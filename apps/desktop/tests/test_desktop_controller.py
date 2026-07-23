@@ -942,6 +942,19 @@ class DesktopControllerTests(unittest.TestCase):
         self.assertEqual(controller.selectedSegmentMode, "prompt")
         self.assertEqual(controller.selectedSegmentPrompt, "camera orbit")
         self.assertEqual(controller.selectedSegmentNegativePrompt, "flicker")
+        self.assertEqual(
+            controller.selectedSegmentAction["motion_instruction"],
+            "walk toward the window",
+        )
+        self.assertEqual(
+            controller.selectedSegmentAction["starting_pose_ref"],
+            "pose-start",
+        )
+        self.assertEqual(
+            controller.selectedSegmentAction["pose_accuracy_preference"],
+            0.7,
+        )
+        self.assertEqual(controller.backendParameterDescriptors[0]["value"], 28)
 
     def test_mode_specific_assets_and_continuation_flow_into_animate_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

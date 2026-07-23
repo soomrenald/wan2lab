@@ -577,6 +577,39 @@ class DesktopController(QObject):
             else ContinuationPolicy.AUTHORED_ANCHOR.value
         )
 
+    @Property("QVariantMap", notify=projectChanged)
+    def selectedSegmentAction(self) -> dict[str, object]:  # noqa: N802
+        segment = self._selected_segment()
+        action = next(
+            (
+                item
+                for item in self._session.project.actions
+                if segment is not None and item.action_id == segment.action_spec_id
+            ),
+            None,
+        )
+        if action is None:
+            return {
+                "motion_instruction": "",
+                "starting_pose_ref": "",
+                "ending_pose_ref": "",
+                "character_trajectory": "",
+                "camera_trajectory": "",
+                "contact_constraints": "",
+                "speed_easing": "",
+                "pose_accuracy_preference": 0.5,
+            }
+        return {
+            "motion_instruction": action.motion_instruction,
+            "starting_pose_ref": action.starting_pose_ref or "",
+            "ending_pose_ref": action.ending_pose_ref or "",
+            "character_trajectory": action.character_trajectory,
+            "camera_trajectory": action.camera_trajectory,
+            "contact_constraints": ", ".join(action.contact_constraints),
+            "speed_easing": action.speed_easing,
+            "pose_accuracy_preference": action.pose_accuracy_preference,
+        }
+
     @Property(str, notify=projectChanged)
     def mannequinConditioningPath(self) -> str:  # noqa: N802
         if not self._session.project.mannequin_scenes:
@@ -625,9 +658,20 @@ class DesktopController(QObject):
     def backendParameters(self) -> list[str]:  # noqa: N802
         return list(self._backend_parameters)
 
-    @Property("QVariantList", notify=statusChanged)
+    @Property("QVariantList", notify=projectChanged)
     def backendParameterDescriptors(self) -> list[dict[str, object]]:  # noqa: N802
-        return list(self._backend_parameter_descriptors)
+        segment = self._selected_segment()
+        return [
+            {
+                **item,
+                "value": (
+                    segment.parameters.get(str(item.get("key")), item.get("default"))
+                    if segment is not None
+                    else item.get("default")
+                ),
+            }
+            for item in self._backend_parameter_descriptors
+        ]
 
     @Property("QStringList", notify=projectChanged)
     def timelineBlocks(self) -> list[str]:  # noqa: N802
@@ -3453,6 +3497,7 @@ class DesktopController(QObject):
                 f"{len(self._backend_models)} compatible model(s)"
             )
             self._append_event(self._backend_status)
+            self.projectChanged.emit()
         elif isinstance(event, ModelsEvent):
             self._backend_models = [str(item.get("display_name", "unknown")) for item in event.models]
         elif isinstance(event, RuntimeStatusEvent):

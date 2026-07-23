@@ -23,6 +23,15 @@ ApplicationWindow {
         )
         segmentPrompt.text = studio.selectedSegmentPrompt
         segmentNegativePrompt.text = studio.selectedSegmentNegativePrompt
+        let action = studio.selectedSegmentAction
+        actionMotion.text = action.motion_instruction
+        actionStartPose.text = action.starting_pose_ref
+        actionEndPose.text = action.ending_pose_ref
+        actionCharacterTrajectory.text = action.character_trajectory
+        actionCameraTrajectory.text = action.camera_trajectory
+        actionContacts.text = action.contact_constraints
+        actionSpeed.text = action.speed_easing
+        actionPoseAccuracy.value = action.pose_accuracy_preference
     }
 
     Connections {
@@ -1117,7 +1126,7 @@ ApplicationWindow {
                         }
                         TextField {
                             Layout.fillWidth: true
-                            text: String(modelData.default)
+                            text: String(modelData.value)
                             onEditingFinished: studio.setSegmentBackendParameter(
                                 selectedSegment.value,
                                 String(modelData.key),
