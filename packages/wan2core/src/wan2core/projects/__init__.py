@@ -260,8 +260,14 @@ __all__ = [
 # Imported last to avoid a cycle while invalidation type-checks canonical projects.
 from wan2core.projects.invalidation import (  # noqa: E402
     change_output_fps,
+    invalidate_for_boundary_assets,
     invalidate_for_keyframe,
     invalidate_segments,
 )
 
-__all__ += ["change_output_fps", "invalidate_for_keyframe", "invalidate_segments"]
+__all__ += [
+    "change_output_fps",
+    "invalidate_for_boundary_assets",
+    "invalidate_for_keyframe",
+    "invalidate_segments",
+]

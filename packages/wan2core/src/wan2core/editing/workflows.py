@@ -271,7 +271,25 @@ def commit_frame_edit_revision(
             "frame_edit_records": (*project.frame_edit_records, *edit_records),
         }
     )
-    return Wan2LabProject.model_validate(updated.model_dump())
+    committed = Wan2LabProject.model_validate(updated.model_dump())
+    propagated_source_assets = []
+    if 0 in propagate and source.start_frame_asset_id is not None:
+        propagated_source_assets.append(source.start_frame_asset_id)
+    if (
+        source.source_request.frame_count - 1 in propagate
+        and source.end_frame_asset_id is not None
+    ):
+        propagated_source_assets.append(source.end_frame_asset_id)
+    if propagated_source_assets:
+        # Imported locally to retain the projects/editing dependency boundary.
+        from wan2core.projects.invalidation import invalidate_for_boundary_assets
+
+        committed = invalidate_for_boundary_assets(
+            committed,
+            source_segment_id=segment_id,
+            replaced_boundary_asset_ids=propagated_source_assets,
+        )
+    return Wan2LabProject.model_validate(committed.model_dump())
 
 
 __all__ = [

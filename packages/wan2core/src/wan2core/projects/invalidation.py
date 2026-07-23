@@ -47,6 +47,37 @@ def invalidate_for_keyframe(
     return invalidate_segments(project, affected, reason=reason)
 
 
+def invalidate_for_boundary_assets(
+    project: Wan2LabProject,
+    *,
+    source_segment_id: str,
+    replaced_boundary_asset_ids: Iterable[str],
+    reason: str = "propagated segment boundary changed",
+) -> Wan2LabProject:
+    """Mark revisions that consumed a replaced boundary asset as stale."""
+
+    changed = {item for item in replaced_boundary_asset_ids if item}
+    if not changed:
+        return project
+    revisions = {item.revision_id: item for item in project.segment_revisions}
+    affected = []
+    for segment in project.segments:
+        if segment.segment_id == source_segment_id or not segment.revision_ids:
+            continue
+        current_id = segment.current_approved_revision_id or segment.revision_ids[-1]
+        current = revisions.get(current_id)
+        if current is None:
+            continue
+        request = current.source_request
+        if changed.intersection(
+            item
+            for item in (request.start_image_asset_id, request.end_image_asset_id)
+            if item is not None
+        ):
+            affected.append(segment.segment_id)
+    return invalidate_segments(project, affected, reason=reason)
+
+
 def change_output_fps(project: Wan2LabProject, output_fps: float) -> Wan2LabProject:
     if output_fps <= 0:
         raise ValueError("output FPS must be positive")
@@ -62,5 +93,9 @@ def change_output_fps(project: Wan2LabProject, output_fps: float) -> Wan2LabProj
     )
 
 
-__all__ = ["change_output_fps", "invalidate_for_keyframe", "invalidate_segments"]
-
+__all__ = [
+    "change_output_fps",
+    "invalidate_for_boundary_assets",
+    "invalidate_for_keyframe",
+    "invalidate_segments",
+]

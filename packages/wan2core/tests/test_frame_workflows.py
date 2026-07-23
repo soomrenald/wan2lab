@@ -169,6 +169,68 @@ class FrameWorkflowTests(unittest.TestCase):
 
     def test_batch_commit_preserves_source_and_propagates_only_selected_boundary(self) -> None:
         project = source_project()
+        dependent_video = asset("dependent-video", AssetKind.VIDEO)
+        dependent_request = SegmentRequest(
+            request_id="request-dependent",
+            segment_id="segment-dependent",
+            mode=WanMode.I2V,
+            backend_id="mock-wan",
+            model_id="wan-test",
+            start_ms=250,
+            end_ms=500,
+            width=1280,
+            height=720,
+            generation_fps=16,
+            frame_count=5,
+            start_image_asset_id="frame-4",
+        )
+        dependent_revision = SegmentRevision(
+            revision_id="revision-dependent",
+            segment_id="segment-dependent",
+            revision_number=1,
+            source_request=dependent_request,
+            seed=2,
+            result_asset_id=dependent_video.asset_id,
+            review_state=RevisionReviewState.READY_FOR_REVIEW,
+            provenance_id="provenance-dependent",
+        )
+        dependent_segment = Segment(
+            segment_id="segment-dependent",
+            start_ms=250,
+            end_ms=500,
+            mode=WanMode.I2V,
+            backend_id="mock-wan",
+            model_id="wan-test",
+            continuation_policy=ContinuationPolicy.GENERATED_LAST_FRAME,
+            state=SegmentState.READY_FOR_REVIEW,
+            revision_ids=(dependent_revision.revision_id,),
+        )
+        project = Wan2LabProject.model_validate(
+            project.model_copy(
+                update={
+                    "assets": (*project.assets, dependent_video),
+                    "segments": (*project.segments, dependent_segment),
+                    "segment_revisions": (
+                        *project.segment_revisions,
+                        dependent_revision,
+                    ),
+                    "generation_records": (
+                        *project.generation_records,
+                        provenance(
+                            "provenance-dependent",
+                            "generate_segment",
+                            (dependent_video.asset_id,),
+                        ),
+                    ),
+                    "timeline": project.timeline.model_copy(
+                        update={
+                            "duration_ms": 500,
+                            "segment_ids": ("segment-1", "segment-dependent"),
+                        }
+                    ),
+                }
+            ).model_dump()
+        )
         first = asset("edited-first", AssetKind.IMAGE, parent=("frame-0",))
         last = asset("edited-last", AssetKind.IMAGE, parent=("frame-4",))
         revised_video = asset("video-revised", AssetKind.VIDEO, parent=("video-source",))
@@ -211,11 +273,17 @@ class FrameWorkflowTests(unittest.TestCase):
             assembly_provenance_id="provenance-assembly",
             new_revision_id="revision-2",
         )
-        source, revised = updated.segment_revisions
+        source = next(
+            item for item in updated.segment_revisions if item.revision_id == "revision-1"
+        )
+        revised = next(
+            item for item in updated.segment_revisions if item.revision_id == "revision-2"
+        )
         self.assertEqual(source.review_state, RevisionReviewState.SUPERSEDED)
         self.assertEqual(revised.start_frame_asset_id, "frame-0")
         self.assertEqual(revised.end_frame_asset_id, "edited-last")
         self.assertEqual(updated.segments[0].state, SegmentState.READY_FOR_REVIEW)
+        self.assertEqual(updated.segments[1].state, SegmentState.STALE)
         self.assertIn("video-source", {item.asset_id for item in updated.assets})
 
     def test_face_edit_requires_confirmation_and_uses_k2core_frame_backend(self) -> None:

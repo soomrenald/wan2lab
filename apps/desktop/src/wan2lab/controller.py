@@ -1575,12 +1575,13 @@ class DesktopController(QObject):
         }
         self._set_status("Krea is generating the immutable replacement frame…")
 
-    @Slot(int, str, str)
+    @Slot(int, str, str, bool)
     def generateBatchFrameEditsWithKrea(  # noqa: N802
         self,
         segment_index: int,
         frame_indices: str,
         prompt: str,
+        propagate_boundary: bool,
     ) -> None:
         if not self._krea_loaded:
             self._set_status("Load Krea before generating batch frame repairs")
@@ -1629,6 +1630,7 @@ class DesktopController(QObject):
             "pending_indices": list(selection.frame_indices),
             "replacement_paths": {},
             "prompt": prompt.strip(),
+            "propagate": propagate_boundary,
             "work": (
                 self._asset_base
                 / self._session.project.project_id
@@ -1837,8 +1839,13 @@ class DesktopController(QObject):
         self._set_status(f"Confirmed manual face region for frame {frame_index}")
         self.projectChanged.emit()
 
-    @Slot(str, int)
-    def refineConfirmedFaceBatch(self, prompt: str, sheet_entry_index: int) -> None:  # noqa: N802
+    @Slot(str, int, bool)
+    def refineConfirmedFaceBatch(  # noqa: N802
+        self,
+        prompt: str,
+        sheet_entry_index: int,
+        propagate_boundary: bool,
+    ) -> None:
         draft = self._face_batch_draft
         try:
             if draft is None or not self.faceBatchReady:
@@ -1893,6 +1900,7 @@ class DesktopController(QObject):
             ),
             "adapter_paths": adapter_paths,
             "adapter_asset_ids": tuple(item.asset_id for item in adapter_refs),
+            "propagate": propagate_boundary,
             "work": (
                 self._asset_base
                 / self._session.project.project_id
@@ -3039,6 +3047,13 @@ class DesktopController(QObject):
                         ),
                         adapters=(context["adapters"] if is_face_refinement else ()),
                         user_confirmed_face_region=is_face_refinement,
+                        boundary_propagation=(
+                            BoundaryPropagation.PROPAGATE_AS_ANCHOR
+                            if bool(context.get("propagate"))
+                            and frame_index
+                            in {0, source_revision.source_request.frame_count - 1}
+                            else BoundaryPropagation.LOCAL_REPAIR
+                        ),
                         provenance_id=edit_id,
                     )
                 )

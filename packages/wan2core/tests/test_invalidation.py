@@ -11,6 +11,7 @@ from wan2core.projects import (
     ProjectSettings,
     Wan2LabProject,
     change_output_fps,
+    invalidate_for_boundary_assets,
     invalidate_for_keyframe,
 )
 from wan2core.provenance import ProvenanceRecord
@@ -124,6 +125,86 @@ def project_with_export() -> Wan2LabProject:
 
 
 class InvalidationTests(unittest.TestCase):
+    def test_propagated_boundary_stales_revision_that_consumed_old_asset(self) -> None:
+        project = project_with_export()
+        dependent = Segment(
+            segment_id="segment-2",
+            start_ms=5_000,
+            end_ms=10_000,
+            mode=WanMode.I2V,
+            backend_id="mock-wan",
+            model_id="wan-test",
+            continuation_policy=ContinuationPolicy.GENERATED_LAST_FRAME,
+        )
+        request = SegmentRequest(
+            request_id="request-2",
+            segment_id=dependent.segment_id,
+            mode=WanMode.I2V,
+            backend_id="mock-wan",
+            model_id="wan-test",
+            start_ms=5_000,
+            end_ms=10_000,
+            width=1280,
+            height=720,
+            generation_fps=16,
+            frame_count=81,
+            start_image_asset_id="image-1",
+        )
+        dependent, revision = queue_revision(
+            dependent,
+            revision_id="revision-2",
+            request=request,
+            seed=2,
+        )
+        dependent, revision = start_generation(dependent, revision)
+        dependent, revision = complete_generation(
+            dependent,
+            revision,
+            result_asset_id="video-2",
+            provenance_id="prov-video-2",
+        )
+        dependent, revision = approve_revision(dependent, revision)
+        video = AssetRef(
+            asset_id="video-2",
+            kind=AssetKind.VIDEO,
+            storage_path="assets/video-2.mp4",
+            sha256="c" * 64,
+            width=1280,
+            height=720,
+            frame_count=81,
+            duration_ms=5_000,
+        )
+        provenance = ProvenanceRecord(
+            provenance_id="prov-video-2",
+            operation="generate_segment",
+            created_at=datetime(2026, 7, 22, tzinfo=UTC),
+            output_asset_ids=(video.asset_id,),
+        )
+        project = Wan2LabProject.model_validate(
+            project.model_copy(
+                update={
+                    "assets": (*project.assets, video),
+                    "segments": (*project.segments, dependent),
+                    "segment_revisions": (*project.segment_revisions, revision),
+                    "generation_records": (*project.generation_records, provenance),
+                    "timeline": project.timeline.model_copy(
+                        update={"segment_ids": ("segment-1", "segment-2")}
+                    ),
+                }
+            ).model_dump()
+        )
+
+        updated = invalidate_for_boundary_assets(
+            project,
+            source_segment_id="segment-1",
+            replaced_boundary_asset_ids=("image-1",),
+        )
+
+        self.assertEqual(updated.segments[0].state, SegmentState.APPROVED_LOCKED)
+        self.assertEqual(updated.segments[1].state, SegmentState.STALE)
+        self.assertIn("boundary", updated.segments[1].stale_reason)
+        self.assertEqual(updated.exports[0].state, ExportState.STALE)
+
     def test_replacing_authored_keyframe_stales_dependent_segment_and_export(self) -> None:
         project = project_with_export()
         updated = invalidate_for_keyframe(project, "keyframe-1")
@@ -144,4 +225,3 @@ class InvalidationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

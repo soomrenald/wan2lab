@@ -633,7 +633,8 @@ ApplicationWindow {
                         onClicked: studio.generateBatchFrameEditsWithKrea(
                             selectedSegment.value,
                             batchFrameIndices.text,
-                            replacementPrompt.text
+                            replacementPrompt.text,
+                            propagateBoundary.checked
                         )
                     }
                 }
@@ -717,7 +718,8 @@ ApplicationWindow {
                         && batchReference.currentIndex >= 0
                     onClicked: studio.refineConfirmedFaceBatch(
                         replacementPrompt.text,
-                        batchReference.currentIndex
+                        batchReference.currentIndex,
+                        propagateBoundary.checked
                     )
                 }
                 Button {
