@@ -13,6 +13,7 @@ from wan2core.characters import (
 )
 from wan2core.keyframes import Keyframe
 from wan2core.projects import Wan2LabProject
+from wan2core.projects.invalidation import invalidate_segments
 from wan2core.provenance import ProvenanceRecord
 
 
@@ -205,6 +206,87 @@ def add_timeline_keyframe(
     return Wan2LabProject.model_validate(updated.model_dump())
 
 
+def revise_timeline_keyframe(
+    project: Wan2LabProject,
+    *,
+    source_keyframe_id: str,
+    revised_keyframe: Keyframe,
+    asset: AssetRef,
+    provenance: ProvenanceRecord,
+) -> Wan2LabProject:
+    source = next(
+        (item for item in project.keyframes if item.keyframe_id == source_keyframe_id),
+        None,
+    )
+    if source is None:
+        raise KeyError(source_keyframe_id)
+    if revised_keyframe.parent_keyframe_id != source.keyframe_id:
+        raise ValueError("revised keyframe must reference its immutable parent")
+    if revised_keyframe.time_ms != source.time_ms:
+        raise ValueError("keyframe refinement must preserve exact timeline time")
+    if revised_keyframe.approved or revised_keyframe.locked:
+        raise ValueError("a revised keyframe requires explicit review")
+    if asset.kind is not AssetKind.IMAGE or asset.asset_id != revised_keyframe.image_asset_id:
+        raise ValueError("revised keyframe requires its matching image asset")
+    if provenance.provenance_id != revised_keyframe.provenance_id:
+        raise ValueError("revised keyframe requires matching provenance")
+    keyframes = tuple(
+        revised_keyframe if item.keyframe_id == source.keyframe_id else item
+        for item in project.keyframes
+    )
+    segments = tuple(
+        item.model_copy(
+            update={
+                "start_keyframe_id": (
+                    revised_keyframe.keyframe_id
+                    if item.start_keyframe_id == source.keyframe_id
+                    else item.start_keyframe_id
+                ),
+                "end_keyframe_id": (
+                    revised_keyframe.keyframe_id
+                    if item.end_keyframe_id == source.keyframe_id
+                    else item.end_keyframe_id
+                ),
+            }
+        )
+        for item in project.segments
+    )
+    timeline = project.timeline.model_copy(
+        update={
+            "keyframe_ids": tuple(
+                revised_keyframe.keyframe_id
+                if item == source.keyframe_id
+                else item
+                for item in project.timeline.keyframe_ids
+            )
+        }
+    )
+    updated = Wan2LabProject.model_validate(
+        project.model_copy(
+            update={
+                "assets": (*project.assets, asset),
+                "keyframes": keyframes,
+                "segments": segments,
+                "timeline": timeline,
+                "generation_records": (*project.generation_records, provenance),
+            }
+        ).model_dump()
+    )
+    affected = tuple(
+        item.segment_id
+        for item in updated.segments
+        if item.start_keyframe_id == revised_keyframe.keyframe_id
+        or item.end_keyframe_id == revised_keyframe.keyframe_id
+    )
+    return Wan2LabProject.model_validate(
+        invalidate_segments(
+            updated,
+            affected,
+            reason="authored keyframe refined and requires segment replanning",
+        ).model_dump()
+    )
+
+
 def _append_asset(existing: tuple[AssetRef, ...], item: AssetRef) -> tuple[AssetRef, ...]:
     if any(current.asset_id == item.asset_id for current in existing):
         raise ValueError(f"asset ID already exists: {item.asset_id}")
@@ -223,6 +305,7 @@ __all__ = [
     "add_timeline_keyframe",
     "register_pose_view_entry",
     "register_style_duplication",
+    "revise_timeline_keyframe",
     "remove_pose_view_entry",
     "update_pose_view_entry",
 ]

@@ -61,6 +61,7 @@ from wan2core.keyframes.workflows import (
     register_pose_view_entry,
     register_style_duplication,
     remove_pose_view_entry,
+    revise_timeline_keyframe,
     update_pose_view_entry,
 )
 from wan2core.identity import IdentityDriftWarning, IdentityWarningKind
@@ -1260,6 +1261,89 @@ class DesktopController(QObject):
         )
         self._set_status("Keyframe approved and locked for Wan planning")
         self.projectChanged.emit()
+
+    @Slot(int, int, int, float, float, float, float, str)
+    def refineKeyframeFace(  # noqa: N802
+        self,
+        keyframe_index: int,
+        identity_index: int,
+        sheet_entry_index: int,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        prompt: str,
+    ) -> None:
+        if not self._krea_loaded:
+            self._set_status("Load Krea before refining a keyframe face")
+            return
+        try:
+            keyframe = self._session.project.keyframes[keyframe_index]
+            identity = self._session.project.characters[identity_index]
+            entries = [
+                entry
+                for sheet in self._session.project.character_sheets
+                for entry in sheet.entries
+            ]
+            reference = entries[sheet_entry_index]
+            if reference.identity_id != identity.identity_id:
+                raise ValueError("selected sheet reference belongs to another identity")
+            assets = {item.asset_id: item for item in self._session.project.assets}
+            source_asset = assets[keyframe.image_asset_id]
+            reference_asset = assets[reference.image_asset_id]
+            region = Rectangle(x0=x0, y0=y0, x1=x1, y1=y1)
+            adapter_refs = tuple(
+                item for item in identity.adapter_refs if item.family.value == "krea"
+            )
+            request = NormalizedFrameEditRequest(
+                source_frame_asset_id=source_asset.asset_id,
+                operation_type=FrameEditOperation.FACE_REFINEMENT,
+                prompt=", ".join(
+                    item
+                    for item in (identity.identity_prompt, prompt.strip())
+                    if item
+                ),
+                settings={"reference_asset_id": reference_asset.asset_id},
+                region=region,
+                identity_id=identity.identity_id,
+                adapters=tuple(
+                    AdapterSelection(
+                        adapter_id=item.adapter_id,
+                        strength=item.default_strength,
+                    )
+                    for item in adapter_refs
+                ),
+                user_confirmed_face_region=True,
+            )
+            asset_paths = {
+                source_asset.asset_id: str(self._asset_store.resolve_ref(source_asset)),
+                "identity-reference": str(self._asset_store.resolve_ref(reference_asset)),
+                **{
+                    item.adapter_id: str(self._asset_store.resolve_ref(assets[item.asset_id]))
+                    for item in adapter_refs
+                },
+            }
+        except Exception as error:
+            self._set_status(f"Keyframe face refinement could not start: {error}")
+            return
+        command_id = self._krea_worker.send(
+            "refine_faces",
+            {
+                "request": request.to_k2_request(),
+                "asset_paths": asset_paths,
+            },
+        )
+        self._pending_krea_jobs[command_id] = {
+            "operation": "keyframe_face_refinement",
+            "source_keyframe_id": keyframe.keyframe_id,
+            "request": request.model_dump(mode="json"),
+            "input_asset_ids": (
+                source_asset.asset_id,
+                reference_asset.asset_id,
+                *(item.asset_id for item in adapter_refs),
+            ),
+        }
+        self._set_status("Refining the explicitly confirmed keyframe face region…")
 
     @Slot()
     def planMockTimeline(self) -> None:  # noqa: N802
@@ -3027,6 +3111,35 @@ class DesktopController(QObject):
                 self._draft_keyframe_regions.clear()
                 completed_label = f"regional keyframe at {keyframe.time_ms / 1000:g}s"
                 status = "Generated keyframe saved as a draft; approve it before Wan planning"
+            elif operation == "keyframe_face_refinement":
+                source_keyframe = next(
+                    item
+                    for item in self._session.project.keyframes
+                    if item.keyframe_id == context["source_keyframe_id"]
+                )
+                keyframe = source_keyframe.model_copy(
+                    update={
+                        "keyframe_id": f"keyframe-{uuid4().hex}",
+                        "image_asset_id": asset.asset_id,
+                        "source_type": KeyframeSource.EDITED,
+                        "provenance_id": provenance.provenance_id,
+                        "approved": False,
+                        "locked": False,
+                        "parent_keyframe_id": source_keyframe.keyframe_id,
+                        "source_frame_asset_id": source_keyframe.image_asset_id,
+                    }
+                )
+                self._session.project = revise_timeline_keyframe(
+                    self._session.project,
+                    source_keyframe_id=source_keyframe.keyframe_id,
+                    revised_keyframe=keyframe,
+                    asset=asset,
+                    provenance=provenance,
+                )
+                completed_label = (
+                    f"face-refined keyframe at {keyframe.time_ms / 1000:g}s"
+                )
+                status = "Refined keyframe saved as a draft; approve before replanning"
             elif operation == "style_duplication_entry":
                 group_id = str(context["group_id"])
                 group = self._style_duplications.get(group_id)

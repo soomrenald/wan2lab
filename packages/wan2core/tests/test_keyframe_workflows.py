@@ -33,7 +33,7 @@ from wan2core.keyframes.composition import (
     KeyframeCompositionRequest,
     compile_keyframe_composition,
 )
-from wan2core.keyframes.workflows import add_timeline_keyframe
+from wan2core.keyframes.workflows import add_timeline_keyframe, revise_timeline_keyframe
 from wan2core.projects import ProjectSettings, Wan2LabProject
 from wan2core.provenance import ProvenanceRecord
 from wan2core.timeline import Timeline
@@ -224,6 +224,48 @@ class KeyframeWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(updated.timeline.keyframe_ids, ("keyframe-1",))
         self.assertEqual(updated.keyframes[0].time_ms, 3_000)
+
+        refined_asset = AssetRef(
+            asset_id="keyframe-image-refined",
+            kind=AssetKind.IMAGE,
+            storage_path="assets/keyframe-refined.png",
+            sha256="d" * 64,
+            width=1280,
+            height=720,
+            parent_asset_ids=(asset.asset_id,),
+        )
+        refined_provenance = ProvenanceRecord(
+            provenance_id="keyframe-refined-prov",
+            operation="refine_keyframe_face",
+            created_at=datetime(2026, 7, 22, tzinfo=UTC),
+            input_asset_ids=(asset.asset_id,),
+            output_asset_ids=(refined_asset.asset_id,),
+        )
+        refined = keyframe.model_copy(
+            update={
+                "keyframe_id": "keyframe-2",
+                "image_asset_id": refined_asset.asset_id,
+                "source_type": KeyframeSource.EDITED,
+                "provenance_id": refined_provenance.provenance_id,
+                "approved": False,
+                "locked": False,
+                "parent_keyframe_id": keyframe.keyframe_id,
+                "source_frame_asset_id": asset.asset_id,
+            }
+        )
+
+        revised = revise_timeline_keyframe(
+            updated,
+            source_keyframe_id=keyframe.keyframe_id,
+            revised_keyframe=refined,
+            asset=refined_asset,
+            provenance=refined_provenance,
+        )
+
+        self.assertEqual(revised.timeline.keyframe_ids, ("keyframe-2",))
+        self.assertEqual(revised.keyframes[0].parent_keyframe_id, "keyframe-1")
+        self.assertFalse(revised.keyframes[0].approved)
+        self.assertIn("keyframe-image", {item.asset_id for item in revised.assets})
 
 
 if __name__ == "__main__":

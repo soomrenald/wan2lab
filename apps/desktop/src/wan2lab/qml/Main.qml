@@ -305,6 +305,47 @@ ApplicationWindow {
                         onClicked: studio.approveKeyframe(keyframeReviewIndex.value)
                     }
                 }
+                Label { text: "Keyframe face refinement"; color: "#aeb9cb" }
+                RowLayout {
+                    ComboBox {
+                        id: keyframeFaceIdentity
+                        Layout.fillWidth: true
+                        model: studio.characterNames
+                    }
+                    ComboBox {
+                        id: keyframeFaceReference
+                        Layout.fillWidth: true
+                        model: studio.sheetEntryNames
+                    }
+                }
+                RowLayout {
+                    SpinBox { id: keyframeFaceX0; from: 0; to: 4096; value: 400 }
+                    SpinBox { id: keyframeFaceY0; from: 0; to: 4096; value: 120 }
+                    SpinBox { id: keyframeFaceX1; from: 1; to: 4096; value: 880 }
+                    SpinBox { id: keyframeFaceY1; from: 1; to: 4096; value: 600 }
+                }
+                TextField {
+                    id: keyframeFacePrompt
+                    Layout.fillWidth: true
+                    placeholderText: "Identity/detail refinement note"
+                }
+                Button {
+                    Layout.fillWidth: true
+                    text: "Confirm box & refine keyframe face"
+                    enabled: studio.kreaLoaded
+                        && keyframeFaceIdentity.currentIndex >= 0
+                        && keyframeFaceReference.currentIndex >= 0
+                    onClicked: studio.refineKeyframeFace(
+                        keyframeReviewIndex.value,
+                        keyframeFaceIdentity.currentIndex,
+                        keyframeFaceReference.currentIndex,
+                        keyframeFaceX0.value,
+                        keyframeFaceY0.value,
+                        keyframeFaceX1.value,
+                        keyframeFaceY1.value,
+                        keyframeFacePrompt.text
+                    )
+                }
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
                 Label { text: "Runtime"; font.bold: true }
                 Label {

@@ -147,6 +147,54 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(len(controller.session.project.assets), 1)
             self.assertIn("immutable draft", controller.status.lower())
 
+    def test_confirmed_keyframe_face_refinement_creates_review_draft(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result_root = root / "krea-results"
+            source = root / "source.png"
+            reference = root / "reference.png"
+            Image.new("RGB", (128, 128), "blue").save(source)
+            Image.new("RGB", (128, 128), "purple").save(reference)
+            controller = DesktopController(
+                asset_base=root / "projects",
+                krea_result_root=result_root,
+            )
+            controller.addCharacter(
+                "Avery",
+                "averyface, stable identity",
+                "Travel clothes",
+                "blue jacket",
+            )
+            controller.importSheetEntry(
+                QUrl.fromLocalFile(str(reference)),
+                "front neutral",
+            )
+            controller.importKeyframe(QUrl.fromLocalFile(str(source)), 2.0)
+            original = controller.session.project.keyframes[0]
+            controller._krea_loaded = True  # noqa: SLF001
+            controller._krea_worker.send = Mock(return_value="refine-keyframe")  # noqa: SLF001
+
+            controller.refineKeyframeFace(0, 0, 0, 10, 12, 80, 90, "natural detail")
+
+            request = controller._krea_worker.send.call_args.args[1]["request"]  # noqa: SLF001
+            self.assertEqual(request["operation"], "face_refinement")
+            self.assertTrue(request["user_confirmed_face_region"])
+            result_root.mkdir(parents=True)
+            result = result_root / "refined.png"
+            Image.new("RGB", (128, 128), "green").save(result)
+            controller._complete_krea_job(  # noqa: SLF001
+                "refine-keyframe",
+                {"asset_paths": [str(result)]},
+            )
+
+            project = controller.session.project
+            refined = project.keyframes[0]
+            self.assertEqual(refined.parent_keyframe_id, original.keyframe_id)
+            self.assertEqual(refined.source_frame_asset_id, original.image_asset_id)
+            self.assertEqual(refined.source_type.value, "edited")
+            self.assertFalse(refined.approved)
+            self.assertIn(original.image_asset_id, {item.asset_id for item in project.assets})
+
     def test_sheet_entry_review_rename_and_remove_preserve_asset(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
