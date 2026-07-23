@@ -143,6 +143,9 @@ class Segment(DomainModel):
     mask_asset_id: Identifier | None = None
     backend_id: Identifier
     model_id: Identifier
+    generation_fps: float | None = Field(default=None, gt=0.0)
+    frame_count: int | None = Field(default=None, gt=0)
+    frame_rounding: FrameRounding = FrameRounding.NEAREST
     continuation_policy: ContinuationPolicy
     state: SegmentState = SegmentState.DRAFT
     revision_ids: tuple[Identifier, ...] = ()

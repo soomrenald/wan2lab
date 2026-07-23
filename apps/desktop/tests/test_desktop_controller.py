@@ -967,6 +967,7 @@ class DesktopControllerTests(unittest.TestCase):
             backend_key="steps",
         )
         capability_payload = default_mock_capabilities().model_dump(mode="json")
+        capability_payload["model_variants"][0]["supported_generation_fps"] = [8.0, 16.0]
         capability_payload["parameter_descriptors"] = [descriptor.model_dump(mode="json")]
         controller._handle_worker_event(  # noqa: SLF001 - exercise the Qt event boundary
             CapabilitiesEvent(
@@ -975,6 +976,7 @@ class DesktopControllerTests(unittest.TestCase):
             )
         )
         controller.setSegmentBackendParameter(0, "steps", "28")
+        controller.setSegmentTemporalSettings(0, 8.0, "floor")
         controller.generateNextMockSegment()
 
         segment = controller.session.project.segments[0]
@@ -985,6 +987,9 @@ class DesktopControllerTests(unittest.TestCase):
         self.assertEqual(revision.source_request.prompt, "camera orbit")
         self.assertEqual(revision.source_request.negative_prompt, "flicker")
         self.assertEqual(revision.source_request.parameters["steps"], 28)
+        self.assertEqual(revision.source_request.generation_fps, 8.0)
+        self.assertEqual(revision.source_request.frame_count, 41)
+        self.assertEqual(revision.source_request.frame_rounding.value, "floor")
         self.assertEqual(
             revision.source_request.action_spec.motion_instruction,
             "walk toward the window",

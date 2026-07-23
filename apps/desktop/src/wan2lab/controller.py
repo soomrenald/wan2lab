@@ -17,7 +17,7 @@ from k2core import __version__ as k2core_version
 from wan2core.actions import ActionSpec
 from wan2core import __version__ as wan2core_version
 from wan2core.assets import AssetKind, AssetRef
-from wan2core.backends import BackendCapabilities, WanMode
+from wan2core.backends import BackendCapabilities, FrameRounding, WanMode
 from wan2core.backends.mock import MockWanBackend, default_mock_capabilities
 from wan2core.characters import (
     AdapterFamily,
@@ -691,6 +691,25 @@ class DesktopController(QObject):
             else ContinuationPolicy.AUTHORED_ANCHOR.value
         )
 
+    @Property(float, notify=projectChanged)
+    def selectedSegmentGenerationFps(self) -> float:  # noqa: N802
+        segment = self._selected_segment()
+        if segment is None:
+            return 0.0
+        if segment.generation_fps is not None:
+            return segment.generation_fps
+        return self._capabilities.model(segment.model_id).default_generation_fps
+
+    @Property(int, notify=projectChanged)
+    def selectedSegmentFrameCount(self) -> int:  # noqa: N802
+        segment = self._selected_segment()
+        return segment.frame_count or 0 if segment is not None else 0
+
+    @Property(str, notify=projectChanged)
+    def selectedSegmentFrameRounding(self) -> str:  # noqa: N802
+        segment = self._selected_segment()
+        return segment.frame_rounding.value if segment is not None else FrameRounding.NEAREST.value
+
     @Property("QVariantMap", notify=projectChanged)
     def selectedSegmentAction(self) -> dict[str, object]:  # noqa: N802
         segment = self._selected_segment()
@@ -796,6 +815,9 @@ class DesktopController(QObject):
                 ),
             }
             for item in self._backend_parameter_descriptors
+            if segment is None
+            or segment.mode.value
+            in {str(mode) for mode in item.get("applicable_modes", ())}
         ]
 
     @Property("QStringList", notify=projectChanged)
@@ -3580,7 +3602,8 @@ class DesktopController(QObject):
         try:
             selected_mode = WanMode(mode)
             current = self._session.project.segments[segment_index]
-            model = self._capabilities.model(current.model_id)
+            capabilities = self._inspected_capabilities or self._capabilities
+            model = capabilities.model(current.model_id)
             if selected_mode not in model.supported_modes:
                 raise ValueError(f"Mode {selected_mode.value} is not supported by the segment model")
             segment = current.model_copy(
@@ -3827,6 +3850,56 @@ class DesktopController(QObject):
             self._set_status(f"Parameter update failed: {error}")
             return
         self._set_status(f"Set {key}={parsed}")
+        self.projectChanged.emit()
+
+    @Slot(int, float, str)
+    def setSegmentTemporalSettings(  # noqa: N802
+        self,
+        segment_index: int,
+        generation_fps: float,
+        frame_rounding: str,
+    ) -> None:
+        try:
+            current = self._session.project.segments[segment_index]
+            capabilities = self._inspected_capabilities or self._capabilities
+            model = capabilities.model(current.model_id)
+            if generation_fps not in model.supported_generation_fps:
+                raise ValueError(
+                    f"generation FPS {generation_fps:g} is not supported by {model.display_name}"
+                )
+            rounding = FrameRounding(frame_rounding)
+            frame_count = model.resolve_frame_count(
+                current.end_ms - current.start_ms,
+                generation_fps,
+                rounding,
+            )
+            segment = current.model_copy(
+                update={
+                    "generation_fps": generation_fps,
+                    "frame_count": frame_count,
+                    "frame_rounding": rounding,
+                }
+            )
+            segments = tuple(
+                segment if index == segment_index else item
+                for index, item in enumerate(self._session.project.segments)
+            )
+            updated = Wan2LabProject.model_validate(
+                self._session.project.model_copy(update={"segments": segments}).model_dump()
+            )
+            self._session.project = self._invalidate_generated_segment(
+                updated,
+                segment.segment_id,
+                "generation FPS or frame-count rounding changed",
+            )
+            actual_duration = model.frame_duration_ms(frame_count, generation_fps)
+        except Exception as error:
+            self._set_status(f"Temporal setting update failed: {error}")
+            return
+        self._set_status(
+            f"Generation timing set to {generation_fps:g} fps / {frame_count} frames "
+            f"({actual_duration / 1000:g}s actual)"
+        )
         self.projectChanged.emit()
 
     @Slot(QUrl)

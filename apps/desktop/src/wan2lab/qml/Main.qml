@@ -32,6 +32,10 @@ ApplicationWindow {
         actionContacts.text = action.contact_constraints
         actionSpeed.text = action.speed_easing
         actionPoseAccuracy.value = action.pose_accuracy_preference
+        generationFps.text = String(studio.selectedSegmentGenerationFps)
+        frameRounding.currentIndex = Math.max(
+            0, frameRounding.find(studio.selectedSegmentFrameRounding)
+        )
     }
 
     Connections {
@@ -1350,6 +1354,34 @@ ApplicationWindow {
                         ? "Backend parameters"
                         : "Inspect backend to discover parameters"
                     color: "#aeb9cb"
+                }
+                Label { text: "Advanced generation timing"; color: "#aeb9cb" }
+                RowLayout {
+                    TextField {
+                        id: generationFps
+                        Layout.fillWidth: true
+                        placeholderText: "Generation FPS"
+                        validator: DoubleValidator { bottom: 0.01; top: 240 }
+                    }
+                    ComboBox {
+                        id: frameRounding
+                        model: ["nearest", "floor", "ceil"]
+                    }
+                    Button {
+                        text: "Apply"
+                        enabled: studio.segmentCount > 0
+                        onClicked: studio.setSegmentTemporalSettings(
+                            selectedSegment.value,
+                            Number(generationFps.text),
+                            frameRounding.currentText
+                        )
+                    }
+                }
+                Label {
+                    text: studio.selectedSegmentFrameCount > 0
+                        ? studio.selectedSegmentFrameCount + " valid generated frames"
+                        : "Frame count is derived from backend rules"
+                    color: "#8f9bb0"
                 }
                 Repeater {
                     model: studio.backendParameterDescriptors

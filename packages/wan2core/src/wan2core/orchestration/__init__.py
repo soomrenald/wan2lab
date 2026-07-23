@@ -70,6 +70,8 @@ class WanStudioSession:
                 mode=item.mode,
                 backend_id=item.backend_id,
                 model_id=item.model_id,
+                generation_fps=item.generation_fps,
+                frame_count=item.frame_count,
                 continuation_policy=item.continuation_policy,
             )
             for item in plan.segments
@@ -488,8 +490,9 @@ class WanStudioSession:
             end_ms=segment.end_ms,
             width=self.project.project_settings.width,
             height=self.project.project_settings.height,
-            generation_fps=planned.generation_fps,
-            frame_count=planned.frame_count,
+            generation_fps=segment.generation_fps or planned.generation_fps,
+            frame_count=segment.frame_count or planned.frame_count,
+            frame_rounding=segment.frame_rounding,
             start_image_asset_id=start_asset,
             end_image_asset_id=end_asset,
             reference_character_asset_id=segment.reference_character_asset_id,

@@ -2803,6 +2803,36 @@
             "title": "End Ms",
             "type": "integer"
           },
+          "frame_count": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Frame Count"
+          },
+          "frame_rounding": {
+            "$ref": "#/$defs/FrameRounding",
+            "default": "nearest"
+          },
+          "generation_fps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Generation Fps"
+          },
           "mask_asset_id": {
             "anyOf": [
               {
