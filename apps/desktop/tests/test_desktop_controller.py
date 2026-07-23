@@ -1136,6 +1136,39 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(opened.outputFps, 30)
             self.assertEqual(opened.session.project.project_settings.output_fps, 30)
 
+    def test_project_settings_are_validated_and_plan_changes_become_stale(self) -> None:
+        controller = DesktopController()
+        controller.planMockTimeline()
+        controller.generateNextMockSegment()
+        controller.approveCurrentSegment()
+
+        controller.updateProjectSettings(
+            1280,
+            720,
+            4_000,
+            "krea-comfyui",
+            "krea2-turbo",
+            "balanced",
+            "generated_last_frame",
+            "/usr/bin/ffmpeg",
+        )
+
+        settings = controller.session.project.project_settings
+        self.assertEqual(settings.default_segment_duration_ms, 4_000)
+        self.assertEqual(settings.default_krea_model_id, "krea2-turbo")
+        self.assertEqual(settings.memory_policy, "balanced")
+        self.assertEqual(
+            settings.default_continuation_policy.value,
+            "generated_last_frame",
+        )
+        self.assertEqual(settings.ffmpeg_executable, "/usr/bin/ffmpeg")
+        self.assertIsNone(controller.session.project.segment_plan)
+        self.assertIsNone(controller.session.segment_plan)
+        self.assertEqual(
+            controller.session.project.segments[0].state,
+            SegmentState.STALE,
+        )
+
     def test_save_as_copies_immutable_assets_to_portable_project_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

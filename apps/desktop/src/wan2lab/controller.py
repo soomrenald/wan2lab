@@ -253,6 +253,30 @@ class DesktopController(QObject):
         return self._session.project.project_settings.height
 
     @Property(int, notify=projectChanged)
+    def defaultSegmentBudgetMs(self) -> int:  # noqa: N802
+        return self._session.project.project_settings.default_segment_duration_ms
+
+    @Property(str, notify=projectChanged)
+    def memoryPolicy(self) -> str:  # noqa: N802
+        return self._session.project.project_settings.memory_policy
+
+    @Property(str, notify=projectChanged)
+    def defaultContinuationPolicy(self) -> str:  # noqa: N802
+        return self._session.project.project_settings.default_continuation_policy.value
+
+    @Property(str, notify=projectChanged)
+    def defaultKreaBackendId(self) -> str:  # noqa: N802
+        return self._session.project.project_settings.default_krea_backend_id
+
+    @Property(str, notify=projectChanged)
+    def defaultKreaModelId(self) -> str:  # noqa: N802
+        return self._session.project.project_settings.default_krea_model_id
+
+    @Property(str, notify=projectChanged)
+    def ffmpegExecutable(self) -> str:  # noqa: N802
+        return self._session.project.project_settings.ffmpeg_executable
+
+    @Property(int, notify=projectChanged)
     def segmentCount(self) -> int:  # noqa: N802
         return len(self._session.project.segments)
 
@@ -3292,6 +3316,80 @@ class DesktopController(QObject):
             return
         self._append_event(f"Set duration-preserving output FPS to {output_fps:g}")
         self._set_status("Output FPS updated; generation timing is unchanged")
+        self.projectChanged.emit()
+
+    @Slot(int, int, int, str, str, str, str, str)
+    def updateProjectSettings(  # noqa: N802
+        self,
+        width: int,
+        height: int,
+        segment_budget_ms: int,
+        krea_backend_id: str,
+        krea_model_id: str,
+        memory_policy: str,
+        continuation_policy: str,
+        ffmpeg_executable: str,
+    ) -> None:
+        try:
+            current = self._session.project.project_settings
+            canvas_changed = width != current.width or height != current.height
+            if canvas_changed and (
+                self._session.project.assets
+                or self._session.project.keyframes
+                or self._session.project.mannequin_scenes
+            ):
+                raise ValueError(
+                    "canvas size cannot change after visual assets exist; start a new project"
+                )
+            selected_continuation = ContinuationPolicy(continuation_policy)
+            settings = current.model_copy(
+                update={
+                    "width": width,
+                    "height": height,
+                    "default_segment_duration_ms": segment_budget_ms,
+                    "default_krea_backend_id": krea_backend_id.strip(),
+                    "default_krea_model_id": krea_model_id.strip(),
+                    "memory_policy": memory_policy.strip(),
+                    "default_continuation_policy": selected_continuation,
+                    "ffmpeg_executable": ffmpeg_executable.strip(),
+                }
+            )
+            plan_changed = (
+                canvas_changed
+                or segment_budget_ms != current.default_segment_duration_ms
+                or selected_continuation is not current.default_continuation_policy
+            )
+            updated = Wan2LabProject.model_validate(
+                self._session.project.model_copy(
+                    update={
+                        "project_settings": settings,
+                        "segment_plan": (
+                            None if plan_changed else self._session.project.segment_plan
+                        ),
+                    }
+                ).model_dump()
+            )
+            if plan_changed:
+                generated_ids = tuple(
+                    item.segment_id for item in updated.segments if item.revision_ids
+                )
+                updated = Wan2LabProject.model_validate(
+                    invalidate_segments(
+                        updated,
+                        generated_ids,
+                        reason="project generation settings changed and require replanning",
+                    ).model_dump()
+                )
+                self._session.segment_plan = None
+            self._session.project = updated
+        except Exception as error:
+            self._set_status(f"Project settings update failed: {error}")
+            return
+        self._append_event("Updated validated project, runtime, and export settings")
+        self._set_status(
+            "Project settings updated"
+            + ("; replan before generation" if plan_changed else "")
+        )
         self.projectChanged.emit()
 
     @Slot(int, str, str, str)

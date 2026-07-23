@@ -195,6 +195,87 @@ ApplicationWindow {
                 ColumnLayout {
                 width: parent.width
                 Label { text: "Project & Assets"; font.bold: true }
+                Label { text: "Project output / runtime settings"; color: "#aeb9cb" }
+                RowLayout {
+                    SpinBox {
+                        id: projectWidth
+                        from: 64
+                        to: 8192
+                        value: studio.projectWidth
+                    }
+                    SpinBox {
+                        id: projectHeight
+                        from: 64
+                        to: 8192
+                        value: studio.projectHeight
+                    }
+                    SpinBox {
+                        id: segmentBudget
+                        from: 250
+                        to: 60000
+                        stepSize: 250
+                        value: studio.defaultSegmentBudgetMs
+                    }
+                }
+                RowLayout {
+                    TextField {
+                        id: projectKreaBackend
+                        Layout.fillWidth: true
+                        text: studio.defaultKreaBackendId
+                        placeholderText: "Krea backend ID"
+                    }
+                    TextField {
+                        id: projectKreaModel
+                        Layout.fillWidth: true
+                        text: studio.defaultKreaModelId
+                        placeholderText: "Krea model ID"
+                    }
+                }
+                RowLayout {
+                    ComboBox {
+                        id: projectMemoryPolicy
+                        Layout.fillWidth: true
+                        model: ["safe_16gb", "balanced", "maximum_residency"]
+                        Component.onCompleted: currentIndex = Math.max(
+                            0, find(studio.memoryPolicy)
+                        )
+                    }
+                    ComboBox {
+                        id: projectContinuation
+                        Layout.fillWidth: true
+                        model: [
+                            "authored_anchor",
+                            "generated_last_frame",
+                            "corrected_continuation",
+                            "dual_boundary",
+                            "overlap"
+                        ]
+                        Component.onCompleted: currentIndex = Math.max(
+                            0, find(studio.defaultContinuationPolicy)
+                        )
+                    }
+                }
+                RowLayout {
+                    TextField {
+                        id: projectFfmpeg
+                        Layout.fillWidth: true
+                        text: studio.ffmpegExecutable
+                        placeholderText: "FFmpeg executable"
+                    }
+                    Button {
+                        text: "Apply settings"
+                        onClicked: studio.updateProjectSettings(
+                            projectWidth.value,
+                            projectHeight.value,
+                            segmentBudget.value,
+                            projectKreaBackend.text,
+                            projectKreaModel.text,
+                            projectMemoryPolicy.currentText,
+                            projectContinuation.currentText,
+                            projectFfmpeg.text
+                        )
+                    }
+                }
                 Label { text: "Character identity"; color: "#aeb9cb" }
                 TextField { id: characterName; Layout.fillWidth: true; placeholderText: "Character name" }
                 TextField { id: identityPrompt; Layout.fillWidth: true; placeholderText: "Stable identity prompt" }
