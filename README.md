@@ -29,3 +29,6 @@ The desktop distribution includes the matching `wan2core` package. Core-only
 consumers may instead install `packages/wan2core` independently.
 
 Model weights are external assets and are never included in this repository.
+
+The current desktop software acceptance status and remaining hardware gates are
+tracked in [docs/phase1-acceptance.md](docs/phase1-acceptance.md).
