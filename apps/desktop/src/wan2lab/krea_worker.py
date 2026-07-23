@@ -145,6 +145,27 @@ class KreaWorkerService:
                     progress=progress,
                     cancellation=cancellation,
                 )
+        elif kind is CommandKind.DETECT_FACES:
+            detection = self.backend.detect_faces(
+                request,
+                progress=progress,
+                cancellation=cancellation,
+            )
+            return {
+                "faces": [
+                    {
+                        "box": {
+                            "x0": face.box.x0,
+                            "y0": face.box.y0,
+                            "x1": face.box.x1,
+                            "y1": face.box.y1,
+                        },
+                        "score": face.score,
+                    }
+                    for face in detection.faces
+                ],
+                "metadata": dict(detection.metadata),
+            }
         elif kind is CommandKind.REFINE_FACES:
             result = self.backend.refine_faces(
                 request,
@@ -208,6 +229,7 @@ class StdioKreaWorker:
             if kind in {
                 CommandKind.GENERATE_BASELINE,
                 CommandKind.EDIT_IMAGE,
+                CommandKind.DETECT_FACES,
                 CommandKind.REFINE_FACES,
             }:
                 if self._jobs:

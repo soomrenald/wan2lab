@@ -17,6 +17,7 @@ from wan2core.backends import (
 )
 from wan2core.backends.mock import default_mock_capabilities
 from wan2core.editing import BatchFrameSelection, FrameEditOperation
+from wan2core.editing.faces import FaceProposal, confirm_face_proposal
 from wan2core.keyframes import Rectangle
 from wan2core.segments import SegmentState
 from wan2core.workers import AckEvent, CapabilitiesEvent, ResultEvent, WorkerResult
@@ -330,6 +331,113 @@ class DesktopControllerTests(unittest.TestCase):
                 {0, 2},
             )
             self.assertIn("mandatory review", controller.status.lower())
+
+    def test_face_detection_draft_requires_explicit_candidate_or_manual_confirmation(self) -> None:
+        controller = DesktopController()
+        selection = BatchFrameSelection(frame_indices=(3, 5))
+        controller._active_batch_frame_edit = {  # noqa: SLF001
+            "mode": "face_detection",
+            "selection": selection,
+            "identity_id": "character-1",
+            "identity_prompt": "stable Avery identity",
+            "pending_indices": [],
+            "candidates": {},
+        }
+        controller._pending_krea_jobs["detect-3"] = {  # noqa: SLF001
+            "operation": "batch_face_detection",
+            "frame_index": 3,
+        }
+
+        controller._complete_krea_job(  # noqa: SLF001
+            "detect-3",
+            {
+                "faces": [
+                    {"box": {"x0": 4, "y0": 5, "x1": 20, "y1": 30}, "score": 0.7},
+                    {"box": {"x0": 30, "y0": 6, "x1": 55, "y1": 35}, "score": 0.95},
+                ]
+            },
+        )
+
+        self.assertEqual(len(controller.faceProposalSummaries), 2)
+        self.assertFalse(controller.faceBatchReady)
+        controller.confirmDetectedBatchFace(1)
+        self.assertFalse(controller.faceBatchReady)
+        controller.confirmManualBatchFace(5, 8, 9, 40, 50)
+        self.assertTrue(controller.faceBatchReady)
+        confirmed = controller._face_batch_draft["confirmed"]  # noqa: SLF001
+        self.assertEqual(confirmed[3].box.x0, 30)
+        self.assertTrue(confirmed[5].manually_corrected)
+
+    def test_completed_face_batch_records_identity_regions_and_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference_source = root / "reference.png"
+            Image.new("RGB", (128, 128), "purple").save(reference_source)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.addCharacter(
+                "Avery",
+                "averyface, stable identity",
+                "Travel clothes",
+                "blue jacket",
+            )
+            controller.importSheetEntry(
+                QUrl.fromLocalFile(str(reference_source)),
+                "front neutral",
+            )
+            controller.planMockTimeline()
+            controller.generateNextMockSegment()
+            project = controller.session.project
+            source_revision = project.segment_revisions[0]
+            identity = project.characters[0]
+            reference_asset_id = project.character_sheets[0].entries[0].image_asset_id
+            size = (
+                source_revision.source_request.width,
+                source_revision.source_request.height,
+            )
+            original = root / "original.png"
+            replacement = root / "replacement.png"
+            revised = root / "revised.mp4"
+            Image.new("RGB", size, "blue").save(original)
+            Image.new("RGB", size, "red").save(replacement)
+            revised.write_bytes(b"immutable face-refined video")
+            proposal = confirm_face_proposal(
+                FaceProposal(
+                    proposal_id="face-0",
+                    frame_index=0,
+                    identity_id=identity.identity_id,
+                    region_id="face-region-0",
+                    box=Rectangle(x0=10, y0=12, x1=80, y1=90),
+                    score=0.91,
+                    prompt=identity.identity_prompt,
+                )
+            )
+            controller._face_batch_draft = {"confirmed": {0: proposal}}  # noqa: SLF001
+            controller._active_batch_frame_edit = {  # noqa: SLF001
+                "mode": "face_refinement",
+                "segment_id": source_revision.segment_id,
+                "revision_id": source_revision.revision_id,
+                "source_video_asset_id": source_revision.result_asset_id,
+                "selection": BatchFrameSelection(frame_indices=(0,)),
+                "prompt": identity.identity_prompt,
+                "identity_id": identity.identity_id,
+                "reference_asset_id": reference_asset_id,
+                "adapter_asset_ids": (),
+                "adapters": (),
+                "regions": {0: proposal},
+            }
+
+            controller._complete_batch_frame_modification(  # noqa: SLF001
+                (str(original),),
+                (str(replacement),),
+                str(revised),
+            )
+
+            edit = controller.session.project.frame_edit_records[0]
+            self.assertEqual(edit.operation_type, FrameEditOperation.FACE_REFINEMENT)
+            self.assertEqual(edit.identity_id, identity.identity_id)
+            self.assertTrue(edit.user_confirmed_face_region)
+            self.assertEqual(edit.region, proposal.box)
+            self.assertIsNone(controller._face_batch_draft)  # noqa: SLF001
 
     def test_confirmed_krea_face_result_starts_typed_revision_assembly(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

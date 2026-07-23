@@ -637,6 +637,89 @@ ApplicationWindow {
                         )
                     }
                 }
+                Label {
+                    text: "Batch identity refinement"
+                    color: "#aeb9cb"
+                }
+                RowLayout {
+                    ComboBox {
+                        id: batchIdentity
+                        Layout.fillWidth: true
+                        model: studio.characterNames
+                        displayText: currentIndex >= 0
+                            ? "Identity: " + currentText
+                            : "Select identity"
+                    }
+                    ComboBox {
+                        id: batchReference
+                        Layout.fillWidth: true
+                        model: studio.sheetEntryNames
+                        displayText: currentIndex >= 0
+                            ? "Reference: " + currentText
+                            : "Select sheet reference"
+                    }
+                }
+                Button {
+                    Layout.fillWidth: true
+                    text: "Detect faces in batch frames"
+                    enabled: !studio.frameModificationRunning
+                        && studio.kreaLoaded
+                        && batchIdentity.currentIndex >= 0
+                    onClicked: studio.detectBatchFaces(
+                        selectedSegment.value,
+                        batchFrameIndices.text,
+                        batchIdentity.currentIndex
+                    )
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: "#d6b76b"
+                    text: "Choose the correct candidate for each frame; Wan2Lab never assumes the largest face is the target."
+                }
+                ComboBox {
+                    id: faceProposalChoice
+                    Layout.fillWidth: true
+                    model: studio.faceProposalSummaries
+                }
+                RowLayout {
+                    Button {
+                        text: "Confirm candidate"
+                        enabled: faceProposalChoice.currentIndex >= 0
+                        onClicked: studio.confirmDetectedBatchFace(
+                            faceProposalChoice.currentIndex
+                        )
+                    }
+                    Button {
+                        text: "Confirm manual box for Frame field"
+                        enabled: studio.confirmedFaceFrames.length > 0
+                        onClicked: studio.confirmManualBatchFace(
+                            replacementFrameIndex.value,
+                            faceX0.value,
+                            faceY0.value,
+                            faceX1.value,
+                            faceY1.value
+                        )
+                    }
+                }
+                Repeater {
+                    model: studio.confirmedFaceFrames
+                    Label {
+                        text: modelData
+                        color: modelData.indexOf("required") >= 0 ? "#d6b76b" : "#91d6a8"
+                    }
+                }
+                Button {
+                    Layout.fillWidth: true
+                    text: "Refine confirmed identity batch"
+                    enabled: studio.faceBatchReady
+                        && !studio.frameModificationRunning
+                        && batchReference.currentIndex >= 0
+                    onClicked: studio.refineConfirmedFaceBatch(
+                        replacementPrompt.text,
+                        batchReference.currentIndex
+                    )
+                }
                 Button {
                     Layout.fillWidth: true
                     text: studio.frameModificationRunning

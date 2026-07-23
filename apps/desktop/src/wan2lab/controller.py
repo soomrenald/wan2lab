@@ -39,7 +39,9 @@ from wan2core.editing.workflows import (
     plan_frame_extraction,
     plan_frame_revision_assembly,
 )
+from wan2core.editing.faces import FaceProposal, confirm_face_proposal
 from wan2core.keyframes import (
+    AdapterSelection,
     CharacterRegionAssignment,
     Keyframe,
     KeyframeSource,
@@ -201,6 +203,7 @@ class DesktopController(QObject):
         self._batch_frame_runner.completed.connect(self._complete_batch_frame_modification)
         self._batch_frame_runner.failed.connect(self._fail_batch_frame_modification)
         self._active_batch_frame_edit: dict[str, object] | None = None
+        self._face_batch_draft: dict[str, object] | None = None
 
     @Property(str, notify=projectChanged)
     def projectName(self) -> str:  # noqa: N802 - Qt property naming
@@ -262,6 +265,46 @@ class DesktopController(QObject):
     @Property("QStringList", notify=projectChanged)
     def characterNames(self) -> list[str]:  # noqa: N802
         return [item.name for item in self._session.project.characters]
+
+    @Property("QStringList", notify=projectChanged)
+    def faceProposalSummaries(self) -> list[str]:  # noqa: N802
+        draft = self._face_batch_draft
+        if draft is None:
+            return []
+        confirmed = draft["confirmed"]
+        return [
+            (
+                f"Frame {proposal.frame_index} · candidate {candidate_index + 1} · "
+                f"score {proposal.score:.2f} · "
+                f"{proposal.box.x0:.0f},{proposal.box.y0:.0f}–"
+                f"{proposal.box.x1:.0f},{proposal.box.y1:.0f}"
+                f"{' · confirmed' if proposal.frame_index in confirmed else ''}"
+            )
+            for proposal, candidate_index in draft["candidate_order"]
+        ]
+
+    @Property("QStringList", notify=projectChanged)
+    def confirmedFaceFrames(self) -> list[str]:  # noqa: N802
+        draft = self._face_batch_draft
+        if draft is None:
+            return []
+        confirmed = draft["confirmed"]
+        selection = draft["selection"]
+        return [
+            (
+                f"Frame {index}: confirmed"
+                if index in confirmed
+                else f"Frame {index}: confirmation required"
+            )
+            for index in selection.frame_indices
+        ]
+
+    @Property(bool, notify=projectChanged)
+    def faceBatchReady(self) -> bool:  # noqa: N802
+        draft = self._face_batch_draft
+        if draft is None:
+            return False
+        return set(draft["selection"].frame_indices) == set(draft["confirmed"])
 
     @Property("QStringList", notify=projectChanged)
     def sheetEntryNames(self) -> list[str]:  # noqa: N802
@@ -389,6 +432,7 @@ class DesktopController(QObject):
         self._project_name = "Untitled Wan2Lab Project"
         self._events.clear()
         self._draft_keyframe_regions.clear()
+        self._face_batch_draft = None
         self._mannequin_preview_url = QUrl()
         self._set_status("New project ready")
         self.projectChanged.emit()
@@ -1490,7 +1534,10 @@ class DesktopController(QObject):
     @Slot(str)
     def _handle_krea_source_extracted(self, source_path: str) -> None:
         if self._active_batch_frame_edit is not None:
-            self._start_batch_krea_edit(source_path)
+            if self._active_batch_frame_edit.get("mode") == "face_detection":
+                self._start_batch_face_detection(source_path)
+            else:
+                self._start_batch_krea_edit(source_path)
         else:
             self._start_krea_frame_edit(source_path)
 
@@ -1572,6 +1619,7 @@ class DesktopController(QObject):
             self._set_status(f"Batch frame edit could not start: {error}")
             return
         self._active_batch_frame_edit = {
+            "mode": "image_edit",
             "segment_id": segment.segment_id,
             "segment_index": segment_index,
             "revision_id": revision.revision_id,
@@ -1591,6 +1639,74 @@ class DesktopController(QObject):
         self._start_next_batch_krea_edit()
         self._set_status(f"Starting Krea batch repair for {len(values)} frame(s)…")
 
+    @Slot(int, str, int)
+    def detectBatchFaces(  # noqa: N802
+        self,
+        segment_index: int,
+        frame_indices: str,
+        identity_index: int,
+    ) -> None:
+        if not self._krea_loaded:
+            self._set_status("Load Krea before detecting batch faces")
+            return
+        if self.frameModificationRunning:
+            self._set_status("A frame modification is already running")
+            return
+        try:
+            values = tuple(
+                sorted(
+                    {
+                        int(item.strip())
+                        for item in frame_indices.split(",")
+                        if item.strip()
+                    }
+                )
+            )
+            selection = BatchFrameSelection(frame_indices=values)
+            identity = self._session.project.characters[identity_index]
+            segment = self._session.project.segments[segment_index]
+            if segment.state is not SegmentState.READY_FOR_REVIEW or not segment.revision_ids:
+                raise ValueError("only a reviewable segment can be analyzed")
+            revision = next(
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == segment.revision_ids[-1]
+            )
+            if any(item >= revision.source_request.frame_count for item in values):
+                raise ValueError("a selected frame index is outside the revision")
+            source_asset = next(
+                item
+                for item in self._session.project.assets
+                if item.asset_id == revision.result_asset_id
+            )
+            source_video = self._asset_store.resolve_ref(source_asset)
+        except Exception as error:
+            self._set_status(f"Batch face detection could not start: {error}")
+            return
+        self._face_batch_draft = None
+        self._active_batch_frame_edit = {
+            "mode": "face_detection",
+            "segment_id": segment.segment_id,
+            "segment_index": segment_index,
+            "revision_id": revision.revision_id,
+            "source_video_asset_id": source_asset.asset_id,
+            "source_video": source_video,
+            "selection": selection,
+            "identity_id": identity.identity_id,
+            "identity_prompt": identity.identity_prompt,
+            "pending_indices": list(selection.frame_indices),
+            "candidates": {},
+            "work": (
+                self._asset_base
+                / self._session.project.project_id
+                / ".frame-work"
+                / uuid4().hex
+            ),
+        }
+        self.projectChanged.emit()
+        self._start_next_batch_krea_edit()
+        self._set_status(f"Detecting faces in {len(values)} selected frame(s)…")
+
     def _start_next_batch_krea_edit(self) -> None:
         context = self._active_batch_frame_edit
         if context is None:
@@ -1600,7 +1716,10 @@ class DesktopController(QObject):
             self._fail_batch_frame_modification("Invalid batch frame queue")
             return
         if not pending:
-            self._start_batch_frame_assembly()
+            if context.get("mode") == "face_detection":
+                self._finish_batch_face_detection()
+            else:
+                self._start_batch_frame_assembly()
             return
         frame_index = int(pending.pop(0))
         context["current_index"] = frame_index
@@ -1618,21 +1737,214 @@ class DesktopController(QObject):
         )
         self._frame_extraction_runner.start(extraction)
 
+    def _start_batch_face_detection(self, source_path: str) -> None:
+        context = self._active_batch_frame_edit
+        if context is None:
+            return
+        frame_index = int(context["current_index"])
+        command_id = self._krea_worker.send(
+            "detect_faces",
+            {
+                "request": {
+                    "source_asset_id": "krea-source-frame",
+                    "threshold": 0.4,
+                    "provider": "auto",
+                },
+                "asset_paths": {"krea-source-frame": source_path},
+            },
+        )
+        self._pending_krea_jobs[command_id] = {
+            "operation": "batch_face_detection",
+            "frame_index": frame_index,
+        }
+        self._set_status(f"Detecting candidate faces in frame {frame_index}…")
+
+    def _finish_batch_face_detection(self) -> None:
+        context = self._active_batch_frame_edit
+        self._active_batch_frame_edit = None
+        if context is None:
+            return
+        candidates = context["candidates"]
+        candidate_order = [
+            (proposal, candidate_index)
+            for frame_index in context["selection"].frame_indices
+            for candidate_index, proposal in enumerate(candidates.get(frame_index, ()))
+        ]
+        self._face_batch_draft = {
+            **context,
+            "candidate_order": candidate_order,
+            "confirmed": {},
+        }
+        missing = sum(
+            not candidates.get(index) for index in context["selection"].frame_indices
+        )
+        self._append_event(
+            f"Face detection proposed {len(candidate_order)} candidate(s) across "
+            f"{len(context['selection'].frame_indices)} frame(s)"
+        )
+        self._set_status(
+            "Confirm one face per frame or draw a manual region"
+            + (f"; {missing} frame(s) need a manual region" if missing else "")
+        )
+        self.projectChanged.emit()
+
+    @Slot(int)
+    def confirmDetectedBatchFace(self, proposal_index: int) -> None:  # noqa: N802
+        draft = self._face_batch_draft
+        try:
+            if draft is None:
+                raise ValueError("run batch face detection first")
+            proposal, _candidate_index = draft["candidate_order"][proposal_index]
+            draft["confirmed"][proposal.frame_index] = confirm_face_proposal(proposal)
+        except Exception as error:
+            self._set_status(f"Face confirmation failed: {error}")
+            return
+        self._set_status(f"Confirmed detected face for frame {proposal.frame_index}")
+        self.projectChanged.emit()
+
+    @Slot(int, float, float, float, float)
+    def confirmManualBatchFace(  # noqa: N802
+        self,
+        frame_index: int,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+    ) -> None:
+        draft = self._face_batch_draft
+        try:
+            if draft is None:
+                raise ValueError("run batch face detection first")
+            if frame_index not in draft["selection"].frame_indices:
+                raise ValueError("manual region frame is outside the analyzed selection")
+            manual_box = Rectangle(x0=x0, y0=y0, x1=x1, y1=y1)
+            proposal = FaceProposal(
+                proposal_id=f"manual-face-{frame_index}-{uuid4().hex}",
+                frame_index=frame_index,
+                identity_id=str(draft["identity_id"]),
+                region_id=f"manual-face-{frame_index}",
+                box=manual_box,
+                score=0.0,
+                prompt=str(draft["identity_prompt"]),
+            )
+            draft["confirmed"][frame_index] = confirm_face_proposal(
+                proposal,
+                manual_box=manual_box,
+            )
+        except Exception as error:
+            self._set_status(f"Manual face confirmation failed: {error}")
+            return
+        self._set_status(f"Confirmed manual face region for frame {frame_index}")
+        self.projectChanged.emit()
+
+    @Slot(str, int)
+    def refineConfirmedFaceBatch(self, prompt: str, sheet_entry_index: int) -> None:  # noqa: N802
+        draft = self._face_batch_draft
+        try:
+            if draft is None or not self.faceBatchReady:
+                raise ValueError("confirm exactly one face region for every selected frame")
+            entries = [
+                entry
+                for sheet in self._session.project.character_sheets
+                for entry in sheet.entries
+            ]
+            reference = entries[sheet_entry_index]
+            if reference.identity_id != draft["identity_id"]:
+                raise ValueError("selected sheet entry belongs to another identity")
+            reference_asset = next(
+                item
+                for item in self._session.project.assets
+                if item.asset_id == reference.image_asset_id
+            )
+            identity = next(
+                item
+                for item in self._session.project.characters
+                if item.identity_id == draft["identity_id"]
+            )
+            adapter_refs = tuple(
+                item for item in identity.adapter_refs if item.family.value == "krea"
+            )
+            project_assets = {item.asset_id: item for item in self._session.project.assets}
+            adapter_paths = {
+                item.adapter_id: str(self._asset_store.resolve_ref(project_assets[item.asset_id]))
+                for item in adapter_refs
+            }
+        except Exception as error:
+            self._set_status(f"Batch face refinement could not start: {error}")
+            return
+        combined_prompt = ", ".join(
+            item for item in (str(draft["identity_prompt"]), prompt.strip()) if item
+        )
+        self._active_batch_frame_edit = {
+            **draft,
+            "mode": "face_refinement",
+            "prompt": combined_prompt,
+            "pending_indices": list(draft["selection"].frame_indices),
+            "replacement_paths": {},
+            "regions": dict(draft["confirmed"]),
+            "reference_asset_id": reference_asset.asset_id,
+            "reference_path": str(self._asset_store.resolve_ref(reference_asset)),
+            "adapters": tuple(
+                AdapterSelection(
+                    adapter_id=item.adapter_id,
+                    strength=item.default_strength,
+                )
+                for item in adapter_refs
+            ),
+            "adapter_paths": adapter_paths,
+            "adapter_asset_ids": tuple(item.asset_id for item in adapter_refs),
+            "work": (
+                self._asset_base
+                / self._session.project.project_id
+                / ".frame-work"
+                / uuid4().hex
+            ),
+        }
+        self._start_next_batch_krea_edit()
+        self._set_status("Starting confirmed batch identity refinement…")
+
     def _start_batch_krea_edit(self, source_path: str) -> None:
         context = self._active_batch_frame_edit
         if context is None:
             return
         frame_index = int(context["current_index"])
+        is_face_refinement = context.get("mode") == "face_refinement"
+        proposal = (
+            context["regions"][frame_index] if is_face_refinement else None
+        )
         request = NormalizedFrameEditRequest(
             source_frame_asset_id="krea-source-frame",
-            operation_type=FrameEditOperation.IMAGE_EDIT,
+            operation_type=(
+                FrameEditOperation.FACE_REFINEMENT
+                if is_face_refinement
+                else FrameEditOperation.IMAGE_EDIT
+            ),
             prompt=str(context["prompt"]),
+            settings=(
+                {"reference_asset_id": str(context["reference_asset_id"])}
+                if is_face_refinement
+                else {}
+            ),
+            region=proposal.box if proposal is not None else None,
+            identity_id=(str(context["identity_id"]) if is_face_refinement else None),
+            adapters=(context["adapters"] if is_face_refinement else ()),
+            user_confirmed_face_region=is_face_refinement,
         )
         command_id = self._krea_worker.send(
-            "edit_image",
+            "refine_faces" if is_face_refinement else "edit_image",
             {
                 "request": request.to_k2_request(),
-                "asset_paths": {"krea-source-frame": source_path},
+                "asset_paths": {
+                    "krea-source-frame": source_path,
+                    **(
+                        {
+                            "identity-reference": str(context["reference_path"]),
+                            **context["adapter_paths"],
+                        }
+                        if is_face_refinement
+                        else {}
+                    ),
+                },
             },
         )
         self._pending_krea_jobs[command_id] = {
@@ -1640,7 +1952,10 @@ class DesktopController(QObject):
             "frame_index": frame_index,
             "request": request.model_dump(mode="json"),
         }
-        self._set_status(f"Krea batch repair: frame {frame_index}")
+        self._set_status(
+            f"Krea {'identity refinement' if is_face_refinement else 'batch repair'}: "
+            f"frame {frame_index}"
+        )
 
     def _start_batch_frame_assembly(self) -> None:
         context = self._active_batch_frame_edit
@@ -1708,7 +2023,8 @@ class DesktopController(QObject):
                 (
                     command_id
                     for command_id, context in self._pending_krea_jobs.items()
-                    if context.get("operation") == "batch_frame_edit_replacement"
+                    if context.get("operation")
+                    in {"batch_frame_edit_replacement", "batch_face_detection"}
                 ),
                 None,
             )
@@ -1906,6 +2222,7 @@ class DesktopController(QObject):
         self._project_name = Path(path).stem
         self._events.clear()
         self._draft_keyframe_regions.clear()
+        self._face_batch_draft = None
         self._refresh_mannequin_preview()
         self._set_status(f"Opened {path}")
         self.projectChanged.emit()
@@ -2197,7 +2514,8 @@ class DesktopController(QObject):
                 self._pending_krea_frame_edit = None
             if (
                 failed_context is not None
-                and failed_context.get("operation") == "batch_frame_edit_replacement"
+                and failed_context.get("operation")
+                in {"batch_frame_edit_replacement", "batch_face_detection"}
             ):
                 self._active_batch_frame_edit = None
             if command_id == self._krea_load_command_id:
@@ -2214,13 +2532,49 @@ class DesktopController(QObject):
     def _complete_krea_job(self, command_id: str, payload: dict[str, object]) -> None:
         context = self._pending_krea_jobs.pop(command_id)
         try:
+            operation = str(context["operation"])
+            if operation == "batch_face_detection":
+                batch = self._active_batch_frame_edit
+                if batch is None or batch.get("mode") != "face_detection":
+                    raise RuntimeError("face detection was cancelled after a worker result")
+                raw_faces = payload.get("faces", ())
+                if not isinstance(raw_faces, list):
+                    raise ValueError("face detector result must contain a face list")
+                frame_index = int(context["frame_index"])
+                proposals = []
+                for candidate_index, raw_face in enumerate(raw_faces):
+                    if not isinstance(raw_face, dict) or not isinstance(
+                        raw_face.get("box"), dict
+                    ):
+                        raise ValueError("face detector returned an invalid candidate")
+                    box = raw_face["box"]
+                    proposals.append(
+                        FaceProposal(
+                            proposal_id=(
+                                f"face-{frame_index}-{candidate_index}-{uuid4().hex}"
+                            ),
+                            frame_index=frame_index,
+                            identity_id=str(batch["identity_id"]),
+                            region_id=f"face-{frame_index}-{candidate_index}",
+                            box=Rectangle(
+                                x0=float(box["x0"]),
+                                y0=float(box["y0"]),
+                                x1=float(box["x1"]),
+                                y1=float(box["y1"]),
+                            ),
+                            score=float(raw_face["score"]),
+                            prompt=str(batch["identity_prompt"]),
+                        )
+                    )
+                batch["candidates"][frame_index] = tuple(proposals)
+                self._start_next_batch_krea_edit()
+                return
             raw_paths = payload.get("asset_paths", ())
             if not isinstance(raw_paths, list) or len(raw_paths) != 1:
                 raise ValueError("Krea job must return exactly one image")
             source = Path(str(raw_paths[0])).expanduser().resolve()
             if self._krea_result_root not in source.parents or not source.is_file():
                 raise ValueError("Krea worker returned an output outside its result root")
-            operation = str(context["operation"])
             if operation == "frame_edit_replacement":
                 frame_context = context["frame_context"]
                 self._pending_krea_frame_edit = None
@@ -2576,6 +2930,15 @@ class DesktopController(QObject):
             edit_records = []
             extraction_provenance = []
             edit_provenance = []
+            is_face_refinement = context.get("mode") == "face_refinement"
+            reference_inputs = (
+                (
+                    str(context["reference_asset_id"]),
+                    *tuple(str(item) for item in context["adapter_asset_ids"]),
+                )
+                if is_face_refinement
+                else ()
+            )
             for frame_index, original_path, replacement_path in zip(
                 selection.frame_indices,
                 original_paths,
@@ -2593,7 +2956,14 @@ class DesktopController(QObject):
                     Path(replacement_path),
                     parent_asset_ids=(original_asset.asset_id,),
                     media_type="image/png",
-                    metadata={"frame_index": frame_index, "operation": "krea_batch_edit"},
+                    metadata={
+                        "frame_index": frame_index,
+                        "operation": (
+                            "krea_batch_face_refinement"
+                            if is_face_refinement
+                            else "krea_batch_edit"
+                        ),
+                    },
                 )
                 replacement_asset = self._wan_asset(replacement_record, AssetKind.IMAGE)
                 extract_id = f"provenance-{uuid4().hex}"
@@ -2613,14 +2983,32 @@ class DesktopController(QObject):
                 edit_provenance.append(
                     ProvenanceRecord(
                         provenance_id=edit_id,
-                        operation="krea_batch_frame_edit",
+                        operation=(
+                            "krea_batch_face_refinement"
+                            if is_face_refinement
+                            else "krea_batch_frame_edit"
+                        ),
                         created_at=datetime.now(UTC),
                         model_identifiers=("krea2",),
                         backend_id="krea-comfyui",
                         prompts={"prompt": str(context["prompt"])},
-                        input_asset_ids=(original_asset.asset_id,),
+                        input_asset_ids=(original_asset.asset_id, *reference_inputs),
                         output_asset_ids=(replacement_asset.asset_id,),
-                        parameters={"frame_index": frame_index},
+                        parameters={
+                            "frame_index": frame_index,
+                            "operation_type": (
+                                FrameEditOperation.FACE_REFINEMENT.value
+                                if is_face_refinement
+                                else FrameEditOperation.IMAGE_EDIT.value
+                            ),
+                            "region": (
+                                context["regions"][frame_index].box.model_dump(
+                                    mode="json"
+                                )
+                                if is_face_refinement
+                                else None
+                            ),
+                        },
                     )
                 )
                 edit_records.append(
@@ -2630,8 +3018,27 @@ class DesktopController(QObject):
                         original_frame_asset_id=original_asset.asset_id,
                         replacement_frame_asset_id=replacement_asset.asset_id,
                         frame_index=frame_index,
-                        operation_type=FrameEditOperation.IMAGE_EDIT,
+                        operation_type=(
+                            FrameEditOperation.FACE_REFINEMENT
+                            if is_face_refinement
+                            else FrameEditOperation.IMAGE_EDIT
+                        ),
                         prompt=str(context["prompt"]),
+                        settings=(
+                            {"reference_asset_id": str(context["reference_asset_id"])}
+                            if is_face_refinement
+                            else {}
+                        ),
+                        region=(
+                            context["regions"][frame_index].box
+                            if is_face_refinement
+                            else None
+                        ),
+                        identity_id=(
+                            str(context["identity_id"]) if is_face_refinement else None
+                        ),
+                        adapters=(context["adapters"] if is_face_refinement else ()),
+                        user_confirmed_face_region=is_face_refinement,
                         provenance_id=edit_id,
                     )
                 )
@@ -2701,8 +3108,11 @@ class DesktopController(QObject):
             self._set_status(f"Batch frame modification registration failed: {error}")
             return
         self._append_event(
-            f"Batch-edited {len(selection.frame_indices)} frames as one immutable revision"
+            f"Batch-{'refined identity in' if is_face_refinement else 'edited'} "
+            f"{len(selection.frame_indices)} frames as one immutable revision"
         )
+        if is_face_refinement:
+            self._face_batch_draft = None
         self._set_status("Batch-modified segment ready for mandatory review")
         self.projectChanged.emit()
 

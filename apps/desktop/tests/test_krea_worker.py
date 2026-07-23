@@ -3,7 +3,11 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from k2core.backends import FaceDetectionResult
+from k2core.face_detail import DetectedFace
+from k2core.regions import PixelBox
 from k2core.worker.protocol import CommandKind
 
 from wan2lab.krea_worker import KreaCancellation, KreaWorkerService
@@ -72,10 +76,32 @@ class KreaWorkerTests(unittest.TestCase):
                 cancellation=KreaCancellation(),
                 progress=lambda *_event: None,
             )
+            with patch.object(
+                type(service.backend),
+                "detect_faces",
+                return_value=FaceDetectionResult(
+                    faces=(DetectedFace(PixelBox(1, 2, 30, 40), 0.9),),
+                    metadata={"provider": "CPUExecutionProvider"},
+                ),
+            ):
+                detected = service.execute(
+                    CommandKind.DETECT_FACES,
+                    {
+                        "request": {
+                            "source_asset_id": "source",
+                            "threshold": 0.4,
+                        },
+                        "asset_paths": {"source": str(source)},
+                    },
+                    cancellation=KreaCancellation(),
+                    progress=lambda *_event: None,
+                )
 
             self.assertTrue(loaded["loaded"])
             self.assertEqual(Path(generated["asset_paths"][0]).read_bytes(), b"generated")
             self.assertEqual(Path(edited["asset_paths"][0]).read_bytes(), b"edited")
+            self.assertEqual(detected["faces"][0]["box"]["x1"], 30)
+            self.assertEqual(detected["metadata"]["provider"], "CPUExecutionProvider")
             service.release()
             self.assertIsNone(runtime.model)
             self.assertIsNone(runtime.clip)
