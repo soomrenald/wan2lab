@@ -259,6 +259,31 @@ class ComfyWanWorkflowBuilder:
                 },
             },
         }
+        _bind_optional_parameters(
+            workflow["4"]["inputs"],
+            parameters,
+            {
+                "use_disk_cache": bool,
+                "device": str,
+            },
+        )
+        _bind_optional_parameters(
+            workflow["6"]["inputs"],
+            parameters,
+            {
+                "denoise_strength": float,
+                "batched_cfg": bool,
+                "rope_function": str,
+                "start_step": int,
+                "end_step": int,
+                "add_noise_to_samples": bool,
+            },
+        )
+        _bind_optional_parameters(
+            workflow["7"]["inputs"],
+            parameters,
+            {"normalization": str},
+        )
         if request.mode is WanMode.PROMPT and not unified_ti2v_5b:
             workflow["5"] = {
                 "class_type": "WanVideoEmptyEmbeds",
@@ -292,6 +317,14 @@ class ComfyWanWorkflowBuilder:
                 }
                 inputs["end_image"] = ["10", 0]
                 inputs["fun_or_fl2v_model"] = True
+            _bind_optional_parameters(
+                inputs,
+                parameters,
+                {
+                    "tiled_vae": bool,
+                    "augment_empty_frames": float,
+                },
+            )
             workflow["5"] = {"class_type": "WanVideoImageToVideoEncode", "inputs": inputs}
         return workflow
 
@@ -408,6 +441,16 @@ def _safe_prefix(value: str) -> str:
     if not cleaned or ".." in cleaned.split("/"):
         raise WorkflowBindingError("invalid output filename prefix")
     return cleaned
+
+
+def _bind_optional_parameters(
+    inputs: dict[str, object],
+    parameters: Mapping[str, object],
+    conversions: Mapping[str, type],
+) -> None:
+    for key, conversion in conversions.items():
+        if key in parameters:
+            inputs[key] = conversion(parameters[key])
 
 
 __all__ = [

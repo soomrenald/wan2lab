@@ -295,7 +295,20 @@ def _workflow_descriptors(
     sources = (
         (
             nodes.sampler,
-            ("steps", "cfg", "shift", "scheduler", "force_offload", "riflex_freq_index"),
+            (
+                "steps",
+                "cfg",
+                "shift",
+                "scheduler",
+                "force_offload",
+                "riflex_freq_index",
+                "denoise_strength",
+                "batched_cfg",
+                "rope_function",
+                "start_step",
+                "end_step",
+                "add_noise_to_samples",
+            ),
             modes,
         ),
         (
@@ -305,6 +318,8 @@ def _workflow_descriptors(
                 "start_latent_strength",
                 "end_latent_strength",
                 "force_offload",
+                "tiled_vae",
+                "augment_empty_frames",
             ),
             modes.intersection({WanMode.I2V, WanMode.FIRST_LAST}),
         ),
@@ -316,7 +331,13 @@ def _workflow_descriptors(
                 "tile_y",
                 "tile_stride_x",
                 "tile_stride_y",
+                "normalization",
             ),
+            modes,
+        ),
+        (
+            nodes.text_encoder,
+            ("use_disk_cache", "device"),
             modes,
         ),
     )
@@ -350,11 +371,15 @@ def _node_descriptors(
     modes: frozenset[WanMode],
     backend_node: str,
 ) -> tuple[ParameterDescriptor, ...]:
-    required = _mapping(_mapping(node_info.get("input", {})).get("required", {}))
+    inputs = _mapping(node_info.get("input", {}))
+    specifications = {
+        **_mapping(inputs.get("required", {})),
+        **_mapping(inputs.get("optional", {})),
+    }
     descriptors = []
     common_keys = {"steps", "cfg", "scheduler", "seed"}
     for key in keys:
-        specification = required.get(key)
+        specification = specifications.get(key)
         if not isinstance(specification, (list, tuple)) or not specification:
             continue
         type_value = specification[0]

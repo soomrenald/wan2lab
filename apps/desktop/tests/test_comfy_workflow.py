@@ -166,6 +166,11 @@ class ComfyWorkflowTests(unittest.TestCase):
                 height=704,
                 generation_fps=24,
                 frame_count=121,
+                parameters={
+                    "batched_cfg": True,
+                    "rope_function": "default",
+                    "normalization": "minmax",
+                },
             ),
             asset_inputs={},
             filename_prefix="wan2lab/ti2v-prompt",
@@ -176,6 +181,9 @@ class ComfyWorkflowTests(unittest.TestCase):
         self.assertEqual(plan.workflow["5"]["inputs"]["vae"], ["2", 0])
         self.assertNotIn("start_image", plan.workflow["5"]["inputs"])
         self.assertNotIn("9", plan.workflow)
+        self.assertTrue(plan.workflow["6"]["inputs"]["batched_cfg"])
+        self.assertEqual(plan.workflow["6"]["inputs"]["rope_function"], "default")
+        self.assertEqual(plan.workflow["7"]["inputs"]["normalization"], "minmax")
 
     def test_first_last_graph_binds_individual_immutable_assets(self) -> None:
         workflow_builder = builder()

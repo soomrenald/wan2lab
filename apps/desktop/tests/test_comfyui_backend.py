@@ -6,8 +6,11 @@ from wan2core.backends import ParameterGroup, WanMode
 from wan2lab.backends.comfyui import inspect_comfyui_wan
 
 
-def node(required: dict[str, object] | None = None) -> dict[str, object]:
-    return {"input": {"required": required or {}}}
+def node(
+    required: dict[str, object] | None = None,
+    optional: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return {"input": {"required": required or {}, "optional": optional or {}}}
 
 
 def object_info() -> dict[str, object]:
@@ -38,7 +41,15 @@ def object_info() -> dict[str, object]:
                 "scheduler": [["unipc", "dpm++"], {"default": "unipc"}],
                 "force_offload": ["BOOLEAN", {"default": True}],
                 "riflex_freq_index": ["INT", {"default": 0, "min": 0, "max": 1000}],
-            }
+            },
+            {
+                "denoise_strength": ["FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0}],
+                "batched_cfg": ["BOOLEAN", {"default": False}],
+                "rope_function": [["default", "comfy"], {"default": "comfy"}],
+                "start_step": ["INT", {"default": 0, "min": 0, "max": 10000}],
+                "end_step": ["INT", {"default": -1, "min": -1, "max": 10000}],
+                "add_noise_to_samples": ["BOOLEAN", {"default": False}],
+            },
         ),
         "WanVideoDecode": node(
             {
@@ -47,7 +58,8 @@ def object_info() -> dict[str, object]:
                 "tile_y": ["INT", {"default": 272, "min": 64, "max": 1024}],
                 "tile_stride_x": ["INT", {"default": 144, "min": 32, "max": 1024}],
                 "tile_stride_y": ["INT", {"default": 128, "min": 32, "max": 1024}],
-            }
+            },
+            {"normalization": [["default", "minmax", "none"], {"default": "default"}]},
         ),
         "WanVideoEmptyEmbeds": node(),
         "WanVideoImageToVideoEncode": node(
@@ -61,7 +73,14 @@ def object_info() -> dict[str, object]:
                     "FLOAT",
                     {"default": 1.0, "min": 0.0, "max": 1.0},
                 ],
-            }
+            },
+            {
+                "tiled_vae": ["BOOLEAN", {"default": False}],
+                "augment_empty_frames": [
+                    "FLOAT",
+                    {"default": 0.0, "min": 0.0, "max": 10.0},
+                ],
+            },
         ),
         "WanVideoAnimateEmbeds": node(),
         "WanVideoMiniMaxRemoverEmbeds": node(),
@@ -117,6 +136,9 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
         self.assertEqual(parameters["shift"].group, ParameterGroup.ADVANCED)
         self.assertEqual(parameters["scheduler"].choices, ("unipc", "dpm++"))
         self.assertEqual(parameters["tile_x"].maximum, 1024)
+        self.assertEqual(parameters["rope_function"].choices, ("default", "comfy"))
+        self.assertEqual(parameters["normalization"].default, "default")
+        self.assertEqual(parameters["tiled_vae"].group, ParameterGroup.ADVANCED)
         self.assertEqual(
             parameters["noise_aug_strength"].applicable_modes,
             frozenset({WanMode.I2V, WanMode.FIRST_LAST}),
