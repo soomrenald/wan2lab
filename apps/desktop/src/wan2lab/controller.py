@@ -157,10 +157,12 @@ class DesktopController(QObject):
             krea_result_root or Path("~/.cache/wan2lab/krea-results")
         ).expanduser().resolve()
         self._project_name = "Untitled Wan2Lab Project"
+        self._review_segment_index = 0
         self._status = "Ready — plan the timeline to begin"
         self._events: list[str] = []
         self._mannequin_preview_url = QUrl()
         self._mannequin_preview_revision = 0
+        self._review_segment_index = 0
         self._wan_worker = WanWorkerProcess(self)
         self._wan_worker.eventReceived.connect(self._handle_worker_event)
         self._wan_worker.transportError.connect(self._handle_worker_transport_error)
@@ -381,6 +383,64 @@ class DesktopController(QObject):
     @Property(QUrl, notify=projectChanged)
     def mannequinPreviewUrl(self) -> QUrl:  # noqa: N802
         return self._mannequin_preview_url
+
+    @Property(QUrl, notify=projectChanged)
+    def reviewVideoUrl(self) -> QUrl:  # noqa: N802
+        revision = self._selected_review_revision()
+        if revision is None or revision.result_asset_id is None:
+            return QUrl()
+        try:
+            asset = next(
+                item
+                for item in self._session.project.assets
+                if item.asset_id == revision.result_asset_id
+            )
+            path = self._asset_store.resolve_ref(asset)
+        except (KeyError, FileNotFoundError, StopIteration, ValueError):
+            return QUrl()
+        return QUrl.fromLocalFile(str(path))
+
+    @Property(int, notify=projectChanged)
+    def reviewFrameCount(self) -> int:  # noqa: N802
+        revision = self._selected_review_revision()
+        return revision.source_request.frame_count if revision is not None else 0
+
+    @Property(float, notify=projectChanged)
+    def reviewGenerationFps(self) -> float:  # noqa: N802
+        revision = self._selected_review_revision()
+        return revision.source_request.generation_fps if revision is not None else 1.0
+
+    @Property("QStringList", notify=projectChanged)
+    def reviewFrameLabels(self) -> list[str]:  # noqa: N802
+        return [str(index) for index in range(self.reviewFrameCount)]
+
+    @Property(str, notify=projectChanged)
+    def reviewMetadata(self) -> str:  # noqa: N802
+        revision = self._selected_review_revision()
+        if revision is None:
+            return "No generated revision selected"
+        request = revision.source_request
+        segment = self._session.project.segments[self._review_segment_index]
+        anchors = "/".join(
+            item
+            for item in (
+                "start" if request.start_image_asset_id else "",
+                "end" if request.end_image_asset_id else "",
+            )
+            if item
+        ) or "prompt-only"
+        parameters = ", ".join(
+            f"{key}={value}" for key, value in sorted(revision.resolved_parameters.items())
+        ) or "defaults"
+        return (
+            f"Revision {revision.revision_number} · {revision.review_state.value} · "
+            f"{request.mode.value} · {request.backend_id}/{request.model_id} · "
+            f"seed {revision.seed} · {request.frame_count} frames at "
+            f"{request.generation_fps:g} fps · "
+            f"{(request.end_ms - request.start_ms) / 1000:g}s · anchors: {anchors}\n"
+            f"Prompt: {segment.prompt or request.prompt or '—'}\n"
+            f"Parameters: {parameters}"
+        )
 
     @Property(str, notify=projectChanged)
     def mannequinConditioningPath(self) -> str:  # noqa: N802
@@ -2484,6 +2544,7 @@ class DesktopController(QObject):
             Path(path).expanduser().resolve().parent / project.project_settings.asset_root
         )
         self._project_name = Path(path).stem
+        self._review_segment_index = 0
         self._events.clear()
         self._draft_keyframe_regions.clear()
         self._face_batch_draft = None
@@ -2496,6 +2557,34 @@ class DesktopController(QObject):
     @property
     def session(self) -> WanStudioSession:
         return self._session
+
+    @Slot(int)
+    def selectReviewSegment(self, segment_index: int) -> None:  # noqa: N802
+        if not self._session.project.segments:
+            self._review_segment_index = 0
+        else:
+            self._review_segment_index = min(
+                max(0, segment_index),
+                len(self._session.project.segments) - 1,
+            )
+        self.projectChanged.emit()
+
+    def _selected_review_revision(self):
+        if not self._session.project.segments:
+            return None
+        index = min(self._review_segment_index, len(self._session.project.segments) - 1)
+        segment = self._session.project.segments[index]
+        if not segment.revision_ids:
+            return None
+        revision_id = segment.revision_ids[-1]
+        return next(
+            (
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == revision_id
+            ),
+            None,
+        )
 
     @staticmethod
     def _new_session(duration_ms: int) -> WanStudioSession:

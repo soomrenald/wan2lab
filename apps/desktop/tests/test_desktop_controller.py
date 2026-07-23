@@ -30,6 +30,43 @@ from wan2lab.controller import DesktopController
 
 
 class DesktopControllerTests(unittest.TestCase):
+    def test_review_player_properties_resolve_latest_immutable_segment_video(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.planMockTimeline()
+            controller.generateNextMockSegment()
+            revision = controller.session.project.segment_revisions[0]
+            video = root / "review.mp4"
+            video.write_bytes(b"review video placeholder")
+            stored = controller._asset_store.register_generated(  # noqa: SLF001
+                video,
+                media_type="video/mp4",
+            )
+            assets = tuple(
+                item.model_copy(
+                    update={
+                        "storage_path": stored.relative_path,
+                        "sha256": stored.sha256,
+                    }
+                )
+                if item.asset_id == revision.result_asset_id
+                else item
+                for item in controller.session.project.assets
+            )
+            controller.session.project = controller.session.project.model_copy(
+                update={"assets": assets}
+            )
+
+            controller.selectReviewSegment(0)
+
+            self.assertTrue(controller.reviewVideoUrl.isLocalFile())
+            self.assertEqual(controller.reviewFrameCount, revision.source_request.frame_count)
+            self.assertEqual(len(controller.reviewFrameLabels), controller.reviewFrameCount)
+            self.assertIn("Revision 1", controller.reviewMetadata)
+            self.assertIn("mock-wan/wan-test", controller.reviewMetadata)
+            self.assertIn("seed 1", controller.reviewMetadata)
+
     def test_mock_workflow_exposes_review_gate_to_qt(self) -> None:
         controller = DesktopController()
         controller.newProject(11.0)

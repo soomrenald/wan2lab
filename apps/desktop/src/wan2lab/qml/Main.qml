@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtMultimedia
 
 ApplicationWindow {
     id: window
@@ -432,11 +433,93 @@ ApplicationWindow {
                         fillMode: Image.PreserveAspectFit
                         cache: false
                     }
+                    MediaPlayer {
+                        id: reviewPlayer
+                        source: studio.reviewVideoUrl
+                        videoOutput: reviewVideoOutput
+                        onSourceChanged: position = 0
+                    }
+                    VideoOutput {
+                        id: reviewVideoOutput
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: studio.mannequinPreviewUrl.toString().length === 0
+                            && studio.reviewVideoUrl.toString().length > 0
+                        fillMode: VideoOutput.PreserveAspectFit
+                    }
                     Label {
                         Layout.alignment: Qt.AlignHCenter
                         visible: studio.mannequinPreviewUrl.toString().length === 0
-                        text: "Review player, frame strip, Krea edits, and mannequin viewport"
+                            && studio.reviewVideoUrl.toString().length === 0
+                        text: "Generate a segment to open its immutable review video"
                         color: "#7f8ca0"
+                    }
+                    RowLayout {
+                        visible: reviewVideoOutput.visible
+                        Layout.fillWidth: true
+                        Button {
+                            text: reviewPlayer.playbackState === MediaPlayer.PlayingState
+                                ? "Pause"
+                                : "Play"
+                            onClicked: reviewPlayer.playbackState === MediaPlayer.PlayingState
+                                ? reviewPlayer.pause()
+                                : reviewPlayer.play()
+                        }
+                        Button {
+                            text: "Stop"
+                            onClicked: reviewPlayer.stop()
+                        }
+                        CheckBox {
+                            id: reviewLoop
+                            text: "Loop"
+                            checked: true
+                            onCheckedChanged: reviewPlayer.loops = checked
+                                ? MediaPlayer.Infinite
+                                : 1
+                        }
+                        Slider {
+                            id: reviewSeek
+                            Layout.fillWidth: true
+                            from: 0
+                            to: Math.max(1, reviewPlayer.duration)
+                            value: reviewPlayer.position
+                            onMoved: reviewPlayer.position = value
+                        }
+                        Label {
+                            text: (reviewPlayer.position / 1000).toFixed(2)
+                                + " / "
+                                + (reviewPlayer.duration / 1000).toFixed(2)
+                                + " s"
+                            color: "#aeb9cb"
+                        }
+                    }
+                    ListView {
+                        id: reviewFrameStrip
+                        visible: reviewVideoOutput.visible
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 42
+                        orientation: ListView.Horizontal
+                        spacing: 4
+                        clip: true
+                        model: studio.reviewFrameLabels
+                        delegate: Button {
+                            required property string modelData
+                            required property int index
+                            width: 44
+                            height: 34
+                            text: modelData
+                            highlighted: Math.floor(
+                                reviewPlayer.position
+                                * studio.reviewGenerationFps
+                                / 1000
+                            ) === index
+                            onClicked: {
+                                reviewPlayer.position = Math.round(
+                                    index * 1000 / studio.reviewGenerationFps
+                                )
+                                replacementFrameIndex.value = index
+                            }
+                        }
                     }
                 }
             }
@@ -508,6 +591,7 @@ ApplicationWindow {
                         from: 0
                         to: Math.max(0, studio.segmentCount - 1)
                         enabled: studio.segmentCount > 0
+                        onValueModified: studio.selectReviewSegment(value)
                     }
                     ComboBox {
                         id: segmentMode
@@ -566,6 +650,12 @@ ApplicationWindow {
                 }
                 Label { text: "Character assignments"; color: "#aeb9cb" }
                 Label { text: "Review and provenance"; color: "#aeb9cb" }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: studio.reviewMetadata
+                    color: "#8f9bb0"
+                }
                 RowLayout {
                     Label { text: "Frame"; color: "#aeb9cb" }
                     SpinBox {
