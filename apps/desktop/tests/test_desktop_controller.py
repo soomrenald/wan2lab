@@ -57,6 +57,11 @@ class DesktopControllerTests(unittest.TestCase):
             recommendations["Full Memory"],
             "NVIDIA RTX 6000 Ada",
         )
+        self.assertEqual(controller.wanGpuRecommendations[0]["mode"], "prompt")
+        self.assertIn(
+            "Enabled",
+            controller.wanGpuRecommendations[0]["expected_acceleration"],
+        )
 
         controller.setWanAcceleration(False, "quality", "")
 

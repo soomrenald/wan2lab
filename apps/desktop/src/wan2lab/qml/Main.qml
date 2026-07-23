@@ -1029,10 +1029,12 @@ ApplicationWindow {
                         required property var modelData
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: modelData.tier + ": " + modelData.gpu + " · "
+                        text: modelData.tier + " · " + modelData.model + " / "
+                            + modelData.mode + ": " + modelData.gpu + " · "
                             + modelData.vram_gib + " GB"
                             + (modelData.requires_quantization ? " · quantized" : "")
                             + (modelData.requires_offload ? " · offload" : "")
+                            + "\nAcceleration: " + modelData.expected_acceleration
                             + "\n" + modelData.rationale
                         color: "#8f9bb0"
                     }
