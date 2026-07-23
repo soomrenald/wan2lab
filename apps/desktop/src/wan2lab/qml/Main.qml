@@ -176,6 +176,36 @@ ApplicationWindow {
                     }
                 }
                 Label { text: studio.sheetEntryNames.join("\n"); color: "#aeb9cb"; wrapMode: Text.Wrap }
+                RowLayout {
+                    SpinBox { id: sheetReviewEntry; from: 0; to: 999; value: 0 }
+                    TextField {
+                        id: sheetReviewName
+                        Layout.fillWidth: true
+                        placeholderText: "Rename selected entry"
+                    }
+                    ComboBox {
+                        id: sheetReviewState
+                        model: ["draft", "approved", "rejected"]
+                    }
+                }
+                RowLayout {
+                    Button {
+                        text: "Save review"
+                        onClicked: studio.reviewSheetEntry(
+                            sheetEntrySheet.value,
+                            sheetReviewEntry.value,
+                            sheetReviewName.text,
+                            sheetReviewState.currentText
+                        )
+                    }
+                    Button {
+                        text: "Remove from sheet"
+                        onClicked: studio.removeSheetEntry(
+                            sheetEntrySheet.value,
+                            sheetReviewEntry.value
+                        )
+                    }
+                }
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
                 Label { text: "Exact-time keyframe"; font.bold: true }
                 RowLayout {

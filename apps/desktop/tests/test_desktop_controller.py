@@ -102,6 +102,26 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(len(controller.session.project.assets), 1)
             self.assertIn("immutable draft", controller.status.lower())
 
+    def test_sheet_entry_review_rename_and_remove_preserve_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.png"
+            Image.new("RGB", (64, 64), "green").save(source)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.addCharacter("Avery", "Avery identity", "Travel", "green coat")
+            controller.importSheetEntry(QUrl.fromLocalFile(str(source)), "front")
+            asset_id = controller.session.project.assets[0].asset_id
+
+            controller.reviewSheetEntry(0, 0, "front smiling", "approved")
+            entry = controller.session.project.character_sheets[0].entries[0]
+            self.assertEqual(entry.name, "front smiling")
+            self.assertEqual(entry.approval_state.value, "approved")
+            controller.removeSheetEntry(0, 0)
+
+            self.assertEqual(controller.session.project.character_sheets[0].entries, ())
+            self.assertEqual(controller.session.project.assets[0].asset_id, asset_id)
+            self.assertIn("non-destructively", controller.status.lower())
+
     def test_multi_character_regional_keyframe_requires_explicit_approval(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

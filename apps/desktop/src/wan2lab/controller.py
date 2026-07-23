@@ -19,6 +19,7 @@ from wan2core.backends import BackendCapabilities, WanMode
 from wan2core.backends.mock import MockWanBackend, default_mock_capabilities
 from wan2core.characters import (
     AppearanceProfile,
+    ApprovalState,
     CharacterIdentity,
     CharacterSheet,
     PoseViewEntry,
@@ -45,7 +46,12 @@ from wan2core.keyframes.generation import (
     CharacterSheetImageRequest,
     ComposedKeyframeRequest,
 )
-from wan2core.keyframes.workflows import add_timeline_keyframe, register_pose_view_entry
+from wan2core.keyframes.workflows import (
+    add_timeline_keyframe,
+    register_pose_view_entry,
+    remove_pose_view_entry,
+    update_pose_view_entry,
+)
 from wan2core.mannequin import JointPose, Quaternion
 from wan2core.mannequin.workflows import (
     GuideKind,
@@ -762,6 +768,52 @@ class DesktopController(QObject):
             return
         self._append_event(f"Imported character-sheet entry {entry.name}")
         self._set_status("Character-sheet entry imported as an immutable asset")
+        self.projectChanged.emit()
+
+    @Slot(int, int, str, str)
+    def reviewSheetEntry(  # noqa: N802
+        self,
+        sheet_index: int,
+        entry_index: int,
+        name: str,
+        approval_state: str,
+    ) -> None:
+        try:
+            sheet = self._session.project.character_sheets[sheet_index]
+            entry = sheet.entries[entry_index]
+            self._session.project = update_pose_view_entry(
+                self._session.project,
+                sheet_id=sheet.sheet_id,
+                entry_id=entry.entry_id,
+                name=name.strip() or entry.name,
+                approval_state=ApprovalState(approval_state),
+            )
+        except Exception as error:
+            self._set_status(f"Sheet-entry review failed: {error}")
+            return
+        self._append_event(
+            f"Reviewed {entry.name} as {approval_state}; immutable image preserved"
+        )
+        self._set_status("Character-sheet entry review saved")
+        self.projectChanged.emit()
+
+    @Slot(int, int)
+    def removeSheetEntry(self, sheet_index: int, entry_index: int) -> None:  # noqa: N802
+        try:
+            sheet = self._session.project.character_sheets[sheet_index]
+            entry = sheet.entries[entry_index]
+            self._session.project = remove_pose_view_entry(
+                self._session.project,
+                sheet_id=sheet.sheet_id,
+                entry_id=entry.entry_id,
+            )
+        except Exception as error:
+            self._set_status(f"Sheet-entry removal failed: {error}")
+            return
+        self._append_event(
+            f"Removed {entry.name} from the sheet; immutable asset history was retained"
+        )
+        self._set_status("Sheet entry removed non-destructively")
         self.projectChanged.emit()
 
     @Slot(QUrl, float)
