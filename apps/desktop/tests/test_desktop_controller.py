@@ -34,7 +34,9 @@ class DesktopControllerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             adapter_file = root / "identity.safetensors"
+            reference_image = root / "reference.png"
             adapter_file.write_bytes(b"immutable adapter weights")
+            Image.new("RGB", (256, 256), "blue").save(reference_image)
             controller = DesktopController(asset_base=root / "projects")
             controller.addCharacter("Avery", "avery person", "Travel", "blue jacket")
 
@@ -60,6 +62,25 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(imported.trigger, "avery_token")
             self.assertTrue(controller._asset_store.resolve_ref(asset).is_file())  # noqa: SLF001
             self.assertEqual(len(controller.characterAdapterLabels), 1)
+            controller.importSheetEntryForSheet(
+                0,
+                QUrl.fromLocalFile(str(reference_image)),
+                "front",
+            )
+            controller.addKeyframeRegionWithAdapters(
+                0,
+                0,
+                0,
+                0,
+                640,
+                720,
+                "walking",
+                f"{imported.adapter_id}=0.65",
+            )
+            self.assertEqual(
+                controller._draft_keyframe_regions[0].adapters[0].strength,  # noqa: SLF001
+                0.65,
+            )
 
             controller.importCharacterAdapter(
                 0,

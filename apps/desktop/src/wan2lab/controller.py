@@ -289,13 +289,14 @@ class DesktopController(QObject):
             item.identity_id: item.name for item in self._session.project.characters
         }
         labels = [
-            f"{identity.name} · identity · {adapter.kind.value} · "
+            f"{adapter.adapter_id} · {identity.name} · identity · {adapter.kind.value} · "
             f"{adapter.model_family} · {adapter.default_strength:g}"
             for identity in self._session.project.characters
             for adapter in identity.adapter_refs
         ]
         labels.extend(
-            f"{identities[appearance.identity_id]} / {appearance.name} · appearance · "
+            f"{adapter.adapter_id} · {identities[appearance.identity_id]} / "
+            f"{appearance.name} · appearance · "
             f"{adapter.kind.value} · {adapter.model_family} · {adapter.default_strength:g}"
             for appearance in self._session.project.appearance_profiles
             for adapter in appearance.adapter_refs
@@ -1293,6 +1294,51 @@ class DesktopController(QObject):
         y1: float,
         prompt: str,
     ) -> None:
+        self._add_keyframe_region(
+            sheet_index,
+            entry_index,
+            x0,
+            y0,
+            x1,
+            y1,
+            prompt,
+            "",
+        )
+
+    @Slot(int, int, float, float, float, float, str, str)
+    def addKeyframeRegionWithAdapters(  # noqa: N802
+        self,
+        sheet_index: int,
+        entry_index: int,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        prompt: str,
+        adapter_spec: str,
+    ) -> None:
+        self._add_keyframe_region(
+            sheet_index,
+            entry_index,
+            x0,
+            y0,
+            x1,
+            y1,
+            prompt,
+            adapter_spec,
+        )
+
+    def _add_keyframe_region(
+        self,
+        sheet_index: int,
+        entry_index: int,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        prompt: str,
+        adapter_spec: str,
+    ) -> None:
         if not 0 <= sheet_index < len(self._session.project.character_sheets):
             self._set_status("Select an existing character sheet")
             return
@@ -1306,6 +1352,34 @@ class DesktopController(QObject):
             if rectangle.x1 > settings.width or rectangle.y1 > settings.height:
                 raise ValueError("region rectangle exceeds the project canvas")
             entry = sheet.entries[entry_index]
+            identity = next(
+                item
+                for item in self._session.project.characters
+                if item.identity_id == sheet.identity_id
+            )
+            appearance = next(
+                item
+                for item in self._session.project.appearance_profiles
+                if item.appearance_id == sheet.appearance_id
+            )
+            available_adapters = {
+                item.adapter_id: item
+                for item in (*identity.adapter_refs, *appearance.adapter_refs)
+            }
+            selections = []
+            for raw_selection in adapter_spec.split(","):
+                raw_selection = raw_selection.strip()
+                if not raw_selection:
+                    continue
+                adapter_id, separator, raw_strength = raw_selection.partition("=")
+                adapter_id = adapter_id.strip()
+                adapter = available_adapters.get(adapter_id)
+                if adapter is None:
+                    raise ValueError(f"adapter {adapter_id} is not assigned to this character")
+                if adapter.family is not AdapterFamily.KREA:
+                    raise ValueError(f"adapter {adapter_id} is not compatible with Krea")
+                strength = float(raw_strength.strip()) if separator else adapter.default_strength
+                selections.append(AdapterSelection(adapter_id=adapter_id, strength=strength))
             assignment = CharacterRegionAssignment(
                 region_id=f"keyframe-region-{uuid4().hex}",
                 name=f"{sheet.name} · {entry.name}",
@@ -1314,6 +1388,7 @@ class DesktopController(QObject):
                 appearance_id=sheet.appearance_id,
                 pose_view_entry_id=entry.entry_id,
                 prompt=prompt.strip(),
+                adapters=tuple(selections),
                 priority=len(self._draft_keyframe_regions),
             )
         except Exception as error:

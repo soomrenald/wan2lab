@@ -312,6 +312,11 @@ ApplicationWindow {
                         placeholderText: "Region prompt"
                     }
                 }
+                TextField {
+                    id: regionAdapters
+                    Layout.fillWidth: true
+                    placeholderText: "Krea adapters: adapter-id=0.8, adapter-id=1.0"
+                }
                 RowLayout {
                     SpinBox { id: regionX0; from: 0; to: 4096; value: 0 }
                     SpinBox { id: regionY0; from: 0; to: 4096; value: 0 }
@@ -321,14 +326,15 @@ ApplicationWindow {
                 RowLayout {
                     Button {
                         text: "Add region"
-                        onClicked: studio.addKeyframeRegion(
+                        onClicked: studio.addKeyframeRegionWithAdapters(
                             regionSheet.value,
                             regionEntry.value,
                             regionX0.value,
                             regionY0.value,
                             regionX1.value,
                             regionY1.value,
-                            regionPrompt.text
+                            regionPrompt.text,
+                            regionAdapters.text
                         )
                     }
                     Button { text: "Clear"; onClicked: studio.clearKeyframeRegions() }
