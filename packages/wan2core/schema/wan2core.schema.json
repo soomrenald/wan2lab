@@ -2679,6 +2679,16 @@
             "title": "Model Id",
             "type": "string"
           },
+          "negative_prompt": {
+            "default": "",
+            "title": "Negative Prompt",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
           "prompt": {
             "default": "",
             "title": "Prompt",

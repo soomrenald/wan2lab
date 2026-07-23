@@ -127,6 +127,8 @@ class Segment(DomainModel):
     end_keyframe_id: Identifier | None = None
     mode: WanMode
     prompt: str = ""
+    negative_prompt: str = ""
+    parameters: dict[str, object] = Field(default_factory=dict)
     action_spec_id: Identifier | None = None
     character_identity_ids: tuple[Identifier, ...] = ()
     driving_video_asset_id: Identifier | None = None

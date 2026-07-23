@@ -14,6 +14,7 @@ from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from k2core import __version__ as k2core_version
 from wan2core import __version__ as wan2core_version
 from wan2core.assets import AssetKind, AssetRef
+from wan2core.backends import WanMode
 from wan2core.backends.mock import MockWanBackend, default_mock_capabilities
 from wan2core.characters import (
     AppearanceProfile,
@@ -95,6 +96,7 @@ class DesktopController(QObject):
         self._backend_status = "Local ComfyUI backend not inspected"
         self._backend_models: list[str] = []
         self._backend_parameters: list[str] = []
+        self._backend_parameter_descriptors: list[dict[str, object]] = []
         self._export_runner = ExportProcessRunner(self)
         self._export_runner.progress.connect(self._handle_export_progress)
         self._export_runner.completed.connect(self._complete_export)
@@ -214,6 +216,26 @@ class DesktopController(QObject):
     @Property("QStringList", notify=statusChanged)
     def backendParameters(self) -> list[str]:  # noqa: N802
         return list(self._backend_parameters)
+
+    @Property("QVariantList", notify=statusChanged)
+    def backendParameterDescriptors(self) -> list[dict[str, object]]:  # noqa: N802
+        return list(self._backend_parameter_descriptors)
+
+    @Property("QStringList", notify=projectChanged)
+    def timelineBlocks(self) -> list[str]:  # noqa: N802
+        blocks = [
+            (item.time_ms, f"K {item.time_ms / 1000:g}s · {item.source_type.value}")
+            for item in self._session.project.keyframes
+        ]
+        blocks.extend(
+            (
+                item.start_ms,
+                f"S {item.start_ms / 1000:g}–{item.end_ms / 1000:g}s · "
+                f"{item.mode.value} · {item.state.value}",
+            )
+            for item in self._session.project.segments
+        )
+        return [label for _time, label in sorted(blocks)]
 
     @Slot(float)
     def newProject(self, duration_seconds: float = 18.0) -> None:  # noqa: N802
@@ -616,6 +638,80 @@ class DesktopController(QObject):
         self._set_status("Output FPS updated; generation timing is unchanged")
         self.projectChanged.emit()
 
+    @Slot(int, str, str, str)
+    def updateSegmentInspector(
+        self,
+        segment_index: int,
+        mode: str,
+        prompt: str,
+        negative_prompt: str,
+    ) -> None:  # noqa: N802
+        if not 0 <= segment_index < len(self._session.project.segments):
+            self._set_status("Select an existing planned segment")
+            return
+        try:
+            selected_mode = WanMode(mode)
+            current = self._session.project.segments[segment_index]
+            model = self._capabilities.model(current.model_id)
+            if selected_mode not in model.supported_modes:
+                raise ValueError(f"Mode {selected_mode.value} is not supported by the segment model")
+            segment = current.model_copy(
+                update={
+                    "mode": selected_mode,
+                    "prompt": prompt,
+                    "negative_prompt": negative_prompt,
+                }
+            )
+            segments = tuple(
+                segment if index == segment_index else item
+                for index, item in enumerate(self._session.project.segments)
+            )
+            self._session.project = Wan2LabProject.model_validate(
+                self._session.project.model_copy(update={"segments": segments}).model_dump()
+            )
+        except Exception as error:
+            self._set_status(f"Segment update failed: {error}")
+            return
+        self._append_event(f"Updated segment {segment.segment_id} inspector settings")
+        self._set_status("Segment prompt and mode updated")
+        self.projectChanged.emit()
+
+    @Slot(int, str, str)
+    def setSegmentBackendParameter(
+        self,
+        segment_index: int,
+        key: str,
+        value: str,
+    ) -> None:  # noqa: N802
+        if not 0 <= segment_index < len(self._session.project.segments):
+            self._set_status("Select an existing planned segment")
+            return
+        descriptor = next(
+            (item for item in self._backend_parameter_descriptors if item.get("key") == key),
+            None,
+        )
+        if descriptor is None:
+            self._set_status(f"Unknown backend parameter: {key}")
+            return
+        try:
+            parsed = self._parse_parameter_value(descriptor, value)
+            current = self._session.project.segments[segment_index]
+            segment = current.model_copy(
+                update={"parameters": {**current.parameters, key: parsed}}
+            )
+            segments = tuple(
+                segment if index == segment_index else item
+                for index, item in enumerate(self._session.project.segments)
+            )
+            self._session.project = Wan2LabProject.model_validate(
+                self._session.project.model_copy(update={"segments": segments}).model_dump()
+            )
+        except Exception as error:
+            self._set_status(f"Parameter update failed: {error}")
+            return
+        self._set_status(f"Set {key}={parsed}")
+        self.projectChanged.emit()
+
     @Slot(QUrl)
     def exportApprovedVideo(self, url: QUrl) -> None:  # noqa: N802
         if self._export_runner.running:
@@ -751,6 +847,9 @@ class DesktopController(QObject):
                 for item in parameters
                 if isinstance(item, dict)
             ]
+            self._backend_parameter_descriptors = [
+                dict(item) for item in parameters if isinstance(item, dict)
+            ]
             vendor = ", ".join(event.capabilities.get("accelerator_vendors", ()))
             wrapper = event.capabilities.get("wrapper_version", "unknown")
             self._backend_status = (
@@ -845,6 +944,36 @@ class DesktopController(QObject):
         self._active_export_plan = None
         self._append_event(message)
         self._set_status(message)
+
+    @staticmethod
+    def _parse_parameter_value(descriptor: dict[str, object], value: str) -> object:
+        parameter_type = str(descriptor.get("parameter_type", "string"))
+        if parameter_type == "integer":
+            parsed: object = int(value)
+        elif parameter_type == "number":
+            parsed = float(value)
+        elif parameter_type == "boolean":
+            normalized = value.strip().lower()
+            if normalized not in {"true", "false", "1", "0", "yes", "no"}:
+                raise ValueError("boolean values must be true or false")
+            parsed = normalized in {"true", "1", "yes"}
+        elif parameter_type == "enum":
+            choices = tuple(descriptor.get("choices", ()))
+            match = next((item for item in choices if str(item) == value), None)
+            if match is None:
+                raise ValueError(f"value must be one of: {', '.join(map(str, choices))}")
+            parsed = match
+        else:
+            parsed = value
+
+        if isinstance(parsed, (int, float)) and not isinstance(parsed, bool):
+            minimum = descriptor.get("minimum")
+            maximum = descriptor.get("maximum")
+            if minimum is not None and parsed < float(minimum):
+                raise ValueError(f"value must be at least {minimum}")
+            if maximum is not None and parsed > float(maximum):
+                raise ValueError(f"value must be at most {maximum}")
+        return parsed
 
     def _set_status(self, value: str) -> None:
         self._status = value

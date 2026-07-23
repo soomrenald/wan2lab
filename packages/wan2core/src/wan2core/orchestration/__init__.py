@@ -273,8 +273,10 @@ class WanStudioSession:
             start_image_asset_id=start_asset,
             end_image_asset_id=end_asset,
             prompt=segment.prompt,
+            negative_prompt=segment.negative_prompt,
             action_spec_id=segment.action_spec_id,
             character_identity_ids=segment.character_identity_ids,
+            parameters=segment.parameters,
         )
 
     def _previous_boundary_asset(self, segment: Segment) -> str | None:

@@ -7,7 +7,9 @@ from pathlib import Path
 from PIL import Image
 from PySide6.QtCore import QUrl
 
+from wan2core.backends import ParameterDescriptor, ParameterGroup, ParameterType, WanMode
 from wan2core.segments import SegmentState
+from wan2core.workers import CapabilitiesEvent
 from wan2lab.controller import DesktopController
 
 
@@ -67,6 +69,40 @@ class DesktopControllerTests(unittest.TestCase):
             controller.session.project.segments[0].state,
             SegmentState.READY_FOR_REVIEW,
         )
+
+    def test_segment_inspector_values_flow_into_generation_request(self) -> None:
+        controller = DesktopController()
+        controller.planMockTimeline()
+        controller.updateSegmentInspector(0, "prompt", "camera orbit", "flicker")
+        descriptor = ParameterDescriptor(
+            key="steps",
+            display_name="Steps",
+            parameter_type=ParameterType.INTEGER,
+            default=20,
+            minimum=1,
+            maximum=40,
+            applicable_modes=frozenset({WanMode.PROMPT}),
+            group=ParameterGroup.COMMON,
+            backend_key="steps",
+        )
+        controller._handle_worker_event(  # noqa: SLF001 - exercise the Qt event boundary
+            CapabilitiesEvent(
+                command_id="inspect-test",
+                capabilities={"parameter_descriptors": [descriptor.model_dump(mode="json")]},
+            )
+        )
+        controller.setSegmentBackendParameter(0, "steps", "28")
+        controller.generateNextMockSegment()
+
+        segment = controller.session.project.segments[0]
+        revision = controller.session.project.segment_revisions[0]
+        self.assertEqual(segment.prompt, "camera orbit")
+        self.assertEqual(segment.negative_prompt, "flicker")
+        self.assertEqual(segment.parameters["steps"], 28)
+        self.assertEqual(revision.source_request.prompt, "camera orbit")
+        self.assertEqual(revision.source_request.negative_prompt, "flicker")
+        self.assertEqual(revision.source_request.parameters["steps"], 28)
+        self.assertTrue(any("prompt" in item for item in controller.timelineBlocks))
 
     def test_output_fps_and_project_file_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

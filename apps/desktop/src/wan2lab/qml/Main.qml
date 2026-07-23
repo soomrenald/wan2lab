@@ -230,12 +230,32 @@ ApplicationWindow {
                         radius: 5
                         color: "#10151d"
                         border.color: "#344052"
-                        Label {
-                            anchors.centerIn: parent
-                            text: studio.segmentCount === 0
-                                ? "Plan the exact-time timeline"
-                                : studio.segmentCount + " bounded segment block(s)"
-                            color: "#aeb9cb"
+                        ListView {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            clip: true
+                            spacing: 4
+                            model: studio.timelineBlocks
+                            delegate: Rectangle {
+                                required property string modelData
+                                width: ListView.view.width
+                                height: 28
+                                radius: 4
+                                color: modelData.startsWith("K ") ? "#2e5266" : "#3b315f"
+                                Label {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: modelData
+                                    color: "#e8edf5"
+                                }
+                            }
+                            Label {
+                                anchors.centerIn: parent
+                                visible: parent.count === 0
+                                text: "Plan the exact-time timeline"
+                                color: "#aeb9cb"
+                            }
                         }
                     }
                 }
@@ -249,8 +269,69 @@ ApplicationWindow {
             ColumnLayout {
                 anchors.fill: parent
                 Label { text: "Context Inspector"; font.bold: true }
-                Label { text: "Mode and backend parameters"; color: "#aeb9cb" }
-                Label { text: "Prompt and action controls"; color: "#aeb9cb" }
+                RowLayout {
+                    Label { text: "Segment"; color: "#aeb9cb" }
+                    SpinBox {
+                        id: selectedSegment
+                        from: 0
+                        to: Math.max(0, studio.segmentCount - 1)
+                        enabled: studio.segmentCount > 0
+                    }
+                    ComboBox {
+                        id: segmentMode
+                        Layout.fillWidth: true
+                        model: ["prompt", "i2v", "first_last", "animate", "replace"]
+                    }
+                }
+                TextField {
+                    id: segmentPrompt
+                    Layout.fillWidth: true
+                    placeholderText: "Segment prompt"
+                }
+                TextField {
+                    id: segmentNegativePrompt
+                    Layout.fillWidth: true
+                    placeholderText: "Negative prompt"
+                }
+                Button {
+                    text: "Apply segment settings"
+                    Layout.fillWidth: true
+                    enabled: studio.segmentCount > 0
+                    onClicked: studio.updateSegmentInspector(
+                        selectedSegment.value,
+                        segmentMode.currentText,
+                        segmentPrompt.text,
+                        segmentNegativePrompt.text
+                    )
+                }
+                Label {
+                    text: studio.backendParameterDescriptors.length > 0
+                        ? "Backend parameters"
+                        : "Inspect backend to discover parameters"
+                    color: "#aeb9cb"
+                }
+                Repeater {
+                    model: studio.backendParameterDescriptors
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        Label {
+                            Layout.preferredWidth: 115
+                            elide: Text.ElideRight
+                            text: modelData.display_name
+                            color: "#aeb9cb"
+                        }
+                        TextField {
+                            Layout.fillWidth: true
+                            text: String(modelData.default)
+                            onEditingFinished: studio.setSegmentBackendParameter(
+                                selectedSegment.value,
+                                String(modelData.key),
+                                text
+                            )
+                        }
+                    }
+                }
                 Label { text: "Character assignments"; color: "#aeb9cb" }
                 Label { text: "Review and provenance"; color: "#aeb9cb" }
                 RowLayout {
