@@ -32,6 +32,7 @@ from wan2core.editing.workflows import (
     plan_frame_revision_assembly,
 )
 from wan2core.keyframes import Keyframe, KeyframeSource
+from wan2core.keyframes.generation import CharacterSheetImageRequest
 from wan2core.keyframes.workflows import add_timeline_keyframe, register_pose_view_entry
 from wan2core.mannequin import JointPose, Quaternion
 from wan2core.mannequin.workflows import (
@@ -67,6 +68,7 @@ from wan2core.workers import (
     LoadModelRequest,
     ModelsEvent,
     ProgressEvent,
+    ReleaseWanModelRequest,
     ResultEvent,
     RuntimeStatusEvent,
 )
@@ -74,6 +76,7 @@ from wan2lab.backends.comfyui import BACKEND_ID
 from wan2lab.assets import LocalAssetStore, LocalComfyAssetBridge, image_media_type
 from wan2lab.export_runner import ExportProcessRunner
 from wan2lab.frame_runner import FrameModificationProcessRunner
+from wan2lab.krea_worker_client import KreaWorkerProcess
 from wan2lab.mannequin import render_mannequin_guides
 from wan2lab.worker_client import WanWorkerProcess
 
@@ -90,6 +93,9 @@ class DesktopController(QObject):
         asset_base: Path | None = None,
         comfy_input_root: Path | None = None,
         comfy_output_root: Path | None = None,
+        comfyui_root: Path | None = None,
+        krea_worker_python: Path | None = None,
+        krea_result_root: Path | None = None,
     ) -> None:
         super().__init__(parent)
         self._asset_base = (
@@ -101,10 +107,14 @@ class DesktopController(QObject):
         self._backend = MockWanBackend(self._capabilities)
         self._session = self._new_session(18_000)
         self._asset_store = self._store_for_project(self._session.project.project_id)
+        self._comfyui_root = (comfyui_root or Path("~/ComfyUI")).expanduser().resolve()
         self._comfy_assets = LocalComfyAssetBridge(
-            comfy_input_root or Path("~/ComfyUI/input"),
-            comfy_output_root or Path("~/ComfyUI/output"),
+            comfy_input_root or self._comfyui_root / "input",
+            comfy_output_root or self._comfyui_root / "output",
         )
+        self._krea_result_root = (
+            krea_result_root or Path("~/.cache/wan2lab/krea-results")
+        ).expanduser().resolve()
         self._project_name = "Untitled Wan2Lab Project"
         self._status = "Ready — plan the timeline to begin"
         self._events: list[str] = []
@@ -113,6 +123,13 @@ class DesktopController(QObject):
         self._wan_worker = WanWorkerProcess(self)
         self._wan_worker.eventReceived.connect(self._handle_worker_event)
         self._wan_worker.transportError.connect(self._handle_worker_transport_error)
+        self._krea_worker = KreaWorkerProcess(
+            self,
+            comfyui_root=self._comfyui_root,
+            worker_python=krea_worker_python,
+        )
+        self._krea_worker.eventReceived.connect(self._handle_krea_event)
+        self._krea_worker.transportError.connect(self._handle_krea_transport_error)
         self._backend_status = "Local ComfyUI backend not inspected"
         self._backend_models: list[str] = []
         self._backend_model_descriptors: list[dict[str, object]] = []
@@ -126,6 +143,10 @@ class DesktopController(QObject):
         self._pending_wan_model_id: str | None = None
         self._active_wan_commands: dict[str, str] = {}
         self._active_wan_jobs: dict[str, str] = {}
+        self._krea_status = "Local Krea worker not inspected"
+        self._krea_loaded = False
+        self._krea_load_command_id: str | None = None
+        self._pending_krea_jobs: dict[str, dict[str, object]] = {}
         self._export_runner = ExportProcessRunner(self)
         self._export_runner.progress.connect(self._handle_export_progress)
         self._export_runner.completed.connect(self._complete_export)
@@ -255,6 +276,14 @@ class DesktopController(QObject):
     def backendStatus(self) -> str:  # noqa: N802
         return self._backend_status
 
+    @Property(str, notify=statusChanged)
+    def kreaStatus(self) -> str:  # noqa: N802
+        return self._krea_status
+
+    @Property(bool, notify=statusChanged)
+    def kreaLoaded(self) -> bool:  # noqa: N802
+        return self._krea_loaded
+
     @Property("QStringList", notify=statusChanged)
     def backendModels(self) -> list[str]:  # noqa: N802
         return list(self._backend_models)
@@ -317,6 +346,91 @@ class DesktopController(QObject):
             )
         )
 
+    @Slot()
+    def inspectLocalKreaBackend(self) -> None:  # noqa: N802
+        self._krea_status = "Inspecting isolated Krea runtime…"
+        self._krea_worker.send(
+            "probe",
+            {"comfyui_root": str(self._comfyui_root)},
+        )
+        self.statusChanged.emit()
+
+    @Slot()
+    def loadLocalKreaBackend(self) -> None:  # noqa: N802
+        if self._active_wan_commands:
+            self._set_status("Finish or cancel Wan generation before loading Krea")
+            return
+        if self._selected_wan_model_id is not None:
+            self._wan_worker.send(
+                ReleaseWanModelRequest(
+                    command_id=f"release-for-krea-{uuid4().hex}",
+                    backend_id=BACKEND_ID,
+                    model_id=self._selected_wan_model_id,
+                )
+            )
+            self._selected_wan_model_id = None
+        self._krea_load_command_id = self._krea_worker.send(
+            "load_model",
+            {
+                "comfyui_root": str(self._comfyui_root),
+                "memory_policy": self._session.project.project_settings.memory_policy,
+            },
+        )
+        self._krea_status = "Loading Krea through the accelerator worker…"
+        self._set_status("Switching model residency to Krea")
+
+    @Slot(str, str)
+    def generateCharacterSheetEntry(  # noqa: N802
+        self,
+        entry_name: str,
+        pose_prompt: str,
+    ) -> None:
+        if not self._krea_loaded:
+            self._set_status("Load the local Krea backend before generating a sheet entry")
+            return
+        if not self._session.project.character_sheets:
+            self._set_status("Create a character before generating a sheet entry")
+            return
+        sheet = self._session.project.character_sheets[0]
+        identity = next(
+            item
+            for item in self._session.project.characters
+            if item.identity_id == sheet.identity_id
+        )
+        appearance = next(
+            item
+            for item in self._session.project.appearance_profiles
+            if item.appearance_id == sheet.appearance_id
+        )
+        try:
+            request = CharacterSheetImageRequest(
+                identity_id=identity.identity_id,
+                appearance_id=appearance.appearance_id,
+                entry_name=entry_name.strip() or "generated pose",
+                identity_prompt=identity.identity_prompt,
+                appearance_prompt=appearance.style_prompt,
+                pose_prompt=pose_prompt.strip(),
+                width=self._session.project.project_settings.width,
+                height=self._session.project.project_settings.height,
+                seed=len(sheet.entries) + 1,
+            )
+        except Exception as error:
+            self._set_status(f"Character-sheet generation failed: {error}")
+            return
+        command_id = self._krea_worker.send(
+            "generate_baseline",
+            {"request": request.to_k2_request()},
+        )
+        self._pending_krea_jobs[command_id] = {
+            "operation": "character_sheet_entry",
+            "sheet_id": sheet.sheet_id,
+            "entry_name": request.entry_name,
+            "identity_id": identity.identity_id,
+            "appearance_id": appearance.appearance_id,
+            "request": request.model_dump(mode="json"),
+        }
+        self._set_status("Generating immutable character-sheet entry with Krea…")
+
     @Slot(int, str, str, str, str, str)
     def loadLocalWanModel(  # noqa: N802
         self,
@@ -359,12 +473,16 @@ class DesktopController(QObject):
             return
         self._pending_model_command_id = request.command_id
         self._pending_wan_model_id = model.model_id
+        if self._krea_loaded:
+            self._krea_worker.send("shutdown")
+            self._krea_loaded = False
         self._wan_worker.send(request)
         self._set_status(f"Loading {model.display_name} through the isolated worker…")
 
     @Slot()
     def closeWorker(self) -> None:  # noqa: N802
         self._wan_worker.close()
+        self._krea_worker.close()
         self._export_runner.cancel()
         self._frame_runner.cancel()
 
@@ -1356,6 +1474,97 @@ class DesktopController(QObject):
             self._pending_wan_model_id = None
         self.projectChanged.emit()
         self.statusChanged.emit()
+
+    @Slot(object)
+    def _handle_krea_event(self, event) -> None:
+        if not isinstance(event, dict):
+            self._handle_krea_transport_error("Invalid Krea worker event object")
+            return
+        command_id = str(event.get("command_id", ""))
+        state = str(event.get("state", "error"))
+        message = str(event.get("message", "Krea worker event"))
+        payload = event.get("payload", {})
+        payload = payload if isinstance(payload, dict) else {}
+        self._krea_status = message
+        if state == "ready" and command_id == self._krea_load_command_id:
+            self._krea_loaded = True
+            self._krea_load_command_id = None
+            self._append_event("Krea model loaded in isolated worker")
+            self._set_status("Krea ready for character sheets, keyframes, and frame edits")
+        elif state == "complete" and command_id in self._pending_krea_jobs:
+            self._complete_krea_job(command_id, payload)
+        elif state in {"error", "cancelled"}:
+            self._pending_krea_jobs.pop(command_id, None)
+            if command_id == self._krea_load_command_id:
+                self._krea_load_command_id = None
+                self._krea_loaded = False
+            self._append_event(f"Krea worker: {message}")
+            self._set_status(message)
+        elif state == "running":
+            self._set_status(f"Krea: {message}")
+        else:
+            self._append_event(f"Krea worker: {message}")
+        self.statusChanged.emit()
+
+    def _complete_krea_job(self, command_id: str, payload: dict[str, object]) -> None:
+        context = self._pending_krea_jobs.pop(command_id)
+        try:
+            raw_paths = payload.get("asset_paths", ())
+            if not isinstance(raw_paths, list) or len(raw_paths) != 1:
+                raise ValueError("Krea job must return exactly one image")
+            source = Path(str(raw_paths[0])).expanduser().resolve()
+            if self._krea_result_root not in source.parents or not source.is_file():
+                raise ValueError("Krea worker returned an output outside its result root")
+            record = self._asset_store.register_generated(
+                source,
+                media_type=image_media_type(source),
+                metadata={
+                    "worker_command_id": command_id,
+                    "operation": str(context["operation"]),
+                },
+            )
+            asset = self._wan_asset(record, AssetKind.IMAGE)
+            provenance = ProvenanceRecord(
+                provenance_id=f"provenance-{uuid4().hex}",
+                operation="krea_generate_character_sheet_entry",
+                created_at=datetime.now(UTC),
+                model_identifiers=("krea2",),
+                backend_id="krea-comfyui",
+                parameters={"request": context["request"]},
+                output_asset_ids=(asset.asset_id,),
+                runtime={"worker_payload": payload.get("metadata", {})},
+            )
+            entry = PoseViewEntry(
+                entry_id=f"entry-{uuid4().hex}",
+                name=str(context["entry_name"]),
+                image_asset_id=asset.asset_id,
+                identity_id=str(context["identity_id"]),
+                appearance_id=str(context["appearance_id"]),
+                source_type=PoseViewSource.GENERATED,
+                provenance_id=provenance.provenance_id,
+            )
+            self._session.project = register_pose_view_entry(
+                self._session.project,
+                sheet_id=str(context["sheet_id"]),
+                entry=entry,
+                asset=asset,
+                provenance=provenance,
+            )
+        except Exception as error:
+            self._set_status(f"Krea result registration failed: {error}")
+            return
+        self._append_event(f"Generated character-sheet entry {entry.name} with Krea")
+        self._set_status("Generated entry saved as an immutable draft for review")
+        self.projectChanged.emit()
+
+    @Slot(str)
+    def _handle_krea_transport_error(self, message: str) -> None:
+        self._krea_status = message
+        self._krea_loaded = False
+        self._krea_load_command_id = None
+        self._pending_krea_jobs.clear()
+        self._append_event(message)
+        self._set_status(message)
 
     @Slot(str, int, int)
     def _handle_export_progress(self, stage: str, current: int, total: int) -> None:

@@ -147,6 +147,20 @@ ApplicationWindow {
                     }
                     Button { text: "Import"; onClicked: sheetImageDialog.open() }
                 }
+                RowLayout {
+                    TextField {
+                        id: sheetPosePrompt
+                        Layout.fillWidth: true
+                        placeholderText: "Generated pose / view prompt"
+                    }
+                    Button {
+                        text: "Generate"
+                        onClicked: studio.generateCharacterSheetEntry(
+                            sheetEntryName.text,
+                            sheetPosePrompt.text
+                        )
+                    }
+                }
                 Label { text: studio.sheetEntryNames.join("\n"); color: "#aeb9cb"; wrapMode: Text.Wrap }
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
                 Label { text: "Exact-time keyframe"; font.bold: true }
@@ -173,6 +187,24 @@ ApplicationWindow {
                     text: "Inspect local Wan backend"
                     Layout.fillWidth: true
                     onClicked: studio.inspectLocalWanBackend()
+                }
+                RowLayout {
+                    Button {
+                        text: "Inspect Krea"
+                        Layout.fillWidth: true
+                        onClicked: studio.inspectLocalKreaBackend()
+                    }
+                    Button {
+                        text: studio.kreaLoaded ? "Krea loaded" : "Load Krea"
+                        enabled: !studio.kreaLoaded
+                        onClicked: studio.loadLocalKreaBackend()
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    text: studio.kreaStatus
+                    color: "#8dd7c4"
                 }
                 Label {
                     Layout.fillWidth: true

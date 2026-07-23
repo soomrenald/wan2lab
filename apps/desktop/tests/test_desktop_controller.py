@@ -63,6 +63,45 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertTrue(all(asset.storage_path.startswith("objects/") for asset in project.assets))
             self.assertEqual(len(tuple((root / "projects").rglob("*.png"))), 2)
 
+    def test_krea_worker_result_registers_generated_sheet_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result_root = root / "krea-results"
+            controller = DesktopController(
+                asset_base=root / "projects",
+                krea_result_root=result_root,
+            )
+            controller.addCharacter(
+                "Avery",
+                "stable Avery identity",
+                "Travel",
+                "blue jacket",
+            )
+            controller._krea_loaded = True  # noqa: SLF001
+            controller._krea_worker.send = Mock(return_value="krea-generate")  # type: ignore[method-assign]  # noqa: SLF001
+            controller.generateCharacterSheetEntry("three-quarter", "looking left")
+            result = result_root / "three-quarter.png"
+            result.parent.mkdir(parents=True)
+            Image.new("RGB", (1280, 720), "navy").save(result)
+
+            controller._handle_krea_event(  # noqa: SLF001
+                {
+                    "command_id": "krea-generate",
+                    "state": "complete",
+                    "message": "complete",
+                    "payload": {
+                        "asset_paths": [str(result)],
+                        "metadata": {"seed": 1},
+                    },
+                }
+            )
+
+            entry = controller.session.project.character_sheets[0].entries[0]
+            self.assertEqual(entry.name, "three-quarter")
+            self.assertEqual(entry.source_type.value, "generated")
+            self.assertEqual(len(controller.session.project.assets), 1)
+            self.assertIn("immutable draft", controller.status.lower())
+
     def test_reject_and_regenerate_create_a_new_reviewable_revision(self) -> None:
         controller = DesktopController()
         controller.planMockTimeline()
