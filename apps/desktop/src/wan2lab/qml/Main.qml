@@ -175,6 +175,70 @@ ApplicationWindow {
                         stylePrompt.text
                     )
                 }
+                Label { text: "Detailed identity / appearance"; color: "#aeb9cb" }
+                TextField {
+                    id: stableDescription
+                    Layout.fillWidth: true
+                    placeholderText: "Stable face / body description"
+                }
+                RowLayout {
+                    TextField {
+                        id: identityTrigger
+                        Layout.fillWidth: true
+                        placeholderText: "Identity trigger text"
+                    }
+                    TextField {
+                        id: permanentFeatures
+                        Layout.fillWidth: true
+                        placeholderText: "Permanent features, comma-separated"
+                    }
+                }
+                RowLayout {
+                    TextField {
+                        id: clothingState
+                        Layout.fillWidth: true
+                        placeholderText: "Clothing state"
+                    }
+                    TextField {
+                        id: hairstyleState
+                        Layout.fillWidth: true
+                        placeholderText: "Hairstyle state"
+                    }
+                }
+                TextField {
+                    id: makeupAccessories
+                    Layout.fillWidth: true
+                    placeholderText: "Makeup / accessories"
+                }
+                RowLayout {
+                    TextField {
+                        id: visibleFeatures
+                        Layout.fillWidth: true
+                        placeholderText: "Visible features, comma-separated"
+                    }
+                    TextField {
+                        id: nudityState
+                        Layout.fillWidth: true
+                        placeholderText: "Nudity state (optional)"
+                    }
+                }
+                Button {
+                    text: "Update selected profile"
+                    Layout.fillWidth: true
+                    onClicked: studio.updateCharacterProfile(
+                        sheetEntrySheet.value,
+                        identityPrompt.text,
+                        stableDescription.text,
+                        identityTrigger.text,
+                        permanentFeatures.text,
+                        stylePrompt.text,
+                        clothingState.text,
+                        hairstyleState.text,
+                        makeupAccessories.text,
+                        visibleFeatures.text,
+                        nudityState.text
+                    )
+                }
                 Label { text: studio.characterNames.join(" · "); color: "#8dd7c4"; wrapMode: Text.Wrap }
                 Label { text: "Identity / appearance adapters"; color: "#aeb9cb" }
                 RowLayout {

@@ -1101,6 +1101,75 @@ class DesktopController(QObject):
         self._set_status("Character sheet ready for imported or generated entries")
         self.projectChanged.emit()
 
+    @Slot(int, str, str, str, str, str, str, str, str, str, str)
+    def updateCharacterProfile(  # noqa: N802
+        self,
+        sheet_index: int,
+        identity_prompt: str,
+        stable_description: str,
+        trigger_text: str,
+        permanent_features: str,
+        style_prompt: str,
+        clothing_state: str,
+        hairstyle_state: str,
+        makeup_accessory_state: str,
+        visible_features: str,
+        nudity_state: str,
+    ) -> None:
+        try:
+            sheet = self._session.project.character_sheets[sheet_index]
+            normalized_identity_prompt = identity_prompt.strip()
+            if not normalized_identity_prompt:
+                raise ValueError("stable identity prompt is required")
+            features = tuple(
+                item.strip() for item in permanent_features.split(",") if item.strip()
+            )
+            visible = tuple(
+                item.strip() for item in visible_features.split(",") if item.strip()
+            )
+            characters = tuple(
+                item.model_copy(
+                    update={
+                        "identity_prompt": normalized_identity_prompt,
+                        "stable_description": stable_description.strip(),
+                        "trigger_text": trigger_text.strip(),
+                        "permanent_features": features,
+                    }
+                )
+                if item.identity_id == sheet.identity_id
+                else item
+                for item in self._session.project.characters
+            )
+            appearances = tuple(
+                item.model_copy(
+                    update={
+                        "style_prompt": style_prompt.strip(),
+                        "clothing_state": clothing_state.strip(),
+                        "hairstyle_state": hairstyle_state.strip(),
+                        "makeup_accessory_state": makeup_accessory_state.strip(),
+                        "visible_features": visible,
+                        "nudity_state": nudity_state.strip() or None,
+                    }
+                )
+                if item.appearance_id == sheet.appearance_id
+                else item
+                for item in self._session.project.appearance_profiles
+            )
+            self._session.project = Wan2LabProject.model_validate(
+                self._session.project.model_copy(
+                    update={
+                        "characters": characters,
+                        "appearance_profiles": appearances,
+                    }
+                ).model_dump()
+            )
+        except Exception as error:
+            self._set_status(f"Character profile update failed: {error}")
+            return
+        self._append_event(f"Updated identity and appearance metadata for {sheet.name}")
+        self._set_status("Character identity and appearance profile updated")
+        self.projectChanged.emit()
+
     @Slot(int, str, QUrl, str, str, str, str, float)
     def importCharacterAdapter(  # noqa: N802
         self,

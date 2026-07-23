@@ -31,6 +31,34 @@ from wan2lab.controller import DesktopController
 
 
 class DesktopControllerTests(unittest.TestCase):
+    def test_detailed_identity_and_appearance_metadata_remain_separate(self) -> None:
+        controller = DesktopController()
+        controller.addCharacter("Avery", "Avery identity", "Travel", "blue jacket")
+
+        controller.updateCharacterProfile(
+            0,
+            "same stable person",
+            "oval face and medium brown hair",
+            "avery_token",
+            "arm tattoo, small scar",
+            "formal evening look",
+            "black suit",
+            "hair tied back",
+            "silver earrings",
+            "arm tattoo",
+            "clothed",
+        )
+
+        identity = controller.session.project.characters[0]
+        appearance = controller.session.project.appearance_profiles[0]
+        self.assertEqual(identity.identity_prompt, "same stable person")
+        self.assertEqual(identity.permanent_features, ("arm tattoo", "small scar"))
+        self.assertEqual(identity.trigger_text, "avery_token")
+        self.assertEqual(appearance.clothing_state, "black suit")
+        self.assertEqual(appearance.hairstyle_state, "hair tied back")
+        self.assertEqual(appearance.nudity_state, "clothed")
+        self.assertNotIn("black suit", identity.stable_description)
+
     def test_runtime_diagnostics_and_explicit_release_use_typed_worker_commands(self) -> None:
         controller = DesktopController()
         controller._wan_worker.send = Mock()  # type: ignore[method-assign]  # noqa: SLF001
