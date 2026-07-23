@@ -1723,6 +1723,17 @@
             "title": "Name",
             "type": "string"
           },
+          "skeleton": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SkeletonDefinition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "skeleton_id": {
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
@@ -1757,6 +1768,50 @@
           "skeleton_id"
         ],
         "title": "MannequinInstance",
+        "type": "object"
+      },
+      "MannequinPose": {
+        "additionalProperties": false,
+        "properties": {
+          "body_proportions": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Body Proportions",
+            "type": "object"
+          },
+          "joints": {
+            "items": {
+              "$ref": "#/$defs/JointPose"
+            },
+            "title": "Joints",
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pose_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Pose Id",
+            "type": "string"
+          },
+          "skeleton_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Skeleton Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pose_id",
+          "name",
+          "skeleton_id",
+          "joints"
+        ],
+        "title": "MannequinPose",
         "type": "object"
       },
       "MannequinScene": {
@@ -1797,6 +1852,11 @@
             "default": null,
             "title": "Imported Asset Id"
           },
+          "imported_source_metadata": {
+            "additionalProperties": true,
+            "title": "Imported Source Metadata",
+            "type": "object"
+          },
           "instances": {
             "items": {
               "$ref": "#/$defs/MannequinInstance"
@@ -1825,6 +1885,14 @@
               "type": "string"
             },
             "title": "Prop Asset Ids",
+            "type": "array"
+          },
+          "props": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/SceneProp"
+            },
+            "title": "Props",
             "type": "array"
           },
           "scene_id": {
@@ -2312,6 +2380,63 @@
           "kind"
         ],
         "title": "SceneLight",
+        "type": "object"
+      },
+      "SceneProp": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Asset Id"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "prop_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Prop Id",
+            "type": "string"
+          },
+          "transform": {
+            "$ref": "#/$defs/Transform",
+            "default": {
+              "rotation": {
+                "w": 1.0,
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "scale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+              },
+              "translation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+              }
+            }
+          }
+        },
+        "required": [
+          "prop_id",
+          "name"
+        ],
+        "title": "SceneProp",
         "type": "object"
       },
       "Segment": {
@@ -2908,6 +3033,65 @@
         "title": "SegmentState",
         "type": "string"
       },
+      "SkeletonDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "joints": {
+            "items": {
+              "$ref": "#/$defs/SkeletonJoint"
+            },
+            "title": "Joints",
+            "type": "array"
+          },
+          "skeleton_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Skeleton Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "skeleton_id",
+          "joints"
+        ],
+        "title": "SkeletonDefinition",
+        "type": "object"
+      },
+      "SkeletonJoint": {
+        "additionalProperties": false,
+        "properties": {
+          "joint_name": {
+            "minLength": 1,
+            "title": "Joint Name",
+            "type": "string"
+          },
+          "parent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parent Name"
+          },
+          "rest_offset": {
+            "$ref": "#/$defs/Vector3",
+            "default": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 0.0
+            }
+          }
+        },
+        "required": [
+          "joint_name"
+        ],
+        "title": "SkeletonJoint",
+        "type": "object"
+      },
       "Timeline": {
         "additionalProperties": false,
         "properties": {
@@ -3087,6 +3271,14 @@
           "$ref": "#/$defs/Keyframe"
         },
         "title": "Keyframes",
+        "type": "array"
+      },
+      "mannequin_poses": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/MannequinPose"
+        },
+        "title": "Mannequin Poses",
         "type": "array"
       },
       "mannequin_scenes": {

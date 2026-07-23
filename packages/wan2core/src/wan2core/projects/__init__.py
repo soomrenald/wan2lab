@@ -13,7 +13,7 @@ from wan2core.characters import AppearanceProfile, CharacterIdentity, CharacterS
 from wan2core.editing import FrameEditRecord
 from wan2core.export import ExportPlan
 from wan2core.keyframes import Keyframe
-from wan2core.mannequin import MannequinScene
+from wan2core.mannequin import MannequinPose, MannequinScene
 from wan2core.provenance import ProvenanceRecord
 from wan2core.segments import ContinuationPolicy, Segment, SegmentRevision
 from wan2core.timeline import Timeline
@@ -46,6 +46,7 @@ class Wan2LabProject(DomainModel):
     appearance_profiles: tuple[AppearanceProfile, ...] = ()
     character_sheets: tuple[CharacterSheet, ...] = ()
     mannequin_scenes: tuple[MannequinScene, ...] = ()
+    mannequin_poses: tuple[MannequinPose, ...] = ()
     keyframes: tuple[Keyframe, ...] = ()
     actions: tuple[ActionSpec, ...] = ()
     timeline: Timeline
@@ -65,6 +66,7 @@ class Wan2LabProject(DomainModel):
             "appearance IDs": [item.appearance_id for item in self.appearance_profiles],
             "sheet IDs": [item.sheet_id for item in self.character_sheets],
             "mannequin scene IDs": [item.scene_id for item in self.mannequin_scenes],
+            "mannequin pose IDs": [item.pose_id for item in self.mannequin_poses],
             "keyframe IDs": [item.keyframe_id for item in self.keyframes],
             "action IDs": [item.action_id for item in self.actions],
             "segment IDs": [item.segment_id for item in self.segments],
@@ -104,6 +106,16 @@ class Wan2LabProject(DomainModel):
         for identity in self.characters:
             if set(identity.character_sheet_ids) - sheet_ids:
                 raise ValueError("character identity references a missing character sheet")
+        for scene in self.mannequin_scenes:
+            referenced_assets = {
+                *scene.prop_asset_ids,
+                *scene.guide_asset_ids,
+                *(item.asset_id for item in scene.props if item.asset_id is not None),
+            }
+            if scene.imported_asset_id is not None:
+                referenced_assets.add(scene.imported_asset_id)
+            if referenced_assets - asset_ids:
+                raise ValueError("mannequin scene references a missing asset")
         for keyframe in self.keyframes:
             if keyframe.image_asset_id not in asset_ids:
                 raise ValueError("keyframe references a missing image asset")

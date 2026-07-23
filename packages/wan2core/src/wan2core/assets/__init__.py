@@ -38,11 +38,15 @@ class AssetRef(DomainModel):
             raise ValueError("asset storage_path must be project-relative or an adapter key")
         if ".." in self.storage_path.replace("\\", "/").split("/"):
             raise ValueError("asset storage_path must not escape its storage adapter")
-        if self.kind in {AssetKind.IMAGE, AssetKind.MASK, AssetKind.DEPTH}:
+        if self.kind in {
+            AssetKind.IMAGE,
+            AssetKind.MASK,
+            AssetKind.DEPTH,
+            AssetKind.MANNEQUIN_GUIDE,
+        }:
             if self.width is None or self.height is None:
                 raise ValueError("image-like assets require width and height")
         return self
 
 
 __all__ = ["AssetKind", "AssetRef"]
-
