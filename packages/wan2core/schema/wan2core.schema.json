@@ -2071,6 +2071,124 @@
         "title": "MannequinSource",
         "type": "string"
       },
+      "PlannedSegment": {
+        "additionalProperties": false,
+        "properties": {
+          "actual_duration_ms": {
+            "exclusiveMinimum": 0,
+            "title": "Actual Duration Ms",
+            "type": "integer"
+          },
+          "backend_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Backend Id",
+            "type": "string"
+          },
+          "continuation_policy": {
+            "$ref": "#/$defs/ContinuationPolicy"
+          },
+          "end_anchor_is_review_target": {
+            "default": false,
+            "title": "End Anchor Is Review Target",
+            "type": "boolean"
+          },
+          "end_keyframe_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End Keyframe Id"
+          },
+          "end_ms": {
+            "minimum": 0,
+            "title": "End Ms",
+            "type": "integer"
+          },
+          "frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Frame Count",
+            "type": "integer"
+          },
+          "generation_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Generation Fps",
+            "type": "number"
+          },
+          "mode": {
+            "$ref": "#/$defs/WanMode"
+          },
+          "model_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "output_fps": {
+            "exclusiveMinimum": 0.0,
+            "title": "Output Fps",
+            "type": "number"
+          },
+          "requested_duration_ms": {
+            "exclusiveMinimum": 0,
+            "title": "Requested Duration Ms",
+            "type": "integer"
+          },
+          "review_required": {
+            "default": true,
+            "title": "Review Required",
+            "type": "boolean"
+          },
+          "segment_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "start_keyframe_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Start Keyframe Id"
+          },
+          "start_ms": {
+            "minimum": 0,
+            "title": "Start Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "segment_id",
+          "start_ms",
+          "end_ms",
+          "requested_duration_ms",
+          "actual_duration_ms",
+          "mode",
+          "backend_id",
+          "model_id",
+          "generation_fps",
+          "frame_count",
+          "output_fps",
+          "continuation_policy"
+        ],
+        "title": "PlannedSegment",
+        "type": "object"
+      },
       "PoseViewEntry": {
         "additionalProperties": false,
         "properties": {
@@ -2805,6 +2923,51 @@
         "title": "SegmentExportInput",
         "type": "object"
       },
+      "SegmentPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "backend_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Backend Id",
+            "type": "string"
+          },
+          "model_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/$defs/PlannedSegment"
+            },
+            "title": "Segments",
+            "type": "array"
+          },
+          "timeline_duration_ms": {
+            "exclusiveMinimum": 0,
+            "title": "Timeline Duration Ms",
+            "type": "integer"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "timeline_duration_ms",
+          "backend_id",
+          "model_id",
+          "segments"
+        ],
+        "title": "SegmentPlan",
+        "type": "object"
+      },
       "SegmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3481,6 +3644,17 @@
         "default": 1,
         "title": "Schema Version",
         "type": "integer"
+      },
+      "segment_plan": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SegmentPlan"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
       },
       "segment_revisions": {
         "default": [],

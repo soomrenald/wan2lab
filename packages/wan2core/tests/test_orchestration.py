@@ -5,7 +5,12 @@ import unittest
 from wan2core.backends import WanMode
 from wan2core.backends.mock import MockWanBackend, default_mock_capabilities
 from wan2core.orchestration import ReviewGateBlocked, WanStudioSession
-from wan2core.projects import ProjectSettings, Wan2LabProject
+from wan2core.projects import (
+    ProjectSettings,
+    Wan2LabProject,
+    load_project_document,
+    project_document,
+)
 from wan2core.assets import AssetKind, AssetRef
 from wan2core.segments import RevisionReviewState, SegmentState
 from wan2core.timeline import Timeline
@@ -13,6 +18,24 @@ from wan2core.workers import WorkerResult
 
 
 class OrchestrationTests(unittest.TestCase):
+    def test_persisted_segment_plan_resumes_generation_after_reload(self) -> None:
+        project = Wan2LabProject(
+            project_id="project-resume",
+            project_settings=ProjectSettings(
+                default_wan_backend_id="mock-wan",
+                default_wan_model_id="wan-test",
+            ),
+            timeline=Timeline(duration_ms=5_000, output_fps=24.0),
+        )
+        session = WanStudioSession(project)
+        session.plan(default_mock_capabilities(), model_id="wan-test")
+        reloaded = WanStudioSession(load_project_document(project_document(session.project)))
+
+        job_id, revision = reloaded.queue_next_generation(seed=3)
+
+        self.assertEqual(job_id, "segment-1-job-1")
+        self.assertEqual(revision.source_request.frame_count, 81)
+
     def test_external_worker_lifecycle_registers_assets_and_failure_state(self) -> None:
         project = Wan2LabProject(
             project_id="project-worker",

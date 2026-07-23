@@ -33,7 +33,7 @@ class WanStudioSession:
 
     def __init__(self, project: Wan2LabProject) -> None:
         self.project = project
-        self.segment_plan: SegmentPlan | None = None
+        self.segment_plan: SegmentPlan | None = project.segment_plan
 
     def plan(self, capabilities: BackendCapabilities, *, model_id: str) -> SegmentPlan:
         plan = plan_segments(
@@ -63,7 +63,12 @@ class WanStudioSession:
         )
         self.project = self._validated(
             self.project.model_copy(
-                update={"segments": segments, "segment_revisions": (), "timeline": timeline}
+                update={
+                    "segments": segments,
+                    "segment_plan": plan,
+                    "segment_revisions": (),
+                    "timeline": timeline,
+                }
             )
         )
         self.segment_plan = plan

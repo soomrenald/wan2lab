@@ -18,7 +18,7 @@ from wan2core.keyframes import Keyframe
 from wan2core.mannequin import MannequinPose, MannequinScene
 from wan2core.provenance import ProvenanceRecord
 from wan2core.segments import ContinuationPolicy, Segment, SegmentRevision
-from wan2core.timeline import Timeline
+from wan2core.timeline import SegmentPlan, Timeline
 
 
 PROJECT_SCHEMA_VERSION = 1
@@ -60,6 +60,7 @@ class Wan2LabProject(DomainModel):
     keyframes: tuple[Keyframe, ...] = ()
     actions: tuple[ActionSpec, ...] = ()
     timeline: Timeline
+    segment_plan: SegmentPlan | None = None
     segments: tuple[Segment, ...] = ()
     segment_revisions: tuple[SegmentRevision, ...] = ()
     generation_records: tuple[ProvenanceRecord, ...] = ()
@@ -147,6 +148,13 @@ class Wan2LabProject(DomainModel):
             raise ValueError("timeline references missing keyframes")
         if set(self.timeline.segment_ids) - segment_ids:
             raise ValueError("timeline references missing segments")
+        if self.segment_plan is not None:
+            if self.segment_plan.timeline_duration_ms != self.timeline.duration_ms:
+                raise ValueError("segment plan duration differs from the timeline")
+            if tuple(item.segment_id for item in self.segment_plan.segments) != tuple(
+                item.segment_id for item in self.segments
+            ):
+                raise ValueError("persisted segment plan differs from project segments")
         for segment in self.segments:
             if segment.start_keyframe_id and segment.start_keyframe_id not in keyframe_ids:
                 raise ValueError("segment references a missing start keyframe")
