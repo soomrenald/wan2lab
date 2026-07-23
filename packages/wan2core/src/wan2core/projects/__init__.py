@@ -93,6 +93,17 @@ class Wan2LabProject(DomainModel):
                 raise ValueError("character sheet references missing identity or appearance")
             if appearance.identity_id != sheet.identity_id:
                 raise ValueError("character sheet appearance belongs to another identity")
+            for entry in sheet.entries:
+                if entry.image_asset_id not in asset_ids:
+                    raise ValueError("character-sheet entry references a missing image asset")
+                if entry.mask_asset_id is not None and entry.mask_asset_id not in asset_ids:
+                    raise ValueError("character-sheet entry references a missing mask asset")
+                if entry.provenance_id not in provenance_ids:
+                    raise ValueError("character-sheet entry references missing provenance")
+        sheet_ids = set(collections["sheet IDs"])
+        for identity in self.characters:
+            if set(identity.character_sheet_ids) - sheet_ids:
+                raise ValueError("character identity references a missing character sheet")
         for keyframe in self.keyframes:
             if keyframe.image_asset_id not in asset_ids:
                 raise ValueError("keyframe references a missing image asset")

@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from wan2core.assets import AssetKind, AssetRef
-from wan2core.characters import CharacterSheet, PoseViewEntry
+from wan2core.characters import (
+    AppearanceProfile,
+    ApprovalState,
+    CharacterSheet,
+    PoseViewEntry,
+    StyleDuplicationEntry,
+    duplicate_sheet_style,
+)
 from wan2core.keyframes import Keyframe
 from wan2core.projects import Wan2LabProject
 from wan2core.provenance import ProvenanceRecord
@@ -38,6 +45,126 @@ def register_pose_view_entry(
                 project.generation_records, provenance
             ),
             "character_sheets": tuple(sheets),
+        }
+    )
+    return Wan2LabProject.model_validate(updated.model_dump())
+
+
+def update_pose_view_entry(
+    project: Wan2LabProject,
+    *,
+    sheet_id: str,
+    entry_id: str,
+    name: str | None = None,
+    approval_state: ApprovalState | None = None,
+) -> Wan2LabProject:
+    """Rename or review one entry without modifying its immutable image asset."""
+
+    sheets: list[CharacterSheet] = []
+    found = False
+    for sheet in project.character_sheets:
+        if sheet.sheet_id != sheet_id:
+            sheets.append(sheet)
+            continue
+        entries: list[PoseViewEntry] = []
+        for entry in sheet.entries:
+            if entry.entry_id != entry_id:
+                entries.append(entry)
+                continue
+            found = True
+            changes: dict[str, object] = {}
+            if name is not None:
+                stripped = name.strip()
+                if not stripped:
+                    raise ValueError("pose/view entry name cannot be empty")
+                changes["name"] = stripped
+            if approval_state is not None:
+                changes["approval_state"] = approval_state
+            entries.append(entry.model_copy(update=changes))
+        sheets.append(sheet.model_copy(update={"entries": tuple(entries)}))
+    if not found:
+        raise KeyError(entry_id)
+    updated = project.model_copy(update={"character_sheets": tuple(sheets)})
+    return Wan2LabProject.model_validate(updated.model_dump())
+
+
+def remove_pose_view_entry(
+    project: Wan2LabProject,
+    *,
+    sheet_id: str,
+    entry_id: str,
+) -> Wan2LabProject:
+    """Remove a library reference while preserving its immutable asset/provenance."""
+
+    sheets: list[CharacterSheet] = []
+    found = False
+    for sheet in project.character_sheets:
+        if sheet.sheet_id != sheet_id:
+            sheets.append(sheet)
+            continue
+        entries = tuple(entry for entry in sheet.entries if entry.entry_id != entry_id)
+        found = len(entries) != len(sheet.entries)
+        sheets.append(sheet.model_copy(update={"entries": entries}))
+    if not found:
+        raise KeyError(entry_id)
+    updated = project.model_copy(update={"character_sheets": tuple(sheets)})
+    return Wan2LabProject.model_validate(updated.model_dump())
+
+
+def register_style_duplication(
+    project: Wan2LabProject,
+    *,
+    source_sheet_id: str,
+    target_profile: AppearanceProfile,
+    target_sheet_id: str,
+    target_name: str,
+    replacements: tuple[StyleDuplicationEntry, ...],
+    assets: tuple[AssetRef, ...],
+    provenance: tuple[ProvenanceRecord, ...],
+) -> Wan2LabProject:
+    """Commit completed Krea restyles as a new sheet; never mutate the source."""
+
+    source = next(
+        (sheet for sheet in project.character_sheets if sheet.sheet_id == source_sheet_id),
+        None,
+    )
+    if source is None:
+        raise KeyError(source_sheet_id)
+    if target_profile.identity_id != source.identity_id:
+        raise ValueError("restyled appearance must belong to the source identity")
+    replacement_assets = {item.target_asset_id for item in replacements}
+    supplied_assets = {item.asset_id for item in assets}
+    if replacement_assets != supplied_assets:
+        raise ValueError("restyle replacements and output assets do not match")
+    replacement_provenance = {item.provenance_id for item in replacements}
+    supplied_provenance = {item.provenance_id for item in provenance}
+    if replacement_provenance != supplied_provenance:
+        raise ValueError("restyle replacements and provenance do not match")
+    if any(asset.kind is not AssetKind.IMAGE for asset in assets):
+        raise ValueError("restyled character-sheet outputs must be images")
+
+    target = duplicate_sheet_style(
+        source,
+        target_sheet_id=target_sheet_id,
+        target_name=target_name,
+        target_appearance_id=target_profile.appearance_id,
+        replacements=replacements,
+    )
+    identities = tuple(
+        identity.model_copy(
+            update={"character_sheet_ids": (*identity.character_sheet_ids, target.sheet_id)}
+        )
+        if identity.identity_id == source.identity_id
+        else identity
+        for identity in project.characters
+    )
+    updated = project.model_copy(
+        update={
+            "assets": (*project.assets, *assets),
+            "appearance_profiles": (*project.appearance_profiles, target_profile),
+            "character_sheets": (*project.character_sheets, target),
+            "characters": identities,
+            "generation_records": (*project.generation_records, *provenance),
         }
     )
     return Wan2LabProject.model_validate(updated.model_dump())
@@ -92,5 +219,10 @@ def _append_provenance(
     return (*existing, item)
 
 
-__all__ = ["add_timeline_keyframe", "register_pose_view_entry"]
-
+__all__ = [
+    "add_timeline_keyframe",
+    "register_pose_view_entry",
+    "register_style_duplication",
+    "remove_pose_view_entry",
+    "update_pose_view_entry",
+]

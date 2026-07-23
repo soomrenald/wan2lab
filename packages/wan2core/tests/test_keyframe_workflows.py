@@ -81,6 +81,20 @@ def character_data(index: int, x0: int):
         source_type=PoseViewSource.IMPORTED,
         provenance_id=f"pose-prov-{index}",
     )
+    asset = AssetRef(
+        asset_id=f"pose-image-{index}",
+        kind=AssetKind.IMAGE,
+        storage_path=f"assets/pose-{index}.png",
+        sha256=str(index) * 64,
+        width=512,
+        height=512,
+    )
+    provenance = ProvenanceRecord(
+        provenance_id=f"pose-prov-{index}",
+        operation="import_pose",
+        created_at=datetime(2026, 7, 22, tzinfo=UTC),
+        output_asset_ids=(asset.asset_id,),
+    )
     sheet = CharacterSheet(
         sheet_id=f"sheet-{index}",
         name=f"Sheet {index}",
@@ -102,7 +116,7 @@ def character_data(index: int, x0: int):
         ),
         priority=10 - index,
     )
-    return identity, appearance, sheet, assignment
+    return identity, appearance, sheet, assignment, asset, provenance
 
 
 def composition_project() -> tuple[Wan2LabProject, tuple[CharacterRegionAssignment, ...]]:
@@ -119,6 +133,8 @@ def composition_project() -> tuple[Wan2LabProject, tuple[CharacterRegionAssignme
         characters=(first[0], second[0]),
         appearance_profiles=(first[1], second[1]),
         character_sheets=(first[2], second[2]),
+        assets=(first[4], second[4]),
+        generation_records=(first[5], second[5]),
         timeline=Timeline(duration_ms=18_000, output_fps=24),
     )
     return project, (first[3], second[3])
@@ -212,4 +228,3 @@ class KeyframeWorkflowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
