@@ -12,6 +12,7 @@ from pydantic import Field, field_validator, model_validator
 
 from wan2core.actions import ActionSpec
 from wan2core.assets import AssetKind, AssetRef
+from wan2core.backends import WanAccelerationPolicy
 from wan2core.base import DomainModel, Identifier, require_unique
 from wan2core.characters import AppearanceProfile, CharacterIdentity, CharacterSheet
 from wan2core.editing import FrameEditRecord
@@ -108,6 +109,9 @@ class ProjectSettings(DomainModel):
     default_krea_backend_id: Identifier = "krea-comfyui"
     default_krea_model_id: Identifier = "krea2"
     memory_policy: str = "safe_16gb"
+    wan_acceleration: WanAccelerationPolicy = Field(
+        default_factory=WanAccelerationPolicy
+    )
     default_continuation_policy: ContinuationPolicy = ContinuationPolicy.AUTHORED_ANCHOR
     ffmpeg_executable: str = "ffmpeg"
     asset_root: str = "assets"

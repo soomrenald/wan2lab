@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Callable
 
 from wan2core.assets import AssetKind, AssetRef
-from wan2core.backends import BackendCapabilities
+from wan2core.backends import BackendCapabilities, resolve_wan_acceleration
 from wan2core.backends.mock import CancellationToken, MockWanBackend
 from wan2core.projects import Wan2LabProject
 from wan2core.provenance import ProvenanceRecord
@@ -436,12 +436,30 @@ class WanStudioSession:
         parent_revision_id: str | None = None,
     ) -> SegmentRevision:
         request = self._request_for(segment, planned)
+        model = backend.capabilities().model(request.model_id)
+        acceleration = resolve_wan_acceleration(
+            project_policy=self.project.project_settings.wan_acceleration,
+            segment_policy=request.acceleration,
+            methods=model.acceleration_methods,
+            model_id=model.model_id,
+            model_family=model.model_family,
+            mode=request.mode,
+            accelerator_vendor="cpu",
+            installed_artifact_ids=frozenset(
+                artifact_id
+                for method in model.acceleration_methods
+                for artifact_id in method.required_artifact_ids
+            ),
+        )
         segment, revision = queue_revision(
             segment,
             revision_id=f"{segment.segment_id}-revision-{len(segment.revision_ids) + 1}",
             request=request,
             seed=seed,
             parent_revision_id=parent_revision_id,
+        )
+        revision = revision.model_copy(
+            update={"resolved_acceleration": acceleration}
         )
         segment, revision = start_generation(segment, revision)
         self._replace_segment_and_revision(segment, revision)
@@ -486,6 +504,7 @@ class WanStudioSession:
                     else None
                 ),
                 "character_identity_ids": request.character_identity_ids,
+                "wan_acceleration": acceleration.model_dump(mode="json"),
             },
             prompts={
                 "prompt": request.prompt,
@@ -596,6 +615,7 @@ class WanStudioSession:
             action_spec_id=segment.action_spec_id,
             action_spec=action,
             character_identity_ids=segment.character_identity_ids,
+            acceleration=segment.acceleration,
             parameters=segment.parameters,
         )
         self._validate_request_assets(request)

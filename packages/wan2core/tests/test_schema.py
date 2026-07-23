@@ -15,6 +15,8 @@ class SchemaTests(unittest.TestCase):
             {
                 "project",
                 "backend_capabilities",
+                "gpu_recommendation_catalog",
+                "gpu_selection_request",
                 "segment_request",
                 "worker_request",
                 "worker_event",

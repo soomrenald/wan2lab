@@ -14,6 +14,9 @@ from wan2core.backends import (
     ModelVariantCapabilities,
     MultiplePlusOffsetFrameCount,
     Resolution,
+    WanAccelerationKind,
+    WanAccelerationMethodCapabilities,
+    WanAccelerationQuality,
     WanMode,
 )
 from wan2core.segments import SegmentRequest
@@ -41,6 +44,7 @@ def default_mock_capabilities() -> BackendCapabilities:
             ModelVariantCapabilities(
                 model_id="wan-test",
                 display_name="Deterministic mock Wan",
+                model_family="wan-test",
                 supported_modes=modes,
                 required_inputs_by_mode={
                     WanMode.PROMPT: (),
@@ -73,6 +77,19 @@ def default_mock_capabilities() -> BackendCapabilities:
                     AdapterCompatibility(
                         mode=WanMode.REPLACE,
                         maximum_reference_characters=1,
+                    ),
+                ),
+                acceleration_methods=(
+                    WanAccelerationMethodCapabilities(
+                        method_id="mock-cache",
+                        display_name="Deterministic mock cache",
+                        kind=WanAccelerationKind.CACHE,
+                        supported_modes=modes,
+                        supported_model_families=("wan-test",),
+                        supported_quality_profiles=frozenset(WanAccelerationQuality),
+                        rank=100,
+                        schedule_description="Deterministic mock schedule",
+                        speed_summary="Exercises the acceleration contract without a GPU.",
                     ),
                 ),
             ),

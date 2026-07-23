@@ -90,6 +90,14 @@
       "ModelVariantCapabilities": {
         "additionalProperties": false,
         "properties": {
+          "acceleration_methods": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/WanAccelerationMethodCapabilities"
+            },
+            "title": "Acceleration Methods",
+            "type": "array"
+          },
           "adapter_compatibility": {
             "default": [],
             "items": {
@@ -158,6 +166,11 @@
             "exclusiveMinimum": 0,
             "title": "Min Frame Count",
             "type": "integer"
+          },
+          "model_family": {
+            "default": "",
+            "title": "Model Family",
+            "type": "string"
           },
           "model_id": {
             "minLength": 1,
@@ -422,6 +435,159 @@
         "title": "Resolution",
         "type": "object"
       },
+      "WanAccelerationKind": {
+        "enum": [
+          "lightx2v",
+          "fastvideo",
+          "lightning",
+          "cache"
+        ],
+        "title": "WanAccelerationKind",
+        "type": "string"
+      },
+      "WanAccelerationMethodCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "accelerator_vendors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Accelerator Vendors",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "default_parameters": {
+            "additionalProperties": true,
+            "title": "Default Parameters",
+            "type": "object"
+          },
+          "deterministic": {
+            "default": true,
+            "title": "Deterministic",
+            "type": "boolean"
+          },
+          "display_name": {
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "incompatible_adapter_kinds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Incompatible Adapter Kinds",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/$defs/WanAccelerationKind"
+          },
+          "method_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Method Id",
+            "type": "string"
+          },
+          "mutually_exclusive_method_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Mutually Exclusive Method Ids",
+            "type": "array"
+          },
+          "quality_tradeoff": {
+            "default": "",
+            "title": "Quality Tradeoff",
+            "type": "string"
+          },
+          "rank": {
+            "default": 100,
+            "minimum": 0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "required_artifact_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Required Artifact Ids",
+            "type": "array"
+          },
+          "schedule_description": {
+            "default": "",
+            "title": "Schedule Description",
+            "type": "string"
+          },
+          "speed_summary": {
+            "default": "",
+            "title": "Speed Summary",
+            "type": "string"
+          },
+          "supported_model_families": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Model Families",
+            "type": "array"
+          },
+          "supported_model_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Supported Model Ids",
+            "type": "array"
+          },
+          "supported_modes": {
+            "items": {
+              "$ref": "#/$defs/WanMode"
+            },
+            "title": "Supported Modes",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "supported_quality_profiles": {
+            "default": [
+              "balanced",
+              "preview",
+              "quality"
+            ],
+            "items": {
+              "$ref": "#/$defs/WanAccelerationQuality"
+            },
+            "title": "Supported Quality Profiles",
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "method_id",
+          "display_name",
+          "kind",
+          "supported_modes"
+        ],
+        "title": "WanAccelerationMethodCapabilities",
+        "type": "object"
+      },
+      "WanAccelerationQuality": {
+        "enum": [
+          "preview",
+          "balanced",
+          "quality"
+        ],
+        "title": "WanAccelerationQuality",
+        "type": "string"
+      },
       "WanMode": {
         "enum": [
           "prompt",
@@ -499,6 +665,252 @@
       "model_variants"
     ],
     "title": "BackendCapabilities",
+    "type": "object"
+  },
+  "gpu_recommendation_catalog": {
+    "$defs": {
+      "GpuRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "acceleration_kinds": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/WanAccelerationKind"
+            },
+            "title": "Acceleration Kinds",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "applicable_modes": {
+            "items": {
+              "$ref": "#/$defs/WanMode"
+            },
+            "title": "Applicable Modes",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "benchmark_required": {
+            "default": false,
+            "title": "Benchmark Required",
+            "type": "boolean"
+          },
+          "display_name": {
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "evidence_version": {
+            "minLength": 1,
+            "title": "Evidence Version",
+            "type": "string"
+          },
+          "gpu_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Gpu Id",
+            "type": "string"
+          },
+          "priority": {
+            "default": 100,
+            "minimum": 0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "rationale": {
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "recommendation_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "requires_offload": {
+            "default": false,
+            "title": "Requires Offload",
+            "type": "boolean"
+          },
+          "requires_quantization": {
+            "default": false,
+            "title": "Requires Quantization",
+            "type": "boolean"
+          },
+          "tier": {
+            "$ref": "#/$defs/GpuRecommendationTier"
+          },
+          "vram_gib": {
+            "exclusiveMinimum": 0,
+            "title": "Vram Gib",
+            "type": "integer"
+          },
+          "workload": {
+            "$ref": "#/$defs/WanWorkloadProfile"
+          }
+        },
+        "required": [
+          "recommendation_id",
+          "workload",
+          "gpu_id",
+          "display_name",
+          "vram_gib",
+          "tier",
+          "applicable_modes",
+          "rationale",
+          "evidence_version"
+        ],
+        "title": "GpuRecommendation",
+        "type": "object"
+      },
+      "GpuRecommendationTier": {
+        "enum": [
+          "value",
+          "speed",
+          "full_memory",
+          "fallback",
+          "minimum_latency"
+        ],
+        "title": "GpuRecommendationTier",
+        "type": "string"
+      },
+      "WanAccelerationKind": {
+        "enum": [
+          "lightx2v",
+          "fastvideo",
+          "lightning",
+          "cache"
+        ],
+        "title": "WanAccelerationKind",
+        "type": "string"
+      },
+      "WanMode": {
+        "enum": [
+          "prompt",
+          "i2v",
+          "first_last",
+          "animate",
+          "replace"
+        ],
+        "title": "WanMode",
+        "type": "string"
+      },
+      "WanWorkloadProfile": {
+        "enum": [
+          "wan2.2-ti2v-5b",
+          "wan-14b-general",
+          "wan-14b-animate-replace",
+          "wan-14b-minimum-latency"
+        ],
+        "title": "WanWorkloadProfile",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "catalog_version": {
+        "minLength": 1,
+        "title": "Catalog Version",
+        "type": "string"
+      },
+      "recommendations": {
+        "items": {
+          "$ref": "#/$defs/GpuRecommendation"
+        },
+        "title": "Recommendations",
+        "type": "array"
+      }
+    },
+    "required": [
+      "catalog_version",
+      "recommendations"
+    ],
+    "title": "GpuRecommendationCatalog",
+    "type": "object"
+  },
+  "gpu_selection_request": {
+    "$defs": {
+      "GpuRecommendationTier": {
+        "enum": [
+          "value",
+          "speed",
+          "full_memory",
+          "fallback",
+          "minimum_latency"
+        ],
+        "title": "GpuRecommendationTier",
+        "type": "string"
+      },
+      "WanMode": {
+        "enum": [
+          "prompt",
+          "i2v",
+          "first_last",
+          "animate",
+          "replace"
+        ],
+        "title": "WanMode",
+        "type": "string"
+      },
+      "WanWorkloadProfile": {
+        "enum": [
+          "wan2.2-ti2v-5b",
+          "wan-14b-general",
+          "wan-14b-animate-replace",
+          "wan-14b-minimum-latency"
+        ],
+        "title": "WanWorkloadProfile",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "allow_offload": {
+        "default": true,
+        "title": "Allow Offload",
+        "type": "boolean"
+      },
+      "allow_quantization": {
+        "default": true,
+        "title": "Allow Quantization",
+        "type": "boolean"
+      },
+      "modes": {
+        "items": {
+          "$ref": "#/$defs/WanMode"
+        },
+        "title": "Modes",
+        "type": "array",
+        "uniqueItems": true
+      },
+      "preferred_tiers": {
+        "default": [
+          "value",
+          "speed",
+          "full_memory",
+          "fallback",
+          "minimum_latency"
+        ],
+        "items": {
+          "$ref": "#/$defs/GpuRecommendationTier"
+        },
+        "title": "Preferred Tiers",
+        "type": "array"
+      },
+      "require_full_memory": {
+        "default": false,
+        "title": "Require Full Memory",
+        "type": "boolean"
+      },
+      "workload": {
+        "$ref": "#/$defs/WanWorkloadProfile"
+      }
+    },
+    "required": [
+      "workload",
+      "modes"
+    ],
+    "title": "GpuSelectionRequest",
     "type": "object"
   },
   "project": {
@@ -2386,6 +2798,9 @@
             "title": "Output Fps",
             "type": "number"
           },
+          "wan_acceleration": {
+            "$ref": "#/$defs/WanAccelerationPolicy"
+          },
           "width": {
             "default": 1280,
             "exclusiveMinimum": 0,
@@ -2580,6 +2995,112 @@
         "title": "Rectangle",
         "type": "object"
       },
+      "ResolvedWanAcceleration": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "artifact_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fallback Reason"
+          },
+          "method_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Method Id"
+          },
+          "method_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/WanAccelerationKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "quality": {
+            "$ref": "#/$defs/WanAccelerationQuality"
+          },
+          "requested_enabled": {
+            "title": "Requested Enabled",
+            "type": "boolean"
+          },
+          "requested_method_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requested Method Id"
+          },
+          "requested_selection": {
+            "$ref": "#/$defs/WanAccelerationSelection"
+          },
+          "resolved_parameters": {
+            "additionalProperties": true,
+            "title": "Resolved Parameters",
+            "type": "object"
+          },
+          "schedule_description": {
+            "default": "",
+            "title": "Schedule Description",
+            "type": "string"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requested_enabled",
+          "requested_selection",
+          "quality",
+          "active"
+        ],
+        "title": "ResolvedWanAcceleration",
+        "type": "object"
+      },
       "RevisionReviewState": {
         "enum": [
           "queued",
@@ -2709,6 +3230,9 @@
       "Segment": {
         "additionalProperties": false,
         "properties": {
+          "acceleration": {
+            "$ref": "#/$defs/SegmentAccelerationPolicy"
+          },
           "action_spec_id": {
             "anyOf": [
               {
@@ -2977,6 +3501,41 @@
         "title": "Segment",
         "type": "object"
       },
+      "SegmentAccelerationMode": {
+        "enum": [
+          "inherit",
+          "enabled",
+          "disabled",
+          "specific"
+        ],
+        "title": "SegmentAccelerationMode",
+        "type": "string"
+      },
+      "SegmentAccelerationPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "method_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Method Id"
+          },
+          "mode": {
+            "$ref": "#/$defs/SegmentAccelerationMode",
+            "default": "inherit"
+          }
+        },
+        "title": "SegmentAccelerationPolicy",
+        "type": "object"
+      },
       "SegmentExportInput": {
         "additionalProperties": false,
         "properties": {
@@ -3081,6 +3640,9 @@
       "SegmentRequest": {
         "additionalProperties": false,
         "properties": {
+          "acceleration": {
+            "$ref": "#/$defs/SegmentAccelerationPolicy"
+          },
           "action_spec": {
             "anyOf": [
               {
@@ -3370,6 +3932,17 @@
             "title": "Replacement Frame Map",
             "type": "object"
           },
+          "resolved_acceleration": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ResolvedWanAcceleration"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "resolved_parameters": {
             "additionalProperties": true,
             "title": "Resolved Parameters",
@@ -3633,6 +4206,77 @@
         },
         "title": "Vector3",
         "type": "object"
+      },
+      "WanAccelerationKind": {
+        "enum": [
+          "lightx2v",
+          "fastvideo",
+          "lightning",
+          "cache"
+        ],
+        "title": "WanAccelerationKind",
+        "type": "string"
+      },
+      "WanAccelerationPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "preferred_method_ids": {
+            "default": [],
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Preferred Method Ids",
+            "type": "array"
+          },
+          "quality": {
+            "$ref": "#/$defs/WanAccelerationQuality",
+            "default": "balanced"
+          },
+          "selection": {
+            "$ref": "#/$defs/WanAccelerationSelection",
+            "default": "auto"
+          },
+          "specific_method_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Specific Method Id"
+          }
+        },
+        "title": "WanAccelerationPolicy",
+        "type": "object"
+      },
+      "WanAccelerationQuality": {
+        "enum": [
+          "preview",
+          "balanced",
+          "quality"
+        ],
+        "title": "WanAccelerationQuality",
+        "type": "string"
+      },
+      "WanAccelerationSelection": {
+        "enum": [
+          "auto",
+          "specific"
+        ],
+        "title": "WanAccelerationSelection",
+        "type": "string"
       },
       "WanMode": {
         "enum": [
@@ -3909,6 +4553,41 @@
         "title": "FrameRounding",
         "type": "string"
       },
+      "SegmentAccelerationMode": {
+        "enum": [
+          "inherit",
+          "enabled",
+          "disabled",
+          "specific"
+        ],
+        "title": "SegmentAccelerationMode",
+        "type": "string"
+      },
+      "SegmentAccelerationPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "method_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Method Id"
+          },
+          "mode": {
+            "$ref": "#/$defs/SegmentAccelerationMode",
+            "default": "inherit"
+          }
+        },
+        "title": "SegmentAccelerationPolicy",
+        "type": "object"
+      },
       "WanMode": {
         "enum": [
           "prompt",
@@ -3923,6 +4602,9 @@
     },
     "additionalProperties": false,
     "properties": {
+      "acceleration": {
+        "$ref": "#/$defs/SegmentAccelerationPolicy"
+      },
       "action_spec": {
         "anyOf": [
           {
@@ -4965,9 +5647,47 @@
         "title": "RuntimeStatusRequest",
         "type": "object"
       },
+      "SegmentAccelerationMode": {
+        "enum": [
+          "inherit",
+          "enabled",
+          "disabled",
+          "specific"
+        ],
+        "title": "SegmentAccelerationMode",
+        "type": "string"
+      },
+      "SegmentAccelerationPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "method_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Method Id"
+          },
+          "mode": {
+            "$ref": "#/$defs/SegmentAccelerationMode",
+            "default": "inherit"
+          }
+        },
+        "title": "SegmentAccelerationPolicy",
+        "type": "object"
+      },
       "SegmentRequest": {
         "additionalProperties": false,
         "properties": {
+          "acceleration": {
+            "$ref": "#/$defs/SegmentAccelerationPolicy"
+          },
           "action_spec": {
             "anyOf": [
               {

@@ -6,7 +6,12 @@ from enum import StrEnum
 
 from pydantic import Field, model_validator
 
-from wan2core.backends import FrameRounding, WanMode
+from wan2core.backends import (
+    FrameRounding,
+    ResolvedWanAcceleration,
+    SegmentAccelerationPolicy,
+    WanMode,
+)
 from wan2core.actions import ActionSpec
 from wan2core.base import DomainModel, Identifier, Milliseconds, require_unique
 
@@ -68,6 +73,9 @@ class SegmentRequest(DomainModel):
     action_spec_id: Identifier | None = None
     action_spec: ActionSpec | None = None
     character_identity_ids: tuple[Identifier, ...] = ()
+    acceleration: SegmentAccelerationPolicy = Field(
+        default_factory=SegmentAccelerationPolicy
+    )
     parameters: dict[str, object] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -96,6 +104,7 @@ class SegmentRevision(DomainModel):
     revision_number: int = Field(gt=0)
     source_request: SegmentRequest
     resolved_parameters: dict[str, object] = Field(default_factory=dict)
+    resolved_acceleration: ResolvedWanAcceleration | None = None
     seed: int = Field(ge=0, le=2_147_483_647)
     result_asset_id: Identifier | None = None
     frame_asset_ids: tuple[Identifier, ...] = ()
@@ -133,6 +142,9 @@ class Segment(DomainModel):
     prompt: str = ""
     negative_prompt: str = ""
     parameters: dict[str, object] = Field(default_factory=dict)
+    acceleration: SegmentAccelerationPolicy = Field(
+        default_factory=SegmentAccelerationPolicy
+    )
     action_spec_id: Identifier | None = None
     character_identity_ids: tuple[Identifier, ...] = ()
     start_image_asset_id: Identifier | None = None
