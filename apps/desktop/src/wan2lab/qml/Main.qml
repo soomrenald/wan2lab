@@ -21,6 +21,13 @@ ApplicationWindow {
     }
 
     FileDialog {
+        id: blenderSceneDialog
+        title: "Import Blender mannequin JSON"
+        nameFilters: ["Wan2Lab mannequin scene (*.json)"]
+        onAccepted: studio.importBlenderScene(selectedFile)
+    }
+
+    FileDialog {
         id: keyframeImageDialog
         title: "Import keyframe image"
         nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
@@ -125,9 +132,25 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 background: Rectangle { color: "#090c11"; radius: 8 }
                 ColumnLayout {
-                    anchors.centerIn: parent
-                    Label { text: "Video / Keyframe Preview"; font.pixelSize: 22 }
+                    anchors.fill: parent
+                    anchors.margins: 12
                     Label {
+                        text: studio.mannequinPreviewUrl.toString().length > 0
+                            ? "Integrated Mannequin Viewport"
+                            : "Video / Keyframe Preview"
+                        font.pixelSize: 22
+                    }
+                    Image {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: source.toString().length > 0
+                        source: studio.mannequinPreviewUrl
+                        fillMode: Image.PreserveAspectFit
+                        cache: false
+                    }
+                    Label {
+                        Layout.alignment: Qt.AlignHCenter
+                        visible: studio.mannequinPreviewUrl.toString().length === 0
                         text: "Review player, frame strip, Krea edits, and mannequin viewport"
                         color: "#7f8ca0"
                     }
@@ -178,6 +201,56 @@ ApplicationWindow {
                 Label { text: "Prompt and action controls"; color: "#aeb9cb" }
                 Label { text: "Character assignments"; color: "#aeb9cb" }
                 Label { text: "Review and provenance"; color: "#aeb9cb" }
+                Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
+                Label { text: "Mannequin pose & camera"; font.bold: true }
+                RowLayout {
+                    TextField {
+                        id: mannequinName
+                        Layout.fillWidth: true
+                        placeholderText: "Pose scene name"
+                        text: "Standing pose"
+                    }
+                    Button { text: "Create"; onClicked: studio.createMannequinScene(mannequinName.text) }
+                }
+                Label { text: "Left arm: " + Math.round(leftArm.value) + "°"; color: "#aeb9cb" }
+                Slider {
+                    id: leftArm
+                    Layout.fillWidth: true
+                    from: -150; to: 150; value: 0
+                    onMoved: studio.setMannequinArmPose(value, rightArm.value)
+                }
+                Label { text: "Right arm: " + Math.round(rightArm.value) + "°"; color: "#aeb9cb" }
+                Slider {
+                    id: rightArm
+                    Layout.fillWidth: true
+                    from: -150; to: 150; value: 0
+                    onMoved: studio.setMannequinArmPose(leftArm.value, value)
+                }
+                Label { text: "Camera: " + Math.round(focalLength.value) + " mm"; color: "#aeb9cb" }
+                Slider {
+                    id: focalLength
+                    Layout.fillWidth: true
+                    from: 18; to: 120; value: 50
+                    onMoved: studio.setMannequinFocalLength(value)
+                }
+                RowLayout {
+                    TextField {
+                        id: poseName
+                        Layout.fillWidth: true
+                        placeholderText: "Saved pose name"
+                    }
+                    Button { text: "Save pose"; onClicked: studio.saveCurrentMannequinPose(poseName.text) }
+                }
+                RowLayout {
+                    Button { text: "Render guides"; onClicked: studio.renderCurrentMannequinGuides() }
+                    Button { text: "Import Blender"; onClicked: blenderSceneDialog.open() }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: studio.mannequinConditioningPath
+                    color: "#8dd7c4"
+                    wrapMode: Text.Wrap
+                }
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
                 Label { text: "Activity"; font.bold: true }
                 ListView {

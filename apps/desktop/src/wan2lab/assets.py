@@ -42,6 +42,21 @@ class LocalAssetStore:
             metadata=metadata,
         )
 
+    def register_generated(
+        self,
+        source: Path,
+        *,
+        media_type: str,
+        parent_asset_ids: tuple[str, ...] = (),
+        metadata: dict[str, object] | None = None,
+    ) -> AssetRecord:
+        return self._copy(
+            source,
+            media_type=media_type,
+            parent_asset_ids=parent_asset_ids,
+            metadata=metadata,
+        )
+
     def resolve(self, asset: AssetRecord) -> Path:
         resolved = (self.root / asset.relative_path).resolve()
         if self.root not in resolved.parents:
@@ -98,4 +113,3 @@ def _sha256(path: Path) -> str:
 
 
 __all__ = ["LocalAssetStore"]
-

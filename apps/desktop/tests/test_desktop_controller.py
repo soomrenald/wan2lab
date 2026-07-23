@@ -53,6 +53,36 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertTrue(all(asset.storage_path.startswith("objects/") for asset in project.assets))
             self.assertEqual(len(tuple((root / "projects").rglob("*.png"))), 2)
 
+    def test_integrated_mannequin_pose_guides_and_blender_import(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.createMannequinScene("Wave setup")
+            controller.setMannequinArmPose(65.0, -20.0)
+            controller.setMannequinFocalLength(70.0)
+            controller.saveCurrentMannequinPose("Wave")
+            controller.renderCurrentMannequinGuides()
+
+            project = controller.session.project
+            self.assertEqual(controller.mannequinNames, ["Wave setup"])
+            self.assertEqual(controller.mannequinPoseNames, ["Wave"])
+            self.assertEqual(len(project.mannequin_scenes[0].guide_asset_ids), 3)
+            self.assertEqual(len(controller.mannequinGuideLabels), 3)
+            self.assertIn("i2i_scaffold", controller.mannequinConditioningPath)
+            self.assertTrue(controller.mannequinPreviewUrl.isLocalFile())
+
+            source = root / "blender-scene.json"
+            source.write_text(
+                project.mannequin_scenes[0]
+                .model_copy(update={"guide_asset_ids": ()})
+                .model_dump_json(),
+                encoding="utf-8",
+            )
+            imported = DesktopController(asset_base=root / "imported-projects")
+            imported.importBlenderScene(QUrl.fromLocalFile(str(source)))
+            self.assertEqual(imported.session.project.mannequin_scenes[0].source_type.value, "blender")
+            self.assertEqual(len(imported.session.project.assets), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

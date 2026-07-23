@@ -200,6 +200,30 @@ def import_blender_scene_document(
     )
 
 
+def register_blender_scene(
+    project: Wan2LabProject,
+    *,
+    scene: MannequinScene,
+    source_asset: AssetRef,
+    provenance: ProvenanceRecord,
+) -> Wan2LabProject:
+    if scene.source_type is not MannequinSource.BLENDER:
+        raise ValueError("registered Blender scene must be marked as Blender-sourced")
+    if scene.imported_asset_id != source_asset.asset_id:
+        raise ValueError("Blender scene and imported source asset do not match")
+    if provenance.output_asset_ids != (source_asset.asset_id,):
+        raise ValueError("Blender import provenance does not match source asset")
+    updated = project.model_copy(
+        update={
+            "assets": (*project.assets, source_asset),
+            "generation_records": (*project.generation_records, provenance),
+        }
+    )
+    return save_mannequin_scene(
+        Wan2LabProject.model_validate(updated.model_dump()), scene
+    )
+
+
 def attach_rendered_guides(
     project: Wan2LabProject,
     *,
@@ -288,6 +312,7 @@ __all__ = [
     "default_mannequin_scene",
     "import_blender_scene_document",
     "plan_krea_conditioning",
+    "register_blender_scene",
     "register_mannequin_pose",
     "save_mannequin_scene",
     "save_pose_from_instance",

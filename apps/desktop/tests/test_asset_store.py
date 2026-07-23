@@ -24,6 +24,20 @@ class LocalAssetStoreTests(unittest.TestCase):
             source.write_bytes(b"changed")
             self.assertTrue(store.verify(asset))
 
+    def test_generated_assets_may_record_parentage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "guide.png"
+            Image.new("RGB", (16, 9), "black").save(source)
+            store = LocalAssetStore(root / "store")
+            asset = store.register_generated(
+                source,
+                media_type="image/png",
+                parent_asset_ids=("scene-source",),
+            )
+            self.assertEqual(asset.parent_asset_ids, ("scene-source",))
+            self.assertTrue(store.verify(asset))
+
 
 if __name__ == "__main__":
     unittest.main()

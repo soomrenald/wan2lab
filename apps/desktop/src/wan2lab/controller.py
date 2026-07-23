@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import math
 from pathlib import Path
+import tempfile
 from uuid import uuid4
 
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
@@ -21,6 +23,19 @@ from wan2core.characters import (
 )
 from wan2core.keyframes import Keyframe, KeyframeSource
 from wan2core.keyframes.workflows import add_timeline_keyframe, register_pose_view_entry
+from wan2core.mannequin import JointPose, Quaternion
+from wan2core.mannequin.workflows import (
+    GuideKind,
+    KreaMannequinCapabilities,
+    attach_rendered_guides,
+    default_mannequin_scene,
+    import_blender_scene_document,
+    plan_krea_conditioning,
+    register_blender_scene,
+    register_mannequin_pose,
+    save_mannequin_scene,
+    save_pose_from_instance,
+)
 from wan2core.orchestration import ReviewGateBlocked, WanStudioSession
 from wan2core.projects import (
     ProjectSettings,
@@ -32,6 +47,7 @@ from wan2core.segments import SegmentState
 from wan2core.timeline import Timeline
 from wan2core.provenance import ProvenanceRecord
 from wan2lab.assets import LocalAssetStore
+from wan2lab.mannequin import render_mannequin_guides
 
 
 class DesktopController(QObject):
@@ -58,6 +74,8 @@ class DesktopController(QObject):
         self._project_name = "Untitled Wan2Lab Project"
         self._status = "Ready — plan the timeline to begin"
         self._events: list[str] = []
+        self._mannequin_preview_url = QUrl()
+        self._mannequin_preview_revision = 0
 
     @Property(str, notify=projectChanged)
     def projectName(self) -> str:  # noqa: N802 - Qt property naming
@@ -109,6 +127,50 @@ class DesktopController(QObject):
             for keyframe in self._session.project.keyframes
         ]
 
+    @Property("QStringList", notify=projectChanged)
+    def mannequinNames(self) -> list[str]:  # noqa: N802
+        return [item.name for item in self._session.project.mannequin_scenes]
+
+    @Property("QStringList", notify=projectChanged)
+    def mannequinPoseNames(self) -> list[str]:  # noqa: N802
+        return [item.name for item in self._session.project.mannequin_poses]
+
+    @Property("QStringList", notify=projectChanged)
+    def mannequinGuideLabels(self) -> list[str]:  # noqa: N802
+        asset_ids = {
+            asset.asset_id: asset.storage_path for asset in self._session.project.assets
+        }
+        return [
+            asset_ids[asset_id]
+            for scene in self._session.project.mannequin_scenes
+            for asset_id in scene.guide_asset_ids
+            if asset_id in asset_ids
+        ]
+
+    @Property(QUrl, notify=projectChanged)
+    def mannequinPreviewUrl(self) -> QUrl:  # noqa: N802
+        return self._mannequin_preview_url
+
+    @Property(str, notify=projectChanged)
+    def mannequinConditioningPath(self) -> str:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            return "No mannequin scene"
+        scene = self._session.project.mannequin_scenes[-1]
+        by_kind = (
+            dict(zip(GuideKind, scene.guide_asset_ids[-3:], strict=True))
+            if len(scene.guide_asset_ids) >= 3
+            else {}
+        )
+        try:
+            plan = plan_krea_conditioning(
+                scene=scene,
+                capabilities=KreaMannequinCapabilities(supports_i2i=True),
+                guide_assets=by_kind,
+            )
+        except ValueError:
+            return "Render guides to enable Krea conditioning"
+        return f"{plan.path.value}: {plan.explanation}"
+
     @Slot(float)
     def newProject(self, duration_seconds: float = 18.0) -> None:  # noqa: N802
         duration_ms = max(1_000, round(duration_seconds * 1000))
@@ -116,9 +178,154 @@ class DesktopController(QObject):
         self._asset_store = self._store_for_project(self._session.project.project_id)
         self._project_name = "Untitled Wan2Lab Project"
         self._events.clear()
+        self._mannequin_preview_url = QUrl()
         self._set_status("New project ready")
         self.projectChanged.emit()
         self.eventLogChanged.emit()
+
+    @Slot(str)
+    def createMannequinScene(self, name: str) -> None:  # noqa: N802
+        scene = default_mannequin_scene(
+            scene_id=f"mannequin-scene-{uuid4().hex}",
+            name=name.strip() or "Untitled pose",
+            width=self._session.project.project_settings.width,
+            height=self._session.project.project_settings.height,
+        )
+        self._session.project = save_mannequin_scene(self._session.project, scene)
+        self._refresh_mannequin_preview()
+        self._append_event(f"Created integrated mannequin scene {scene.name}")
+        self._set_status("Adjust pose and camera, then render reproducible guides")
+        self.projectChanged.emit()
+
+    @Slot(float, float)
+    def setMannequinArmPose(self, left_degrees: float, right_degrees: float) -> None:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        scene = self._session.project.mannequin_scenes[-1]
+        instance = scene.instances[0]
+        rotations = {
+            "shoulder_l": self._z_rotation(left_degrees),
+            "shoulder_r": self._z_rotation(right_degrees),
+        }
+        joints = tuple(
+            JointPose(
+                joint_name=joint.joint_name,
+                rotation=rotations.get(joint.joint_name, joint.rotation),
+            )
+            for joint in instance.joints
+        )
+        changed_instance = instance.model_copy(update={"joints": joints})
+        changed_scene = scene.model_copy(
+            update={"instances": (changed_instance, *scene.instances[1:])}
+        )
+        self._session.project = save_mannequin_scene(self._session.project, changed_scene)
+        self._refresh_mannequin_preview()
+        self.projectChanged.emit()
+
+    @Slot(float)
+    def setMannequinFocalLength(self, focal_length_mm: float) -> None:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            return
+        scene = self._session.project.mannequin_scenes[-1]
+        camera = scene.camera.model_copy(
+            update={"focal_length_mm": max(12.0, min(200.0, focal_length_mm))}
+        )
+        self._session.project = save_mannequin_scene(
+            self._session.project, scene.model_copy(update={"camera": camera})
+        )
+        self._refresh_mannequin_preview()
+        self.projectChanged.emit()
+
+    @Slot(str)
+    def saveCurrentMannequinPose(self, name: str) -> None:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        scene = self._session.project.mannequin_scenes[-1]
+        pose = save_pose_from_instance(
+            scene.instances[0],
+            pose_id=f"mannequin-pose-{uuid4().hex}",
+            name=name.strip() or scene.name,
+        )
+        self._session.project = register_mannequin_pose(self._session.project, pose)
+        self._append_event(f"Saved reusable mannequin pose {pose.name}")
+        self._set_status("Pose saved in the project library")
+        self.projectChanged.emit()
+
+    @Slot()
+    def renderCurrentMannequinGuides(self) -> None:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        scene = self._session.project.mannequin_scenes[-1]
+        assets = []
+        records = []
+        try:
+            with tempfile.TemporaryDirectory(prefix="wan2lab-guides-") as directory:
+                for guide in render_mannequin_guides(scene, Path(directory)):
+                    record = self._asset_store.register_generated(
+                        guide.path,
+                        media_type="image/png",
+                        metadata={"guide_kind": guide.kind.value, "scene_id": scene.scene_id},
+                    )
+                    records.append((guide.kind, record))
+            for kind, record in records:
+                assets.append(self._wan_asset(record, AssetKind.MANNEQUIN_GUIDE))
+            provenance = tuple(
+                ProvenanceRecord(
+                    provenance_id=f"provenance-{uuid4().hex}",
+                    operation=f"render_mannequin_{kind.value}_guide",
+                    created_at=datetime.now(UTC),
+                    output_asset_ids=(asset.asset_id,),
+                    parameters={"scene_id": scene.scene_id, "guide_kind": kind.value},
+                )
+                for (kind, _record), asset in zip(records, assets, strict=True)
+            )
+            self._session.project = attach_rendered_guides(
+                self._session.project,
+                scene_id=scene.scene_id,
+                assets=tuple(assets),
+                provenance=provenance,
+            )
+        except Exception as error:
+            self._set_status(f"Guide render failed: {error}")
+            return
+        self._append_event("Rendered shaded, silhouette, and depth mannequin guides")
+        self._set_status("Guides saved; Krea i2i fallback is available")
+        self.projectChanged.emit()
+
+    @Slot(QUrl)
+    def importBlenderScene(self, source_url: QUrl) -> None:  # noqa: N802
+        source = Path(source_url.toLocalFile())
+        try:
+            record = self._asset_store.register_imported(
+                source, media_type="application/vnd.wan2lab.mannequin+json"
+            )
+            asset = self._wan_asset(record, AssetKind.PROJECT)
+            scene = import_blender_scene_document(
+                source.read_bytes(), imported_asset_id=asset.asset_id
+            )
+            provenance = ProvenanceRecord(
+                provenance_id=f"provenance-{uuid4().hex}",
+                operation="import_blender_mannequin_scene",
+                created_at=datetime.now(UTC),
+                output_asset_ids=(asset.asset_id,),
+                parameters={"source_format": "wan2lab-mannequin-json"},
+            )
+            self._session.project = register_blender_scene(
+                self._session.project,
+                scene=scene,
+                source_asset=asset,
+                provenance=provenance,
+            )
+        except Exception as error:
+            self._set_status(f"Blender scene import failed: {error}")
+            return
+        self._refresh_mannequin_preview()
+        self._append_event(f"Imported Blender mannequin scene {scene.name}")
+        self._set_status("Blender scene imported into the renderer-neutral project model")
+        self.projectChanged.emit()
 
     @Slot(str, str, str, str)
     def addCharacter(
@@ -304,6 +511,7 @@ class DesktopController(QObject):
         self._asset_store = LocalAssetStore(Path(path).expanduser().resolve().parent / "assets")
         self._project_name = Path(path).stem
         self._events.clear()
+        self._refresh_mannequin_preview()
         self._set_status(f"Opened {path}")
         self.projectChanged.emit()
         self.eventLogChanged.emit()
@@ -339,6 +547,29 @@ class DesktopController(QObject):
             height=record.height,
             parent_asset_ids=record.parent_asset_ids,
         )
+
+    @staticmethod
+    def _z_rotation(degrees: float) -> Quaternion:
+        half = math.radians(max(-180.0, min(180.0, degrees))) / 2
+        return Quaternion(z=math.sin(half), w=math.cos(half))
+
+    def _refresh_mannequin_preview(self) -> None:
+        if not self._session.project.mannequin_scenes:
+            self._mannequin_preview_url = QUrl()
+            return
+        scene = self._session.project.mannequin_scenes[-1]
+        preview_dir = self._asset_base / self._session.project.project_id / ".preview"
+        try:
+            guides = render_mannequin_guides(scene, preview_dir)
+            shaded = next(item for item in guides if item.kind is GuideKind.SHADED)
+        except Exception as error:
+            self._mannequin_preview_url = QUrl()
+            self._set_status(f"Mannequin preview failed: {error}")
+            return
+        self._mannequin_preview_revision += 1
+        url = QUrl.fromLocalFile(str(shaded.path))
+        url.setQuery(f"revision={self._mannequin_preview_revision}")
+        self._mannequin_preview_url = url
 
     def _set_status(self, value: str) -> None:
         self._status = value
