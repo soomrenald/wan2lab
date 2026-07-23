@@ -11,7 +11,13 @@ from wan2core.backends import BackendCapabilities
 from wan2core.backends.mock import CancellationToken, MockWanBackend
 from wan2core.projects import Wan2LabProject
 from wan2core.provenance import ProvenanceRecord
-from wan2core.review import approve_revision, complete_generation, queue_revision, start_generation
+from wan2core.review import (
+    approve_revision,
+    complete_generation,
+    queue_revision,
+    reject_revision,
+    start_generation,
+)
 from wan2core.segments import Segment, SegmentRequest, SegmentRevision, SegmentState
 from wan2core.timeline import SegmentPlan, plan_segments
 from wan2core.workers import WorkerProgress
@@ -98,12 +104,61 @@ class WanStudioSession:
         if segment is None:
             raise StopIteration("no draft segment remains")
         planned = next(item for item in self.segment_plan.segments if item.segment_id == segment.segment_id)
+        return self._generate_mock_revision(
+            segment,
+            planned,
+            backend,
+            seed=seed,
+            progress=progress,
+            cancellation=cancellation,
+        )
+
+    def regenerate_rejected_with_mock(
+        self,
+        backend: MockWanBackend,
+        *,
+        seed: int,
+        progress: Callable[[WorkerProgress], None],
+        cancellation: CancellationToken | None = None,
+    ) -> SegmentRevision:
+        if self.segment_plan is None:
+            raise RuntimeError("timeline must be planned before generation")
+        segment = next(
+            (item for item in self.project.segments if item.state is SegmentState.REJECTED),
+            None,
+        )
+        if segment is None:
+            raise ReviewGateBlocked("no rejected segment is ready to regenerate")
+        parent = self._latest_revision(segment)
+        planned = next(item for item in self.segment_plan.segments if item.segment_id == segment.segment_id)
+        return self._generate_mock_revision(
+            segment,
+            planned,
+            backend,
+            seed=seed,
+            progress=progress,
+            cancellation=cancellation,
+            parent_revision_id=parent.revision_id,
+        )
+
+    def _generate_mock_revision(
+        self,
+        segment: Segment,
+        planned,
+        backend: MockWanBackend,
+        *,
+        seed: int,
+        progress: Callable[[WorkerProgress], None],
+        cancellation: CancellationToken | None,
+        parent_revision_id: str | None = None,
+    ) -> SegmentRevision:
         request = self._request_for(segment, planned)
         segment, revision = queue_revision(
             segment,
             revision_id=f"{segment.segment_id}-revision-{len(segment.revision_ids) + 1}",
             request=request,
             seed=seed,
+            parent_revision_id=parent_revision_id,
         )
         segment, revision = start_generation(segment, revision)
         self._replace_segment_and_revision(segment, revision)
@@ -170,6 +225,23 @@ class WanStudioSession:
             raise ReviewGateBlocked("no segment is ready for review")
         revision = self._latest_revision(segment)
         segment, revision = approve_revision(segment, revision)
+        self._replace_segment_and_revision(segment, revision)
+        self.project = self._validated(self.project)
+        return revision
+
+    def reject_current(self, reason: str) -> SegmentRevision:
+        segment = next(
+            (
+                segment
+                for segment in self.project.segments
+                if segment.state is SegmentState.READY_FOR_REVIEW
+            ),
+            None,
+        )
+        if segment is None:
+            raise ReviewGateBlocked("no segment is ready for review")
+        revision = self._latest_revision(segment)
+        segment, revision = reject_revision(segment, revision, reason=reason)
         self._replace_segment_and_revision(segment, revision)
         self.project = self._validated(self.project)
         return revision

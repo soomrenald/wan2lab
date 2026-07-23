@@ -53,6 +53,21 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertTrue(all(asset.storage_path.startswith("objects/") for asset in project.assets))
             self.assertEqual(len(tuple((root / "projects").rglob("*.png"))), 2)
 
+    def test_reject_and_regenerate_create_a_new_reviewable_revision(self) -> None:
+        controller = DesktopController()
+        controller.planMockTimeline()
+        controller.generateNextMockSegment()
+        controller.rejectCurrentSegment("visible flicker")
+        self.assertEqual(controller.session.project.segments[0].state, SegmentState.REJECTED)
+        controller.regenerateRejectedMockSegment()
+        revisions = controller.session.project.segment_revisions
+        self.assertEqual(len(revisions), 2)
+        self.assertEqual(revisions[-1].parent_revision_id, revisions[0].revision_id)
+        self.assertEqual(
+            controller.session.project.segments[0].state,
+            SegmentState.READY_FOR_REVIEW,
+        )
+
     def test_integrated_mannequin_pose_guides_and_blender_import(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

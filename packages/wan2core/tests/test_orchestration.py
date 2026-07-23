@@ -52,7 +52,32 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(len(progress), 12)
         self.assertEqual(len(session.project.segment_revisions), 3)
 
+    def test_reject_and_regenerate_preserves_old_revision_and_assets(self) -> None:
+        project = Wan2LabProject(
+            project_id="project-1",
+            project_settings=ProjectSettings(
+                default_wan_backend_id="mock-wan",
+                default_wan_model_id="wan-test",
+            ),
+            timeline=Timeline(duration_ms=5_000, output_fps=24.0),
+        )
+        capabilities = default_mock_capabilities()
+        backend = MockWanBackend(capabilities)
+        session = WanStudioSession(project)
+        session.plan(capabilities, model_id="wan-test")
+        first = session.generate_next_with_mock(backend, seed=1, progress=lambda _event: None)
+        rejected = session.reject_current("motion direction was wrong")
+        self.assertEqual(rejected.revision_id, first.revision_id)
+        old_asset_ids = {asset.asset_id for asset in session.project.assets}
+
+        second = session.regenerate_rejected_with_mock(
+            backend, seed=2, progress=lambda _event: None
+        )
+        self.assertEqual(second.revision_number, 2)
+        self.assertEqual(second.parent_revision_id, first.revision_id)
+        self.assertTrue(old_asset_ids.issubset({asset.asset_id for asset in session.project.assets}))
+        self.assertEqual(session.project.segments[0].state, SegmentState.READY_FOR_REVIEW)
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -57,6 +57,13 @@ ApplicationWindow {
             Button { text: "Plan"; onClicked: studio.planMockTimeline() }
             Button { text: "Generate next"; onClicked: studio.generateNextMockSegment() }
             Button { text: "Approve"; onClicked: studio.approveCurrentSegment() }
+            TextField {
+                id: rejectionReason
+                placeholderText: "Rejection reason"
+                Layout.preferredWidth: 170
+            }
+            Button { text: "Reject"; onClicked: studio.rejectCurrentSegment(rejectionReason.text) }
+            Button { text: "Regenerate"; onClicked: studio.regenerateRejectedMockSegment() }
         }
     }
 

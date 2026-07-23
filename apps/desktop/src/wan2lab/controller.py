@@ -492,6 +492,38 @@ class DesktopController(QObject):
         self.projectChanged.emit()
 
     @Slot(str)
+    def rejectCurrentSegment(self, reason: str) -> None:  # noqa: N802
+        try:
+            revision = self._session.reject_current(reason)
+        except (ReviewGateBlocked, ValueError) as error:
+            self._set_status(str(error))
+            return
+        self._append_event(
+            f"Rejected {revision.segment_id} revision {revision.revision_number}: {reason.strip()}"
+        )
+        self._set_status("Revision preserved; regenerate the rejected segment when ready")
+        self.projectChanged.emit()
+
+    @Slot()
+    def regenerateRejectedMockSegment(self) -> None:  # noqa: N802
+        try:
+            revision = self._session.regenerate_rejected_with_mock(
+                self._backend,
+                seed=len(self._session.project.segment_revisions) + 1,
+                progress=lambda event: self._append_event(
+                    f"{event.segment_id}: {event.stage} {event.current}/{event.total}"
+                ),
+            )
+        except (ReviewGateBlocked, RuntimeError, ValueError) as error:
+            self._set_status(str(error))
+            return
+        self._append_event(
+            f"Regenerated {revision.segment_id} as immutable revision {revision.revision_number}"
+        )
+        self._set_status("Regenerated revision ready for mandatory review")
+        self.projectChanged.emit()
+
+    @Slot(str)
     def saveProject(self, path: str) -> None:  # noqa: N802
         try:
             save_project(self._session.project, Path(path).expanduser())
