@@ -28,6 +28,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--frames", type=int, default=5)
     parser.add_argument("--steps", type=int, default=4)
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=1,
+        help="Generate repeatedly in one worker session to exercise retained residency",
+    )
     parser.add_argument("--seed", type=int, default=20260723)
     parser.add_argument("--prompt", default="A paper windmill turns gently in a clean studio.")
     parser.add_argument("--negative-prompt", default="flicker, distortion, text, watermark")
@@ -40,6 +46,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.mode == "i2v" and not args.start_image:
         parser.error("--start-image is required for --mode i2v")
+    if args.runs < 1:
+        parser.error("--runs must be at least 1")
     return args
 
 
@@ -91,23 +99,6 @@ def main() -> int:
     }
     if mode is WanMode.I2V:
         parameters["tiled_vae"] = True
-    request = SegmentRequest(
-        request_id="wan2-2-smoke-request",
-        segment_id="wan2-2-smoke-segment",
-        mode=mode,
-        backend_id=BACKEND_ID,
-        model_id=model.model_id,
-        start_ms=0,
-        end_ms=max(1, round((args.frames - 1) / 24 * 1000)),
-        width=1280,
-        height=704,
-        generation_fps=24,
-        frame_count=args.frames,
-        start_image_asset_id=start_image_asset_id,
-        prompt=args.prompt,
-        negative_prompt=args.negative_prompt,
-        parameters=parameters,
-    )
     asset_inputs = (
         {start_image_asset_id: args.start_image}
         if start_image_asset_id is not None
@@ -123,19 +114,43 @@ def main() -> int:
             last_stage = item.stage
 
     try:
-        result = service.generate(
-            GenerateSegmentRequest(
-                command_id="wan2-2-smoke-generate",
-                job_id="wan2-2-smoke-job",
-                request=request,
-                asset_inputs=asset_inputs,
-                seed=args.seed,
-                output_prefix=args.output_prefix,
-            ),
-            ThreadCancellation(),
-            progress,
-        )
-        print(json.dumps(result.model_dump(mode="json"), indent=2))
+        for run_index in range(1, args.runs + 1):
+            run_id = f"run-{run_index}"
+            output_prefix = (
+                args.output_prefix
+                if args.runs == 1
+                else f"{args.output_prefix}_{run_index:02d}"
+            )
+            request = SegmentRequest(
+                request_id=f"wan2-2-smoke-request-{run_id}",
+                segment_id=f"wan2-2-smoke-segment-{run_id}",
+                mode=mode,
+                backend_id=BACKEND_ID,
+                model_id=model.model_id,
+                start_ms=0,
+                end_ms=max(1, round((args.frames - 1) / 24 * 1000)),
+                width=1280,
+                height=704,
+                generation_fps=24,
+                frame_count=args.frames,
+                start_image_asset_id=start_image_asset_id,
+                prompt=args.prompt,
+                negative_prompt=args.negative_prompt,
+                parameters=parameters,
+            )
+            result = service.generate(
+                GenerateSegmentRequest(
+                    command_id=f"wan2-2-smoke-generate-{run_id}",
+                    job_id=f"wan2-2-smoke-job-{run_id}",
+                    request=request,
+                    asset_inputs=asset_inputs,
+                    seed=args.seed + run_index - 1,
+                    output_prefix=output_prefix,
+                ),
+                ThreadCancellation(),
+                progress,
+            )
+            print(json.dumps(result.model_dump(mode="json"), indent=2))
     finally:
         if args.release:
             service.release("wan2-2-smoke-release")

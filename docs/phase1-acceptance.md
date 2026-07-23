@@ -43,6 +43,9 @@ after a segment becomes stale.
   [wan2.2-ti2v-5b-hardware.md](wan2.2-ti2v-5b-hardware.md).
 - Explicit model release succeeds through ComfyUI's `/free` endpoint and clears
   the worker's retained-model state.
+- Two sequential Prompt jobs completed through one worker selection without an
+  intervening release; the second reused ComfyUI's cached T5/model work and
+  produced a distinct revision from its incremented seed.
 
 ## Hardware acceptance status
 
@@ -51,12 +54,11 @@ artifact selection, Prompt execution, I2V execution, output encoding, and
 structured provenance are verified. The short four-step smoke renders establish
 runtime integration only; they do not establish production visual quality.
 
-Still manually verify full 121-frame production settings, retained residency,
-and regeneration without unnecessary reload for TI2V-5B. First/last, Animate,
-and Replace require later compatible model families because TI2V-5B does not
-advertise those modes. OOM recovery, mannequin/Krea-to-Wan handoff, identity
-correction, batch face repair, long continuation, and final export also remain
-hardware gates.
+Still manually verify full 121-frame production settings for TI2V-5B.
+First/last, Animate, and Replace require later compatible model families because
+TI2V-5B does not advertise those modes. OOM recovery, mannequin/Krea-to-Wan
+handoff, identity correction, batch face repair, long continuation, and final
+export also remain hardware gates.
 
 Visual quality remains a human review decision and is never inferred from file
 existence.

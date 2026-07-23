@@ -100,6 +100,8 @@ export PYTHONPATH=apps/desktop/src:packages/wan2core/src:/home/wolfhard/k2core/s
 ```
 
 For I2V, `--start-image` is relative to the ComfyUI input directory.
+Use `--runs 2` (or more) to submit sequential regenerations through one worker
+session and `--release` to free the selection after the final run.
 
 ## Output evidence
 
@@ -113,6 +115,22 @@ Prompt ID `34d05420-fe9c-4ee6-b6b7-eee5bbc77e82` produced the I2V result.
 
 The highest observed sampler allocation was 5.453 GB and highest observed
 sampler reservation was 5.883 GB during the I2V smoke test.
+
+## Retained residency and regeneration evidence
+
+Two Prompt jobs were submitted sequentially through one loaded
+`ComfyWorkerService`, with no intervening release:
+
+| Run | Prompt ID | Output | Bytes | SHA-256 | ComfyUI time |
+| --- | --- | --- | ---: | --- | ---: |
+| 1 | `bd109283-aa7d-4751-b03f-dbbca156cf29` | `output/wan2lab/hardware/wan2_2_ti2v_residency_01_00001.mp4` | 91,696 | `57c73080c16b8091da99b8b8e617e59b8cbaa66bd4bf78d7cc560231969a2c5e` | 99.05 s |
+| 2 | `e982ebe7-9d37-4db7-9573-e7935c6cb1b2` | `output/wan2lab/hardware/wan2_2_ti2v_residency_02_00001.mp4` | 76,803 | `871ed70698a5dabe307e6a3ef62ac8babdcaa5cfc3f018771d601be9a7b72a25` | 88.08 s |
+
+Both results are 1280x704, 24 FPS, five-frame H.264 files. ComfyUI's second-job
+log omitted transformer format detection, T5 parameter loading, and T5
+encoding. It reused the cached graph outputs and host-resident model, while the
+configured offload policy still copied transformer weights to the GPU for
+sampling. The second job then completed with a new seed and distinct output.
 
 ## Explicit release evidence
 
