@@ -667,6 +667,166 @@
     "title": "BackendCapabilities",
     "type": "object"
   },
+  "gpu_benchmark_evidence": {
+    "$defs": {
+      "WanBenchmarkConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "acceleration_method_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Acceleration Method Id"
+          },
+          "frame_count": {
+            "exclusiveMinimum": 0,
+            "title": "Frame Count",
+            "type": "integer"
+          },
+          "height": {
+            "exclusiveMinimum": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "mode": {
+            "$ref": "#/$defs/WanMode"
+          },
+          "model_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "offload_mode": {
+            "minLength": 1,
+            "title": "Offload Mode",
+            "type": "string"
+          },
+          "precision": {
+            "minLength": 1,
+            "title": "Precision",
+            "type": "string"
+          },
+          "quantization": {
+            "minLength": 1,
+            "title": "Quantization",
+            "type": "string"
+          },
+          "runtime_version": {
+            "minLength": 1,
+            "title": "Runtime Version",
+            "type": "string"
+          },
+          "scheduler": {
+            "minLength": 1,
+            "title": "Scheduler",
+            "type": "string"
+          },
+          "steps": {
+            "exclusiveMinimum": 0,
+            "title": "Steps",
+            "type": "integer"
+          },
+          "width": {
+            "exclusiveMinimum": 0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_id",
+          "mode",
+          "width",
+          "height",
+          "frame_count",
+          "steps",
+          "precision",
+          "quantization",
+          "offload_mode",
+          "scheduler",
+          "runtime_version"
+        ],
+        "title": "WanBenchmarkConfiguration",
+        "type": "object"
+      },
+      "WanMode": {
+        "enum": [
+          "prompt",
+          "i2v",
+          "first_last",
+          "animate",
+          "replace"
+        ],
+        "title": "WanMode",
+        "type": "string"
+      },
+      "WanWorkloadProfile": {
+        "enum": [
+          "wan2.2-ti2v-5b",
+          "wan-14b-general",
+          "wan-14b-animate-replace",
+          "wan-14b-minimum-latency"
+        ],
+        "title": "WanWorkloadProfile",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "benchmark_id": {
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "title": "Benchmark Id",
+        "type": "string"
+      },
+      "configuration": {
+        "$ref": "#/$defs/WanBenchmarkConfiguration"
+      },
+      "evidence_ref": {
+        "minLength": 1,
+        "title": "Evidence Ref",
+        "type": "string"
+      },
+      "generation_seconds": {
+        "exclusiveMinimum": 0.0,
+        "title": "Generation Seconds",
+        "type": "number"
+      },
+      "gpu_id": {
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "title": "Gpu Id",
+        "type": "string"
+      },
+      "measured_at": {
+        "minLength": 1,
+        "title": "Measured At",
+        "type": "string"
+      },
+      "workload": {
+        "$ref": "#/$defs/WanWorkloadProfile"
+      }
+    },
+    "required": [
+      "benchmark_id",
+      "workload",
+      "gpu_id",
+      "configuration",
+      "generation_seconds",
+      "measured_at",
+      "evidence_ref"
+    ],
+    "title": "GpuBenchmarkEvidence",
+    "type": "object"
+  },
   "gpu_recommendation_catalog": {
     "$defs": {
       "GpuRecommendation": {
@@ -4815,6 +4975,107 @@
       "frame_count"
     ],
     "title": "SegmentRequest",
+    "type": "object"
+  },
+  "wan_benchmark_configuration": {
+    "$defs": {
+      "WanMode": {
+        "enum": [
+          "prompt",
+          "i2v",
+          "first_last",
+          "animate",
+          "replace"
+        ],
+        "title": "WanMode",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "acceleration_method_id": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Acceleration Method Id"
+      },
+      "frame_count": {
+        "exclusiveMinimum": 0,
+        "title": "Frame Count",
+        "type": "integer"
+      },
+      "height": {
+        "exclusiveMinimum": 0,
+        "title": "Height",
+        "type": "integer"
+      },
+      "mode": {
+        "$ref": "#/$defs/WanMode"
+      },
+      "model_id": {
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        "title": "Model Id",
+        "type": "string"
+      },
+      "offload_mode": {
+        "minLength": 1,
+        "title": "Offload Mode",
+        "type": "string"
+      },
+      "precision": {
+        "minLength": 1,
+        "title": "Precision",
+        "type": "string"
+      },
+      "quantization": {
+        "minLength": 1,
+        "title": "Quantization",
+        "type": "string"
+      },
+      "runtime_version": {
+        "minLength": 1,
+        "title": "Runtime Version",
+        "type": "string"
+      },
+      "scheduler": {
+        "minLength": 1,
+        "title": "Scheduler",
+        "type": "string"
+      },
+      "steps": {
+        "exclusiveMinimum": 0,
+        "title": "Steps",
+        "type": "integer"
+      },
+      "width": {
+        "exclusiveMinimum": 0,
+        "title": "Width",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "model_id",
+      "mode",
+      "width",
+      "height",
+      "frame_count",
+      "steps",
+      "precision",
+      "quantization",
+      "offload_mode",
+      "scheduler",
+      "runtime_version"
+    ],
+    "title": "WanBenchmarkConfiguration",
     "type": "object"
   },
   "worker_event": {

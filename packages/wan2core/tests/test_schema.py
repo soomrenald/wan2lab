@@ -17,6 +17,8 @@ class SchemaTests(unittest.TestCase):
                 "backend_capabilities",
                 "gpu_recommendation_catalog",
                 "gpu_selection_request",
+                "gpu_benchmark_evidence",
+                "wan_benchmark_configuration",
                 "segment_request",
                 "worker_request",
                 "worker_event",

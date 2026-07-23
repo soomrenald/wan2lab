@@ -120,6 +120,70 @@ class RankedGpuCandidate(DomainModel):
     rationale: str
 
 
+class WanBenchmarkConfiguration(DomainModel):
+    model_id: Identifier
+    mode: WanMode
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    frame_count: int = Field(gt=0)
+    steps: int = Field(gt=0)
+    precision: str = Field(min_length=1)
+    quantization: str = Field(min_length=1)
+    offload_mode: str = Field(min_length=1)
+    scheduler: str = Field(min_length=1)
+    acceleration_method_id: Identifier | None = None
+    runtime_version: str = Field(min_length=1)
+
+
+class GpuBenchmarkEvidence(DomainModel):
+    benchmark_id: Identifier
+    workload: WanWorkloadProfile
+    gpu_id: Identifier
+    configuration: WanBenchmarkConfiguration
+    generation_seconds: float = Field(gt=0.0)
+    measured_at: str = Field(min_length=1)
+    evidence_ref: str = Field(min_length=1)
+
+
+class GpuCostEstimate(DomainModel):
+    benchmark_id: Identifier
+    gpu_id: Identifier
+    generation_seconds: float = Field(gt=0.0)
+    hourly_price_usd: float = Field(gt=0.0)
+    estimated_generation_cost_usd: float = Field(ge=0.0)
+    exact_configuration_match: bool = True
+    warning: str = (
+        "Estimate uses matching historical benchmark evidence; live runtime may vary."
+    )
+
+
+def estimate_generation_cost(
+    *,
+    candidate: AvailableGpuCandidate,
+    request: WanBenchmarkConfiguration,
+    benchmark: GpuBenchmarkEvidence,
+) -> GpuCostEstimate | None:
+    """Estimate cost only from an available exact-SKU, exact-configuration match."""
+
+    if (
+        not candidate.available
+        or candidate.hourly_price_usd is None
+        or candidate.gpu_id != benchmark.gpu_id
+        or request != benchmark.configuration
+    ):
+        return None
+    hourly_price = candidate.hourly_price_usd
+    return GpuCostEstimate(
+        benchmark_id=benchmark.benchmark_id,
+        gpu_id=candidate.gpu_id,
+        generation_seconds=benchmark.generation_seconds,
+        hourly_price_usd=hourly_price,
+        estimated_generation_cost_usd=(
+            benchmark.generation_seconds * hourly_price / 3600.0
+        ),
+    )
+
+
 def rank_gpu_candidates(
     *,
     catalog: GpuRecommendationCatalog,
@@ -380,12 +444,16 @@ def approved_gpu_recommendation_catalog() -> GpuRecommendationCatalog:
 
 __all__ = [
     "AvailableGpuCandidate",
+    "GpuBenchmarkEvidence",
+    "GpuCostEstimate",
     "GpuRecommendation",
     "GpuRecommendationCatalog",
     "GpuRecommendationTier",
     "GpuSelectionRequest",
     "RankedGpuCandidate",
     "WanWorkloadProfile",
+    "WanBenchmarkConfiguration",
     "approved_gpu_recommendation_catalog",
+    "estimate_generation_cost",
     "rank_gpu_candidates",
 ]

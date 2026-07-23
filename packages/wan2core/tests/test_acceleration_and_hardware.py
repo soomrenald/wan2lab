@@ -17,10 +17,13 @@ from wan2core.backends import (
 )
 from wan2core.hardware import (
     AvailableGpuCandidate,
+    GpuBenchmarkEvidence,
     GpuRecommendationTier,
     GpuSelectionRequest,
     WanWorkloadProfile,
+    WanBenchmarkConfiguration,
     approved_gpu_recommendation_catalog,
+    estimate_generation_cost,
     rank_gpu_candidates,
 )
 from wan2core.projects import ProjectSettings
@@ -200,6 +203,53 @@ class GpuRecommendationTests(unittest.TestCase):
             "nvidia-rtx-pro-6000-blackwell",
         )
         self.assertFalse(ranked[-1].suitable)
+
+    def test_cost_estimate_requires_an_exact_matching_benchmark(self) -> None:
+        configuration = WanBenchmarkConfiguration(
+            model_id="wan-ti2v-5b",
+            mode=WanMode.I2V,
+            width=1280,
+            height=704,
+            frame_count=121,
+            steps=30,
+            precision="bf16",
+            quantization="disabled",
+            offload_mode="offload_device",
+            scheduler="unipc",
+            acceleration_method_id="comfy-wan-easycache",
+            runtime_version="workspace-image-sha256:abc",
+        )
+        candidate = AvailableGpuCandidate(
+            gpu_id="nvidia-rtx-4090",
+            display_name="RTX 4090",
+            vram_gib=24,
+            available=True,
+            hourly_price_usd=0.72,
+        )
+        benchmark = GpuBenchmarkEvidence(
+            benchmark_id="benchmark-1",
+            workload=WanWorkloadProfile.TI2V_5B,
+            gpu_id=candidate.gpu_id,
+            configuration=configuration,
+            generation_seconds=600,
+            measured_at="2026-07-23T16:00:00Z",
+            evidence_ref="sha256:benchmark-evidence",
+        )
+
+        estimate = estimate_generation_cost(
+            candidate=candidate,
+            request=configuration,
+            benchmark=benchmark,
+        )
+        mismatch = estimate_generation_cost(
+            candidate=candidate,
+            request=configuration.model_copy(update={"steps": 20}),
+            benchmark=benchmark,
+        )
+
+        assert estimate is not None
+        self.assertAlmostEqual(estimate.estimated_generation_cost_usd, 0.12)
+        self.assertIsNone(mismatch)
 
 
 if __name__ == "__main__":
