@@ -656,6 +656,17 @@ ApplicationWindow {
                         model: ["prompt", "i2v", "first_last", "animate", "replace"]
                     }
                 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: "Revision"; color: "#aeb9cb" }
+                    ComboBox {
+                        Layout.fillWidth: true
+                        model: studio.reviewRevisionLabels
+                        currentIndex: studio.reviewRevisionIndex
+                        enabled: count > 0
+                        onActivated: studio.selectReviewRevision(index)
+                    }
+                }
                 ComboBox {
                     id: continuationPolicy
                     Layout.fillWidth: true

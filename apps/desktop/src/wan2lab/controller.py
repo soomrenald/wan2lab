@@ -161,11 +161,11 @@ class DesktopController(QObject):
         ).expanduser().resolve()
         self._project_name = "Untitled Wan2Lab Project"
         self._review_segment_index = 0
+        self._review_revision_id: str | None = None
         self._status = "Ready — plan the timeline to begin"
         self._events: list[str] = []
         self._mannequin_preview_url = QUrl()
         self._mannequin_preview_revision = 0
-        self._review_segment_index = 0
         self._wan_worker = WanWorkerProcess(self)
         self._wan_worker.eventReceived.connect(self._handle_worker_event)
         self._wan_worker.transportError.connect(self._handle_worker_transport_error)
@@ -417,13 +417,42 @@ class DesktopController(QObject):
     def reviewFrameLabels(self) -> list[str]:  # noqa: N802
         return [str(index) for index in range(self.reviewFrameCount)]
 
+    @Property("QStringList", notify=projectChanged)
+    def reviewRevisionLabels(self) -> list[str]:  # noqa: N802
+        if not self._session.project.segments:
+            return []
+        segment = self._session.project.segments[
+            min(self._review_segment_index, len(self._session.project.segments) - 1)
+        ]
+        revisions = {
+            item.revision_id: item for item in self._session.project.segment_revisions
+        }
+        return [
+            f"Revision {revisions[revision_id].revision_number} · "
+            f"{revisions[revision_id].review_state.value}"
+            for revision_id in segment.revision_ids
+            if revision_id in revisions
+        ]
+
+    @Property(int, notify=projectChanged)
+    def reviewRevisionIndex(self) -> int:  # noqa: N802
+        if not self._session.project.segments:
+            return -1
+        segment = self._session.project.segments[
+            min(self._review_segment_index, len(self._session.project.segments) - 1)
+        ]
+        if not segment.revision_ids:
+            return -1
+        if self._review_revision_id in segment.revision_ids:
+            return segment.revision_ids.index(self._review_revision_id)
+        return len(segment.revision_ids) - 1
+
     @Property(str, notify=projectChanged)
     def reviewMetadata(self) -> str:  # noqa: N802
         revision = self._selected_review_revision()
         if revision is None:
             return "No generated revision selected"
         request = revision.source_request
-        segment = self._session.project.segments[self._review_segment_index]
         anchors = "/".join(
             item
             for item in (
@@ -441,7 +470,7 @@ class DesktopController(QObject):
             f"seed {revision.seed} · {request.frame_count} frames at "
             f"{request.generation_fps:g} fps · "
             f"{(request.end_ms - request.start_ms) / 1000:g}s · anchors: {anchors}\n"
-            f"Prompt: {segment.prompt or request.prompt or '—'}\n"
+            f"Prompt: {request.prompt or '—'}\n"
             f"Parameters: {parameters}"
         )
 
@@ -542,6 +571,8 @@ class DesktopController(QObject):
         self._session = self._new_session(duration_ms)
         self._asset_store = self._store_for_project(self._session.project.project_id)
         self._project_name = "Untitled Wan2Lab Project"
+        self._review_segment_index = 0
+        self._review_revision_id = None
         self._events.clear()
         self._draft_keyframe_regions.clear()
         self._face_batch_draft = None
@@ -2845,6 +2876,7 @@ class DesktopController(QObject):
         )
         self._project_name = Path(path).stem
         self._review_segment_index = 0
+        self._review_revision_id = None
         self._events.clear()
         self._draft_keyframe_regions.clear()
         self._face_batch_draft = None
@@ -2867,6 +2899,22 @@ class DesktopController(QObject):
                 max(0, segment_index),
                 len(self._session.project.segments) - 1,
             )
+        self._review_revision_id = None
+        self.projectChanged.emit()
+
+    @Slot(int)
+    def selectReviewRevision(self, revision_index: int) -> None:  # noqa: N802
+        if not self._session.project.segments:
+            self._review_revision_id = None
+            return
+        segment = self._session.project.segments[
+            min(self._review_segment_index, len(self._session.project.segments) - 1)
+        ]
+        if not segment.revision_ids:
+            self._review_revision_id = None
+            return
+        index = min(max(0, revision_index), len(segment.revision_ids) - 1)
+        self._review_revision_id = segment.revision_ids[index]
         self.projectChanged.emit()
 
     def _selected_review_revision(self):
@@ -2876,7 +2924,7 @@ class DesktopController(QObject):
         segment = self._session.project.segments[index]
         if not segment.revision_ids:
             return None
-        revision_id = segment.revision_ids[-1]
+        revision_id = segment.revision_ids[self.reviewRevisionIndex]
         return next(
             (
                 item

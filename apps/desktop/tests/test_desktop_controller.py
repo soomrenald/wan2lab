@@ -359,6 +359,23 @@ class DesktopControllerTests(unittest.TestCase):
             SegmentState.READY_FOR_REVIEW,
         )
 
+    def test_review_revision_selector_inspects_preserved_history(self) -> None:
+        controller = DesktopController()
+        controller.planMockTimeline()
+        controller.generateNextMockSegment()
+        controller.rejectCurrentSegment("visible flicker")
+        controller.regenerateRejectedMockSegment()
+
+        self.assertEqual(len(controller.reviewRevisionLabels), 2)
+        self.assertEqual(controller.reviewRevisionIndex, 1)
+        self.assertIn("Revision 2", controller.reviewMetadata)
+
+        controller.selectReviewRevision(0)
+
+        self.assertEqual(controller.reviewRevisionIndex, 0)
+        self.assertIn("Revision 1", controller.reviewMetadata)
+        self.assertIn("rejected", controller.reviewMetadata)
+
     def test_completed_frame_modification_creates_a_new_reviewable_revision(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
