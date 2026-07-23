@@ -68,6 +68,17 @@ class DesktopControllerTests(unittest.TestCase):
             SegmentState.READY_FOR_REVIEW,
         )
 
+    def test_output_fps_and_project_file_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "project.wan2lab.json"
+            controller = DesktopController(asset_base=Path(directory) / "assets")
+            controller.setOutputFps(30)
+            controller.saveProject(str(path))
+            opened = DesktopController(asset_base=Path(directory) / "opened-assets")
+            opened.openProject(str(path))
+            self.assertEqual(opened.outputFps, 30)
+            self.assertEqual(opened.session.project.project_settings.output_fps, 30)
+
     def test_integrated_mannequin_pose_guides_and_blender_import(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

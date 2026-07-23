@@ -22,6 +22,7 @@ from wan2core.characters import (
     PoseViewEntry,
     PoseViewSource,
 )
+from wan2core.export import ExportPlan, ExportState, build_export_plan
 from wan2core.keyframes import Keyframe, KeyframeSource
 from wan2core.keyframes.workflows import add_timeline_keyframe, register_pose_view_entry
 from wan2core.mannequin import JointPose, Quaternion
@@ -44,6 +45,7 @@ from wan2core.projects import (
     load_project,
     save_project,
 )
+from wan2core.projects.invalidation import change_output_fps
 from wan2core.segments import SegmentState
 from wan2core.timeline import Timeline
 from wan2core.provenance import ProvenanceRecord
@@ -56,6 +58,7 @@ from wan2core.workers import (
 )
 from wan2lab.backends.comfyui import BACKEND_ID
 from wan2lab.assets import LocalAssetStore
+from wan2lab.export_runner import ExportProcessRunner
 from wan2lab.mannequin import render_mannequin_guides
 from wan2lab.worker_client import WanWorkerProcess
 
@@ -92,6 +95,11 @@ class DesktopController(QObject):
         self._backend_status = "Local ComfyUI backend not inspected"
         self._backend_models: list[str] = []
         self._backend_parameters: list[str] = []
+        self._export_runner = ExportProcessRunner(self)
+        self._export_runner.progress.connect(self._handle_export_progress)
+        self._export_runner.completed.connect(self._complete_export)
+        self._export_runner.failed.connect(self._fail_export)
+        self._active_export_plan: ExportPlan | None = None
 
     @Property(str, notify=projectChanged)
     def projectName(self) -> str:  # noqa: N802 - Qt property naming
@@ -111,6 +119,14 @@ class DesktopController(QObject):
             segment.state is SegmentState.APPROVED_LOCKED
             for segment in self._session.project.segments
         )
+
+    @Property(float, notify=projectChanged)
+    def outputFps(self) -> float:  # noqa: N802
+        return self._session.project.timeline.output_fps
+
+    @Property(bool, notify=statusChanged)
+    def exportRunning(self) -> bool:  # noqa: N802
+        return self._export_runner.running
 
     @Property(str, notify=statusChanged)
     def status(self) -> str:
@@ -225,6 +241,7 @@ class DesktopController(QObject):
     @Slot()
     def closeWorker(self) -> None:  # noqa: N802
         self._wan_worker.close()
+        self._export_runner.cancel()
 
     @Slot(str)
     def createMannequinScene(self, name: str) -> None:  # noqa: N802
@@ -575,6 +592,79 @@ class DesktopController(QObject):
             return
         self._set_status(f"Saved {path}")
 
+    @Slot(QUrl)
+    def saveProjectFile(self, url: QUrl) -> None:  # noqa: N802
+        path = Path(url.toLocalFile()).expanduser()
+        if not path.suffix:
+            path = path.with_suffix(".wan2lab.json")
+        self.saveProject(str(path))
+
+    @Slot(QUrl)
+    def openProjectFile(self, url: QUrl) -> None:  # noqa: N802
+        self.openProject(str(Path(url.toLocalFile()).expanduser()))
+
+    @Slot(float)
+    def setOutputFps(self, output_fps: float) -> None:  # noqa: N802
+        try:
+            self._session.project = Wan2LabProject.model_validate(
+                change_output_fps(self._session.project, output_fps).model_dump()
+            )
+        except Exception as error:
+            self._set_status(f"Output FPS change failed: {error}")
+            return
+        self._append_event(f"Set duration-preserving output FPS to {output_fps:g}")
+        self._set_status("Output FPS updated; generation timing is unchanged")
+        self.projectChanged.emit()
+
+    @Slot(QUrl)
+    def exportApprovedVideo(self, url: QUrl) -> None:  # noqa: N802
+        if self._export_runner.running:
+            self._set_status("An export is already running")
+            return
+        output = Path(url.toLocalFile()).expanduser().resolve()
+        if not output.suffix:
+            output = output.with_suffix(".mp4")
+        try:
+            revisions = {item.revision_id: item for item in self._session.project.segment_revisions}
+            source_paths = {}
+            for segment in self._session.project.segments:
+                revision_id = segment.current_approved_revision_id
+                if revision_id is None:
+                    continue
+                revision = revisions[revision_id]
+                result_asset = next(
+                    item
+                    for item in self._session.project.assets
+                    if item.asset_id == revision.result_asset_id
+                )
+                source_paths[result_asset.asset_id] = str(
+                    self._asset_store.resolve_ref(result_asset)
+                )
+            plan = build_export_plan(
+                export_id=f"export-{uuid4().hex}",
+                segments=self._session.project.segments,
+                revisions=self._session.project.segment_revisions,
+                source_paths=source_paths,
+                output_path=str(output),
+                output_fps=self.outputFps,
+                ffmpeg_executable=self._session.project.project_settings.ffmpeg_executable,
+                work_directory=str(output.parent / f".{output.stem}-wan2lab-work"),
+                provenance_id=f"provenance-{uuid4().hex}",
+            )
+            self._active_export_plan = plan
+            self._export_runner.start(plan)
+        except Exception as error:
+            self._active_export_plan = None
+            self._set_status(f"Export planning failed: {error}")
+            return
+        self._append_event(f"Started non-blocking export to {output}")
+        self._set_status("Exporting approved immutable revisions…")
+        self.statusChanged.emit()
+
+    @Slot()
+    def cancelExport(self) -> None:  # noqa: N802
+        self._export_runner.cancel()
+
     @Slot(str)
     def openProject(self, path: str) -> None:  # noqa: N802
         try:
@@ -682,6 +772,79 @@ class DesktopController(QObject):
         self._backend_status = message
         self._append_event(message)
         self.statusChanged.emit()
+
+    @Slot(str, int, int)
+    def _handle_export_progress(self, stage: str, current: int, total: int) -> None:
+        self._set_status(f"Export {stage}: {current}/{total}")
+
+    @Slot(str)
+    def _complete_export(self, output_path: str) -> None:
+        plan = self._active_export_plan
+        self._active_export_plan = None
+        if plan is None:
+            self._set_status("Export completed without an active plan")
+            return
+        try:
+            parent_ids = tuple(
+                revision.result_asset_id
+                for revision in self._session.project.segment_revisions
+                if revision.review_state.value == "approved" and revision.result_asset_id is not None
+            )
+            record = self._asset_store.register_generated(
+                Path(output_path),
+                media_type="video/mp4",
+                parent_asset_ids=parent_ids,
+                metadata={"export_id": plan.export_id, "output_fps": plan.output_fps},
+            )
+            output_asset = AssetRef(
+                asset_id=record.asset_id,
+                kind=AssetKind.VIDEO,
+                storage_path=record.relative_path,
+                sha256=record.sha256,
+                width=self._session.project.project_settings.width,
+                height=self._session.project.project_settings.height,
+                frame_count=max(
+                    1,
+                    round(
+                        self._session.project.timeline.duration_ms * plan.output_fps / 1000
+                    ),
+                ),
+                duration_ms=self._session.project.timeline.duration_ms,
+                parent_asset_ids=record.parent_asset_ids,
+            )
+            provenance = ProvenanceRecord(
+                provenance_id=plan.provenance_id,
+                operation="assemble_approved_segments",
+                created_at=datetime.now(UTC),
+                parameters={"output_fps": plan.output_fps},
+                input_asset_ids=parent_ids,
+                output_asset_ids=(output_asset.asset_id,),
+                runtime={"ffmpeg": self._session.project.project_settings.ffmpeg_executable},
+            )
+            complete = plan.model_copy(update={"state": ExportState.COMPLETE})
+            updated = self._session.project.model_copy(
+                update={
+                    "assets": (*self._session.project.assets, output_asset),
+                    "generation_records": (
+                        *self._session.project.generation_records,
+                        provenance,
+                    ),
+                    "exports": (*self._session.project.exports, complete),
+                }
+            )
+            self._session.project = Wan2LabProject.model_validate(updated.model_dump())
+        except Exception as error:
+            self._set_status(f"Export registration failed: {error}")
+            return
+        self._append_event(f"Export completed and registered as {output_asset.asset_id}")
+        self._set_status(f"Export complete: {output_path}")
+        self.projectChanged.emit()
+
+    @Slot(str)
+    def _fail_export(self, message: str) -> None:
+        self._active_export_plan = None
+        self._append_event(message)
+        self._set_status(message)
 
     def _set_status(self, value: str) -> None:
         self._status = value

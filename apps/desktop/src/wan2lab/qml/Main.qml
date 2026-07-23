@@ -21,6 +21,30 @@ ApplicationWindow {
     }
 
     FileDialog {
+        id: saveProjectDialog
+        title: "Save Wan2Lab project"
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["Wan2Lab project (*.wan2lab.json)", "JSON (*.json)"]
+        onAccepted: studio.saveProjectFile(selectedFile)
+    }
+
+    FileDialog {
+        id: openProjectDialog
+        title: "Open Wan2Lab project"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["Wan2Lab project (*.wan2lab.json *.json)"]
+        onAccepted: studio.openProjectFile(selectedFile)
+    }
+
+    FileDialog {
+        id: exportVideoDialog
+        title: "Export approved timeline"
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["MP4 video (*.mp4)"]
+        onAccepted: studio.exportApprovedVideo(selectedFile)
+    }
+
+    FileDialog {
         id: blenderSceneDialog
         title: "Import Blender mannequin JSON"
         nameFilters: ["Wan2Lab mannequin scene (*.json)"]
@@ -54,6 +78,8 @@ ApplicationWindow {
             Label { text: studio.projectName; color: "#aeb9cb" }
             Item { Layout.fillWidth: true }
             Button { text: "New"; onClicked: studio.newProject(18) }
+            Button { text: "Open"; onClicked: openProjectDialog.open() }
+            Button { text: "Save"; onClicked: saveProjectDialog.open() }
             Button { text: "Plan"; onClicked: studio.planMockTimeline() }
             Button { text: "Generate next"; onClicked: studio.generateNextMockSegment() }
             Button { text: "Approve"; onClicked: studio.approveCurrentSegment() }
@@ -227,6 +253,22 @@ ApplicationWindow {
                 Label { text: "Prompt and action controls"; color: "#aeb9cb" }
                 Label { text: "Character assignments"; color: "#aeb9cb" }
                 Label { text: "Review and provenance"; color: "#aeb9cb" }
+                RowLayout {
+                    Label { text: "Output FPS"; color: "#aeb9cb" }
+                    SpinBox {
+                        id: outputFps
+                        from: 1
+                        to: 120
+                        value: Math.round(studio.outputFps)
+                        onValueModified: studio.setOutputFps(value)
+                    }
+                    Button {
+                        text: studio.exportRunning ? "Cancel" : "Export"
+                        onClicked: studio.exportRunning
+                            ? studio.cancelExport()
+                            : exportVideoDialog.open()
+                    }
+                }
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
                 Label { text: "Mannequin pose & camera"; font.bold: true }
                 RowLayout {

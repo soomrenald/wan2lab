@@ -10,6 +10,7 @@ from uuid import uuid4
 from PIL import Image
 
 from k2core.assets import AssetRecord
+from wan2core.assets import AssetRef
 
 
 class LocalAssetStore:
@@ -66,6 +67,31 @@ class LocalAssetStore:
     def verify(self, asset: AssetRecord) -> bool:
         path = self.resolve(asset)
         return path.is_file() and _sha256(path) == asset.sha256
+
+    def resolve_ref(self, asset: AssetRef) -> Path:
+        resolved = (self.root / asset.storage_path).resolve()
+        if self.root not in resolved.parents:
+            raise ValueError("asset path escapes the local store")
+        if not resolved.is_file():
+            raise FileNotFoundError(resolved)
+        if _sha256(resolved) != asset.sha256:
+            raise ValueError(f"asset hash mismatch: {asset.asset_id}")
+        return resolved
+
+    def copy_to(self, target_root: Path, assets: tuple[AssetRef, ...]) -> "LocalAssetStore":
+        target = LocalAssetStore(target_root)
+        for asset in assets:
+            source = self.resolve_ref(asset)
+            destination = (target.root / asset.storage_path).resolve()
+            if target.root not in destination.parents:
+                raise ValueError("asset path escapes target local store")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.exists():
+                if _sha256(destination) != asset.sha256:
+                    raise FileExistsError(f"different asset already exists: {destination}")
+                continue
+            shutil.copy2(source, destination)
+        return target
 
     def _copy(
         self,
