@@ -84,6 +84,7 @@ from wan2core.identity.workflows import (
 from wan2core.mannequin import (
     ContactConstraint,
     JointPose,
+    MannequinInstance,
     Quaternion,
     SceneLight,
     SceneProp,
@@ -184,6 +185,7 @@ class DesktopController(QObject):
         self._events: list[str] = []
         self._mannequin_preview_url = QUrl()
         self._mannequin_preview_revision = 0
+        self._mannequin_instance_index = 0
         self._preview_keyframe_index = 0
         self._wan_worker = WanWorkerProcess(self)
         self._wan_worker.eventReceived.connect(self._handle_worker_event)
@@ -509,6 +511,22 @@ class DesktopController(QObject):
         return [item.name for item in self._session.project.mannequin_poses]
 
     @Property("QStringList", notify=projectChanged)
+    def mannequinInstanceNames(self) -> list[str]:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            return []
+        return [
+            item.name for item in self._session.project.mannequin_scenes[-1].instances
+        ]
+
+    @Property("QStringList", notify=projectChanged)
+    def mannequinJointNames(self) -> list[str]:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            return []
+        scene = self._session.project.mannequin_scenes[-1]
+        _index, instance = self._selected_mannequin_instance(scene)
+        return [item.joint_name for item in instance.joints]
+
+    @Property("QStringList", notify=projectChanged)
     def mannequinGuideLabels(self) -> list[str]:  # noqa: N802
         asset_ids = {
             asset.asset_id: asset.storage_path for asset in self._session.project.assets
@@ -816,7 +834,7 @@ class DesktopController(QObject):
         if not self._session.project.mannequin_scenes:
             return "No mannequin scene"
         scene = self._session.project.mannequin_scenes[-1]
-        instance = scene.instances[0]
+        _instance_index, instance = self._selected_mannequin_instance(scene)
         region = instance.character_region_id or "unassigned"
         return (
             f"{scene.name} · {len(scene.instances)} mannequin(s) · "
@@ -939,6 +957,7 @@ class DesktopController(QObject):
         self._pending_checkpoint_application = None
         self._mannequin_preview_url = QUrl()
         self._preview_keyframe_index = 0
+        self._mannequin_instance_index = 0
         self._set_status("New project ready")
         self.projectChanged.emit()
         self.eventLogChanged.emit()
@@ -1250,6 +1269,7 @@ class DesktopController(QObject):
             height=self._session.project.project_settings.height,
         )
         self._session.project = save_mannequin_scene(self._session.project, scene)
+        self._mannequin_instance_index = 0
         self._refresh_mannequin_preview()
         self._append_event(f"Created integrated mannequin scene {scene.name}")
         self._set_status("Adjust pose and camera, then render reproducible guides")
@@ -1261,7 +1281,7 @@ class DesktopController(QObject):
             self._set_status("Create a mannequin scene first")
             return
         scene = self._session.project.mannequin_scenes[-1]
-        instance = scene.instances[0]
+        instance_index, instance = self._selected_mannequin_instance(scene)
         rotations = {
             "shoulder_l": self._z_rotation(left_degrees),
             "shoulder_r": self._z_rotation(right_degrees),
@@ -1275,10 +1295,117 @@ class DesktopController(QObject):
         )
         changed_instance = instance.model_copy(update={"joints": joints})
         changed_scene = scene.model_copy(
-            update={"instances": (changed_instance, *scene.instances[1:])}
+            update={
+                "instances": tuple(
+                    changed_instance if index == instance_index else item
+                    for index, item in enumerate(scene.instances)
+                )
+            }
         )
         self._session.project = save_mannequin_scene(self._session.project, changed_scene)
         self._refresh_mannequin_preview()
+        self.projectChanged.emit()
+
+    @Slot(str)
+    def addMannequinInstance(self, name: str) -> None:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            scene = self._session.project.mannequin_scenes[-1]
+            template = scene.instances[0]
+            instance = MannequinInstance(
+                instance_id=f"{scene.scene_id}-mannequin-{uuid4().hex}",
+                name=name.strip() or f"Mannequin {len(scene.instances) + 1}",
+                skeleton_id=template.skeleton_id,
+                skeleton=template.skeleton,
+                joints=tuple(
+                    JointPose(joint_name=item.joint_name) for item in template.joints
+                ),
+                body_proportions=dict(template.body_proportions),
+                world_transform=Transform(
+                    translation=Vector3(x=0.8 * len(scene.instances))
+                ),
+            )
+            changed = scene.model_copy(
+                update={"instances": (*scene.instances, instance)}
+            )
+            self._session.project = save_mannequin_scene(
+                self._session.project,
+                changed,
+            )
+            self._mannequin_instance_index = len(changed.instances) - 1
+        except Exception as error:
+            self._set_status(f"Mannequin could not be added: {error}")
+            return
+        self._refresh_mannequin_preview()
+        self._set_status(f"Added and selected {instance.name}")
+        self.projectChanged.emit()
+
+    @Slot(int)
+    def selectMannequinInstance(self, instance_index: int) -> None:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        scene = self._session.project.mannequin_scenes[-1]
+        if not 0 <= instance_index < len(scene.instances):
+            self._set_status("Select an existing mannequin")
+            return
+        self._mannequin_instance_index = instance_index
+        self._set_status(f"Selected {scene.instances[instance_index].name}")
+        self.projectChanged.emit()
+
+    @Slot(int, float, float, float)
+    def setMannequinJointRotation(  # noqa: N802
+        self,
+        joint_index: int,
+        x_degrees: float,
+        y_degrees: float,
+        z_degrees: float,
+    ) -> None:
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            if any(
+                not -180.0 <= value <= 180.0
+                for value in (x_degrees, y_degrees, z_degrees)
+            ):
+                raise ValueError("joint rotations must be between -180 and 180 degrees")
+            scene = self._session.project.mannequin_scenes[-1]
+            instance_index, instance = self._selected_mannequin_instance(scene)
+            joint = instance.joints[joint_index]
+            changed_joint = joint.model_copy(
+                update={
+                    "rotation": self._euler_rotation(
+                        x_degrees,
+                        y_degrees,
+                        z_degrees,
+                    )
+                }
+            )
+            joints = tuple(
+                changed_joint if index == joint_index else item
+                for index, item in enumerate(instance.joints)
+            )
+            changed_instance = instance.model_copy(update={"joints": joints})
+            changed_scene = scene.model_copy(
+                update={
+                    "instances": tuple(
+                        changed_instance if index == instance_index else item
+                        for index, item in enumerate(scene.instances)
+                    )
+                }
+            )
+            self._session.project = save_mannequin_scene(
+                self._session.project,
+                changed_scene,
+            )
+        except Exception as error:
+            self._set_status(f"Mannequin joint update failed: {error}")
+            return
+        self._refresh_mannequin_preview()
+        self._set_status(f"Updated {joint.joint_name} rotation")
         self.projectChanged.emit()
 
     @Slot(float)
@@ -1349,10 +1476,11 @@ class DesktopController(QObject):
             if any(not 0.5 <= value <= 1.75 for value in (height_scale, width_scale, limb_scale)):
                 raise ValueError("mannequin proportions must be between 0.5 and 1.75")
             scene = self._session.project.mannequin_scenes[-1]
-            instance = scene.instances[0].model_copy(
+            instance_index, selected_instance = self._selected_mannequin_instance(scene)
+            instance = selected_instance.model_copy(
                 update={
                     "body_proportions": {
-                        **scene.instances[0].body_proportions,
+                        **selected_instance.body_proportions,
                         "height_scale": height_scale,
                         "width_scale": width_scale,
                         "limb_scale": limb_scale,
@@ -1360,7 +1488,12 @@ class DesktopController(QObject):
                 }
             )
             changed = scene.model_copy(
-                update={"instances": (instance, *scene.instances[1:])}
+                update={
+                    "instances": tuple(
+                        instance if index == instance_index else item
+                        for index, item in enumerate(scene.instances)
+                    )
+                }
             )
             self._session.project = save_mannequin_scene(self._session.project, changed)
         except Exception as error:
@@ -1408,11 +1541,19 @@ class DesktopController(QObject):
         try:
             pose = self._session.project.mannequin_poses[pose_index]
             scene = self._session.project.mannequin_scenes[-1]
-            instance = apply_pose(scene.instances[0], pose)
+            instance_index, selected_instance = self._selected_mannequin_instance(
+                scene
+            )
+            instance = apply_pose(selected_instance, pose)
             self._session.project = save_mannequin_scene(
                 self._session.project,
                 scene.model_copy(
-                    update={"instances": (instance, *scene.instances[1:])}
+                    update={
+                        "instances": tuple(
+                            instance if index == instance_index else item
+                            for index, item in enumerate(scene.instances)
+                        )
+                    }
                 ),
             )
         except Exception as error:
@@ -1430,13 +1571,21 @@ class DesktopController(QObject):
         try:
             region = self._draft_keyframe_regions[region_index]
             scene = self._session.project.mannequin_scenes[-1]
-            instance = scene.instances[0].model_copy(
+            instance_index, selected_instance = self._selected_mannequin_instance(
+                scene
+            )
+            instance = selected_instance.model_copy(
                 update={"character_region_id": region.region_id}
             )
             self._session.project = save_mannequin_scene(
                 self._session.project,
                 scene.model_copy(
-                    update={"instances": (instance, *scene.instances[1:])}
+                    update={
+                        "instances": tuple(
+                            instance if index == instance_index else item
+                            for index, item in enumerate(scene.instances)
+                        )
+                    }
                 ),
             )
         except Exception as error:
@@ -1488,7 +1637,7 @@ class DesktopController(QObject):
             return
         try:
             scene = self._session.project.mannequin_scenes[-1]
-            instance = scene.instances[0]
+            _instance_index, instance = self._selected_mannequin_instance(scene)
             known_joints = {item.joint_name for item in instance.joints}
             if joint_name.strip() not in known_joints:
                 raise ValueError("contact joint is not present on the mannequin")
@@ -1555,8 +1704,9 @@ class DesktopController(QObject):
             self._set_status("Create a mannequin scene first")
             return
         scene = self._session.project.mannequin_scenes[-1]
+        _instance_index, instance = self._selected_mannequin_instance(scene)
         pose = save_pose_from_instance(
-            scene.instances[0],
+            instance,
             pose_id=f"mannequin-pose-{uuid4().hex}",
             name=name.strip() or scene.name,
         )
@@ -4280,6 +4430,32 @@ class DesktopController(QObject):
     def _z_rotation(degrees: float) -> Quaternion:
         half = math.radians(max(-180.0, min(180.0, degrees))) / 2
         return Quaternion(z=math.sin(half), w=math.cos(half))
+
+    @staticmethod
+    def _euler_rotation(
+        x_degrees: float,
+        y_degrees: float,
+        z_degrees: float,
+    ) -> Quaternion:
+        roll = math.radians(x_degrees) / 2
+        pitch = math.radians(y_degrees) / 2
+        yaw = math.radians(z_degrees) / 2
+        cr, sr = math.cos(roll), math.sin(roll)
+        cp, sp = math.cos(pitch), math.sin(pitch)
+        cy, sy = math.cos(yaw), math.sin(yaw)
+        return Quaternion(
+            x=sr * cp * cy - cr * sp * sy,
+            y=cr * sp * cy + sr * cp * sy,
+            z=cr * cp * sy - sr * sp * cy,
+            w=cr * cp * cy + sr * sp * sy,
+        )
+
+    def _selected_mannequin_instance(
+        self,
+        scene,
+    ) -> tuple[int, MannequinInstance]:
+        index = min(self._mannequin_instance_index, len(scene.instances) - 1)
+        return index, scene.instances[index]
 
     @staticmethod
     def _camera_rotation(yaw_degrees: float, pitch_degrees: float) -> Quaternion:

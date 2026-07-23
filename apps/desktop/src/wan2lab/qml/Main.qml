@@ -1683,6 +1683,65 @@ ApplicationWindow {
                     }
                     Button { text: "Create"; onClicked: studio.createMannequinScene(mannequinName.text) }
                 }
+                RowLayout {
+                    ComboBox {
+                        id: mannequinInstance
+                        Layout.fillWidth: true
+                        model: studio.mannequinInstanceNames
+                        displayText: count > 0 ? currentText : "No mannequin"
+                        onActivated: studio.selectMannequinInstance(index)
+                    }
+                    TextField {
+                        id: newMannequinName
+                        Layout.fillWidth: true
+                        placeholderText: "Additional figure"
+                    }
+                    Button {
+                        text: "Add"
+                        enabled: mannequinInstance.count > 0
+                        onClicked: studio.addMannequinInstance(newMannequinName.text)
+                    }
+                }
+                Label { text: "Selected joint rotation X / Y / Z"; color: "#aeb9cb" }
+                ComboBox {
+                    id: mannequinJoint
+                    Layout.fillWidth: true
+                    model: studio.mannequinJointNames
+                    displayText: count > 0 ? currentText : "No joints"
+                }
+                RowLayout {
+                    TextField {
+                        id: jointRotationX
+                        Layout.fillWidth: true
+                        text: "0"
+                        placeholderText: "X°"
+                        validator: DoubleValidator { bottom: -180; top: 180 }
+                    }
+                    TextField {
+                        id: jointRotationY
+                        Layout.fillWidth: true
+                        text: "0"
+                        placeholderText: "Y°"
+                        validator: DoubleValidator { bottom: -180; top: 180 }
+                    }
+                    TextField {
+                        id: jointRotationZ
+                        Layout.fillWidth: true
+                        text: "0"
+                        placeholderText: "Z°"
+                        validator: DoubleValidator { bottom: -180; top: 180 }
+                    }
+                    Button {
+                        text: "Pose"
+                        enabled: mannequinJoint.currentIndex >= 0
+                        onClicked: studio.setMannequinJointRotation(
+                            mannequinJoint.currentIndex,
+                            Number(jointRotationX.text),
+                            Number(jointRotationY.text),
+                            Number(jointRotationZ.text)
+                        )
+                    }
+                }
                 Label { text: "Left arm: " + Math.round(leftArm.value) + "°"; color: "#aeb9cb" }
                 Slider {
                     id: leftArm

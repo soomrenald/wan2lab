@@ -1422,6 +1422,32 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(imported.session.project.mannequin_scenes[0].source_type.value, "blender")
             self.assertEqual(len(imported.session.project.assets), 1)
 
+    def test_multiple_mannequins_support_selected_three_axis_joint_pose(self) -> None:
+        controller = DesktopController()
+        controller.createMannequinScene("Two figures")
+        controller.addMannequinInstance("Second figure")
+        elbow_index = controller.mannequinJointNames.index("elbow_l")
+
+        controller.setMannequinJointRotation(elbow_index, 35.0, -10.0, 20.0)
+        controller.saveCurrentMannequinPose("Bent elbow")
+
+        scene = controller.session.project.mannequin_scenes[0]
+        first_elbow = next(
+            item for item in scene.instances[0].joints if item.joint_name == "elbow_l"
+        )
+        second_elbow = next(
+            item for item in scene.instances[1].joints if item.joint_name == "elbow_l"
+        )
+        saved_elbow = next(
+            item
+            for item in controller.session.project.mannequin_poses[0].joints
+            if item.joint_name == "elbow_l"
+        )
+        self.assertEqual(controller.mannequinInstanceNames, ["Mannequin 1", "Second figure"])
+        self.assertEqual(first_elbow.rotation.w, 1.0)
+        self.assertNotEqual(second_elbow.rotation.w, 1.0)
+        self.assertEqual(saved_elbow.rotation, second_elbow.rotation)
+
 
 if __name__ == "__main__":
     unittest.main()
