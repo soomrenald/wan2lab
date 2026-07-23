@@ -226,11 +226,11 @@ class ComfyWanWorkflowBuilder:
                 "inputs": {
                     "vae": ["2", 0],
                     "samples": ["6", 0],
-                    "enable_vae_tiling": True,
-                    "tile_x": 272,
-                    "tile_y": 272,
-                    "tile_stride_x": 144,
-                    "tile_stride_y": 128,
+                    "enable_vae_tiling": bool(parameters.get("enable_vae_tiling", True)),
+                    "tile_x": int(parameters.get("tile_x", 272)),
+                    "tile_y": int(parameters.get("tile_y", 272)),
+                    "tile_stride_x": int(parameters.get("tile_stride_x", 144)),
+                    "tile_stride_y": int(parameters.get("tile_stride_y", 128)),
                 },
             },
             "8": {

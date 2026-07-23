@@ -38,9 +38,29 @@ def object_info() -> dict[str, object]:
                 "riflex_freq_index": ["INT", {"default": 0, "min": 0, "max": 1000}],
             }
         ),
-        "WanVideoDecode": node(),
+        "WanVideoDecode": node(
+            {
+                "enable_vae_tiling": ["BOOLEAN", {"default": True}],
+                "tile_x": ["INT", {"default": 272, "min": 64, "max": 1024}],
+                "tile_y": ["INT", {"default": 272, "min": 64, "max": 1024}],
+                "tile_stride_x": ["INT", {"default": 144, "min": 32, "max": 1024}],
+                "tile_stride_y": ["INT", {"default": 128, "min": 32, "max": 1024}],
+            }
+        ),
         "WanVideoEmptyEmbeds": node(),
-        "WanVideoImageToVideoEncode": node(),
+        "WanVideoImageToVideoEncode": node(
+            {
+                "noise_aug_strength": ["FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0}],
+                "start_latent_strength": [
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 1.0},
+                ],
+                "end_latent_strength": [
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 1.0},
+                ],
+            }
+        ),
         "WanVideoAnimateEmbeds": node(),
         "WanVideoMiniMaxRemoverEmbeds": node(),
     }
@@ -77,6 +97,11 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
         self.assertEqual(parameters["steps"].group, ParameterGroup.COMMON)
         self.assertEqual(parameters["shift"].group, ParameterGroup.ADVANCED)
         self.assertEqual(parameters["scheduler"].choices, ("unipc", "dpm++"))
+        self.assertEqual(parameters["tile_x"].maximum, 1024)
+        self.assertEqual(
+            parameters["noise_aug_strength"].applicable_modes,
+            frozenset({WanMode.I2V, WanMode.FIRST_LAST}),
+        )
 
     def test_missing_required_wrapper_node_is_rejected_before_queueing(self) -> None:
         incomplete = object_info()

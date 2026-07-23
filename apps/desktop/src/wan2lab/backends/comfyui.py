@@ -135,10 +135,9 @@ def inspect_comfyui_wan(
         WanMode.FIRST_LAST,
     }.intersection(wrapper_modes)
     executable_modes.update(executable_specialized_modes.intersection(wrapper_modes))
-    sampler_info = _node(object_info, nodes.sampler)
     model_loader_info = _node(object_info, nodes.model_loader)
     model_names = tuple(str(item) for item in _choices(model_loader_info, "model"))
-    descriptors = _sampler_descriptors(sampler_info, frozenset(executable_modes))
+    descriptors = _workflow_descriptors(object_info, frozenset(executable_modes), nodes)
     variants = tuple(
         _model_capabilities(name, executable_modes, descriptors)
         for name in model_names
@@ -244,14 +243,74 @@ def _modes_for_model(filename: str, wrapper_modes: set[WanMode]) -> set[WanMode]
     return modes.intersection(wrapper_modes)
 
 
-def _sampler_descriptors(
-    node_info: Mapping[str, object],
+def _workflow_descriptors(
+    object_info: Mapping[str, object],
     modes: frozenset[WanMode],
+    nodes: WrapperNodes,
+) -> tuple[ParameterDescriptor, ...]:
+    descriptors: dict[str, ParameterDescriptor] = {}
+    sources = (
+        (
+            nodes.sampler,
+            ("steps", "cfg", "shift", "scheduler", "force_offload", "riflex_freq_index"),
+            modes,
+        ),
+        (
+            nodes.image_embeds,
+            (
+                "noise_aug_strength",
+                "start_latent_strength",
+                "end_latent_strength",
+                "force_offload",
+            ),
+            modes.intersection({WanMode.I2V, WanMode.FIRST_LAST}),
+        ),
+        (
+            nodes.decoder,
+            (
+                "enable_vae_tiling",
+                "tile_x",
+                "tile_y",
+                "tile_stride_x",
+                "tile_stride_y",
+            ),
+            modes,
+        ),
+    )
+    for node_name, keys, applicable_modes in sources:
+        if not applicable_modes or node_name not in object_info:
+            continue
+        for descriptor in _node_descriptors(
+            _node(object_info, node_name),
+            keys=keys,
+            modes=frozenset(applicable_modes),
+            backend_node=node_name,
+        ):
+            existing = descriptors.get(descriptor.key)
+            if existing is None:
+                descriptors[descriptor.key] = descriptor
+            else:
+                descriptors[descriptor.key] = existing.model_copy(
+                    update={
+                        "applicable_modes": existing.applicable_modes.union(
+                            descriptor.applicable_modes
+                        )
+                    }
+                )
+    return tuple(descriptors.values())
+
+
+def _node_descriptors(
+    node_info: Mapping[str, object],
+    *,
+    keys: tuple[str, ...],
+    modes: frozenset[WanMode],
+    backend_node: str,
 ) -> tuple[ParameterDescriptor, ...]:
     required = _mapping(_mapping(node_info.get("input", {})).get("required", {}))
     descriptors = []
     common_keys = {"steps", "cfg", "scheduler", "seed"}
-    for key in ("steps", "cfg", "shift", "scheduler", "force_offload", "riflex_freq_index"):
+    for key in keys:
         specification = required.get(key)
         if not isinstance(specification, (list, tuple)) or not specification:
             continue
@@ -282,7 +341,7 @@ def _sampler_descriptors(
                 choices=choices,
                 applicable_modes=modes,
                 group=ParameterGroup.COMMON if key in common_keys else ParameterGroup.ADVANCED,
-                backend_key=f"{key}",
+                backend_key=f"{backend_node}.{key}",
                 help_text=str(options.get("tooltip", "")),
             )
         )

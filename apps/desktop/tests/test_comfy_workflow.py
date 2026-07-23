@@ -143,7 +143,15 @@ class ComfyWorkflowTests(unittest.TestCase):
             end_image_asset_id="last-frame",
         )
         plan = workflow_builder.build(
-            segment_request,
+            segment_request.model_copy(
+                update={
+                    "parameters": {
+                        "noise_aug_strength": 0.25,
+                        "enable_vae_tiling": False,
+                        "tile_x": 384,
+                    }
+                }
+            ),
             asset_inputs={"first-frame": "input/first.png", "last-frame": "input/last.png"},
             filename_prefix="segment-1",
             seed=1,
@@ -151,6 +159,9 @@ class ComfyWorkflowTests(unittest.TestCase):
         self.assertEqual(plan.workflow["9"]["inputs"]["image"], "input/first.png")
         self.assertEqual(plan.workflow["10"]["inputs"]["image"], "input/last.png")
         self.assertEqual(plan.workflow["5"]["inputs"]["end_image"], ["10", 0])
+        self.assertEqual(plan.workflow["5"]["inputs"]["noise_aug_strength"], 0.25)
+        self.assertFalse(plan.workflow["7"]["inputs"]["enable_vae_tiling"])
+        self.assertEqual(plan.workflow["7"]["inputs"]["tile_x"], 384)
 
     def test_animate_and_replace_use_explicit_versioned_templates(self) -> None:
         workflow_builder = builder()
