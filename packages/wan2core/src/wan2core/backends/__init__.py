@@ -54,7 +54,29 @@ class ParameterDescriptor(DomainModel):
             raise ValueError("enum parameters require choices")
         if not self.applicable_modes:
             raise ValueError("parameter must apply to at least one mode")
+        self.validate_value(self.default)
         return self
+
+    def validate_value(self, value: object) -> object:
+        """Validate a resolved value without coupling consumers to a UI toolkit."""
+
+        valid_type = {
+            ParameterType.INTEGER: isinstance(value, int) and not isinstance(value, bool),
+            ParameterType.NUMBER: isinstance(value, (int, float)) and not isinstance(value, bool),
+            ParameterType.BOOLEAN: isinstance(value, bool),
+            ParameterType.STRING: isinstance(value, str),
+            ParameterType.ENUM: value in self.choices,
+        }[self.parameter_type]
+        if not valid_type:
+            raise ValueError(f"{self.key} must have type {self.parameter_type.value}")
+        if self.choices and value not in self.choices:
+            raise ValueError(f"{self.key} must be one of {self.choices}")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if self.minimum is not None and value < self.minimum:
+                raise ValueError(f"{self.key} must be at least {self.minimum:g}")
+            if self.maximum is not None and value > self.maximum:
+                raise ValueError(f"{self.key} must be at most {self.maximum:g}")
+        return value
 
 
 class Resolution(DomainModel):
@@ -228,6 +250,22 @@ class BackendCapabilities(DomainModel):
             if model.model_id == model_id:
                 return model
         raise KeyError(model_id)
+
+    def parameters_for(
+        self,
+        model_id: str,
+        mode: WanMode,
+    ) -> tuple[ParameterDescriptor, ...]:
+        """Return effective descriptors with model declarations overriding backend defaults."""
+
+        model = self.model(model_id)
+        if mode not in model.supported_modes:
+            raise ValueError(f"model {model_id} does not support {mode.value}")
+        descriptors: dict[str, ParameterDescriptor] = {}
+        for descriptor in (*self.parameter_descriptors, *model.parameter_descriptors):
+            if mode in descriptor.applicable_modes:
+                descriptors[descriptor.key] = descriptor
+        return tuple(descriptors.values())
 
 
 __all__ = [

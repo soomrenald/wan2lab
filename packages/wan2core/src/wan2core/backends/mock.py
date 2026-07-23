@@ -148,13 +148,21 @@ class MockWanBackend:
         for field_name in required:
             if getattr(request, field_name, None) is None:
                 errors.append(f"required input is missing: {field_name}")
-        supported_parameter_keys = {
-            item.key for item in (*self._capabilities.parameter_descriptors, *model.parameter_descriptors)
-            if request.mode in item.applicable_modes
+        descriptors = {
+            item.key: item
+            for item in self._capabilities.parameters_for(request.model_id, request.mode)
         }
-        unknown = set(request.parameters) - supported_parameter_keys
+        unknown = set(request.parameters) - set(descriptors)
         if unknown:
             errors.append(f"unsupported parameters: {', '.join(sorted(unknown))}")
+        for key, value in request.parameters.items():
+            descriptor = descriptors.get(key)
+            if descriptor is None:
+                continue
+            try:
+                descriptor.validate_value(value)
+            except ValueError as error:
+                errors.append(f"invalid parameter {key}: {error}")
         return tuple(errors)
 
     def generate_segment(

@@ -150,11 +150,7 @@ class ComfyWanWorkflowBuilder:
     def _resolve_parameters(self, request: SegmentRequest) -> dict[str, object]:
         descriptors = {
             item.key: item
-            for item in (
-                *self.capabilities.parameter_descriptors,
-                *self.capabilities.model(request.model_id).parameter_descriptors,
-            )
-            if request.mode in item.applicable_modes
+            for item in self.capabilities.parameters_for(request.model_id, request.mode)
         }
         unknown = set(request.parameters) - set(descriptors)
         if unknown:
@@ -165,12 +161,10 @@ class ComfyWanWorkflowBuilder:
         resolved.update(request.parameters)
         for key, value in resolved.items():
             descriptor = descriptors[key]
-            if descriptor.minimum is not None and float(value) < descriptor.minimum:
-                raise WorkflowBindingError(f"{key} is below its backend minimum")
-            if descriptor.maximum is not None and float(value) > descriptor.maximum:
-                raise WorkflowBindingError(f"{key} exceeds its backend maximum")
-            if descriptor.choices and value not in descriptor.choices:
-                raise WorkflowBindingError(f"{key} is not an allowed backend choice")
+            try:
+                descriptor.validate_value(value)
+            except ValueError as error:
+                raise WorkflowBindingError(str(error)) from error
         return resolved
 
     def _standard_workflow(

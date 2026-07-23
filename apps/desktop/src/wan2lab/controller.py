@@ -922,6 +922,22 @@ class DesktopController(QObject):
     @Property("QVariantList", notify=projectChanged)
     def backendParameterDescriptors(self) -> list[dict[str, object]]:  # noqa: N802
         segment = self._selected_segment()
+        capabilities = self._inspected_capabilities
+        model = self._wan_model_control()
+        if capabilities is not None and model is not None:
+            mode = segment.mode if segment is not None else next(
+                iter(sorted(model.supported_modes, key=lambda item: item.value))
+            )
+            descriptors = (
+                [
+                    item.model_dump(mode="json")
+                    for item in capabilities.parameters_for(model.model_id, mode)
+                ]
+                if mode in model.supported_modes
+                else []
+            )
+        else:
+            descriptors = self._backend_parameter_descriptors
         return [
             {
                 **item,
@@ -931,7 +947,7 @@ class DesktopController(QObject):
                     else item.get("default")
                 ),
             }
-            for item in self._backend_parameter_descriptors
+            for item in descriptors
             if segment is None
             or segment.mode.value
             in {str(mode) for mode in item.get("applicable_modes", ())}
@@ -4273,7 +4289,7 @@ class DesktopController(QObject):
             self._set_status("Select an existing planned segment")
             return
         descriptor = next(
-            (item for item in self._backend_parameter_descriptors if item.get("key") == key),
+            (item for item in self.backendParameterDescriptors if item.get("key") == key),
             None,
         )
         if descriptor is None:

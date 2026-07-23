@@ -1068,6 +1068,40 @@ class DesktopControllerTests(unittest.TestCase):
         self.assertEqual(planned.frame_count, segment.frame_count)
         self.assertEqual(controller.session.segment_plan, controller.session.project.segment_plan)
 
+    def test_segment_inspector_uses_model_parameter_override(self) -> None:
+        controller = DesktopController()
+        controller.planMockTimeline()
+        backend_descriptor = ParameterDescriptor(
+            key="steps",
+            display_name="Steps",
+            parameter_type=ParameterType.INTEGER,
+            default=20,
+            minimum=1,
+            maximum=100,
+            applicable_modes=frozenset({WanMode.PROMPT}),
+            group=ParameterGroup.COMMON,
+            backend_key="steps",
+        )
+        model_descriptor = backend_descriptor.model_copy(
+            update={"default": 8, "maximum": 10}
+        )
+        capability_payload = default_mock_capabilities().model_dump(mode="json")
+        capability_payload["parameter_descriptors"] = [
+            backend_descriptor.model_dump(mode="json")
+        ]
+        capability_payload["model_variants"][0]["parameter_descriptors"] = [
+            model_descriptor.model_dump(mode="json")
+        ]
+        controller._handle_worker_event(  # noqa: SLF001
+            CapabilitiesEvent(command_id="inspect-test", capabilities=capability_payload)
+        )
+
+        self.assertEqual(controller.backendParameterDescriptors[0]["default"], 8)
+        self.assertEqual(controller.backendParameterDescriptors[0]["maximum"], 10)
+        controller.setSegmentBackendParameter(0, "steps", "11")
+        self.assertNotIn("steps", controller.session.project.segments[0].parameters)
+        self.assertIn("at most 10", controller.status)
+
     def test_mode_specific_assets_and_continuation_flow_into_animate_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
