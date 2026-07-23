@@ -78,7 +78,15 @@ from wan2core.identity.workflows import (
     propose_checkpoint_from_warnings,
     register_identity_analysis,
 )
-from wan2core.mannequin import JointPose, Quaternion, SceneLight, Transform, Vector3
+from wan2core.mannequin import (
+    ContactConstraint,
+    JointPose,
+    Quaternion,
+    SceneLight,
+    SceneProp,
+    Transform,
+    Vector3,
+)
 from wan2core.mannequin.workflows import (
     GuideKind,
     KreaMannequinCapabilities,
@@ -199,6 +207,7 @@ class DesktopController(QObject):
         self._active_wan_jobs: dict[str, str] = {}
         self._krea_status = "Local Krea worker not inspected"
         self._krea_loaded = False
+        self._krea_depth_control_model_ids: tuple[str, ...] = ()
         self._krea_load_command_id: str | None = None
         self._pending_krea_jobs: dict[str, dict[str, object]] = {}
         self._style_duplications: dict[str, dict[str, object]] = {}
@@ -616,15 +625,14 @@ class DesktopController(QObject):
         if not self._session.project.mannequin_scenes:
             return "No mannequin scene"
         scene = self._session.project.mannequin_scenes[-1]
-        by_kind = (
-            dict(zip(GuideKind, scene.guide_asset_ids[-3:], strict=True))
-            if len(scene.guide_asset_ids) >= 3
-            else {}
-        )
+        by_kind = self._mannequin_guide_assets(scene.scene_id)
         try:
             plan = plan_krea_conditioning(
                 scene=scene,
-                capabilities=KreaMannequinCapabilities(supports_i2i=True),
+                capabilities=KreaMannequinCapabilities(
+                    depth_control_model_ids=self._krea_depth_control_model_ids,
+                    supports_i2i=True,
+                ),
                 guide_assets=by_kind,
             )
         except ValueError:
@@ -1200,6 +1208,110 @@ class DesktopController(QObject):
             self._set_status(f"Mannequin region association failed: {error}")
             return
         self._set_status(f"Mannequin associated with {region.name}")
+        self.projectChanged.emit()
+
+    @Slot(str, float, float, float)
+    def addMannequinProp(  # noqa: N802
+        self,
+        name: str,
+        x: float,
+        y: float,
+        z: float,
+    ) -> None:
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            if not name.strip():
+                raise ValueError("prop name is required")
+            scene = self._session.project.mannequin_scenes[-1]
+            prop = SceneProp(
+                prop_id=f"mannequin-prop-{uuid4().hex}",
+                name=name.strip(),
+                transform=Transform(translation=Vector3(x=x, y=y, z=z)),
+            )
+            self._session.project = save_mannequin_scene(
+                self._session.project,
+                scene.model_copy(update={"props": (*scene.props, prop)}),
+            )
+        except Exception as error:
+            self._set_status(f"Mannequin prop could not be added: {error}")
+            return
+        self._set_status(f"Added mannequin scene prop {prop.name}")
+        self.projectChanged.emit()
+
+    @Slot(str, float, float, float)
+    def addMannequinContact(  # noqa: N802
+        self,
+        joint_name: str,
+        x: float,
+        y: float,
+        z: float,
+    ) -> None:
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            scene = self._session.project.mannequin_scenes[-1]
+            instance = scene.instances[0]
+            known_joints = {item.joint_name for item in instance.joints}
+            if joint_name.strip() not in known_joints:
+                raise ValueError("contact joint is not present on the mannequin")
+            contact = ContactConstraint(
+                instance_id=instance.instance_id,
+                joint_name=joint_name.strip(),
+                target=Vector3(x=x, y=y, z=z),
+            )
+            self._session.project = save_mannequin_scene(
+                self._session.project,
+                scene.model_copy(
+                    update={
+                        "contact_constraints": (*scene.contact_constraints, contact)
+                    }
+                ),
+            )
+        except Exception as error:
+            self._set_status(f"Mannequin contact could not be added: {error}")
+            return
+        self._set_status(f"Added contact constraint for {contact.joint_name}")
+        self.projectChanged.emit()
+
+    @Slot(QUrl, str)
+    def importMannequinGuide(self, source_url: QUrl, guide_kind: str) -> None:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            kind = GuideKind(guide_kind)
+            source = Path(source_url.toLocalFile()).expanduser().resolve()
+            record = self._asset_store.register_imported(
+                source,
+                media_type=image_media_type(source),
+                metadata={
+                    "operation": "import_mannequin_guide",
+                    "guide_kind": kind.value,
+                },
+            )
+            asset = self._wan_asset(record, AssetKind.MANNEQUIN_GUIDE)
+            scene = self._session.project.mannequin_scenes[-1]
+            provenance = ProvenanceRecord(
+                provenance_id=f"provenance-{uuid4().hex}",
+                operation="import_mannequin_guide",
+                created_at=datetime.now(UTC),
+                output_asset_ids=(asset.asset_id,),
+                parameters={"scene_id": scene.scene_id, "guide_kind": kind.value},
+            )
+            self._session.project = attach_rendered_guides(
+                self._session.project,
+                scene_id=scene.scene_id,
+                assets=(asset,),
+                provenance=(provenance,),
+            )
+        except Exception as error:
+            self._set_status(f"Mannequin guide import failed: {error}")
+            return
+        self._append_event(f"Imported immutable {kind.value} mannequin guide")
+        self._set_status("Mannequin guide imported for capability-gated conditioning")
         self.projectChanged.emit()
 
     @Slot(str)
@@ -1835,11 +1947,14 @@ class DesktopController(QObject):
             conditioning_path = None
             if self._session.project.mannequin_scenes:
                 scene = self._session.project.mannequin_scenes[-1]
-                if len(scene.guide_asset_ids) >= 3:
-                    guides = dict(zip(GuideKind, scene.guide_asset_ids[-3:], strict=True))
+                guides = self._mannequin_guide_assets(scene.scene_id)
+                if guides:
                     conditioning = plan_krea_conditioning(
                         scene=scene,
-                        capabilities=KreaMannequinCapabilities(supports_i2i=True),
+                        capabilities=KreaMannequinCapabilities(
+                            depth_control_model_ids=self._krea_depth_control_model_ids,
+                            supports_i2i=True,
+                        ),
                         guide_assets=guides,
                     )
                     mannequin_guide_asset_id = conditioning.guide_asset_id
@@ -3581,6 +3696,29 @@ class DesktopController(QObject):
     def _store_for_project(self, project_id: str) -> LocalAssetStore:
         return LocalAssetStore(self._asset_base / project_id / "assets")
 
+    def _mannequin_guide_assets(self, scene_id: str) -> dict[GuideKind, str]:
+        scene = next(
+            item
+            for item in self._session.project.mannequin_scenes
+            if item.scene_id == scene_id
+        )
+        available = set(scene.guide_asset_ids)
+        guides: dict[GuideKind, str] = {}
+        for record in self._session.project.generation_records:
+            if record.parameters.get("scene_id") != scene_id:
+                continue
+            try:
+                kind = GuideKind(str(record.parameters["guide_kind"]))
+            except (KeyError, ValueError):
+                continue
+            output = next(
+                (item for item in record.output_asset_ids if item in available),
+                None,
+            )
+            if output is not None:
+                guides[kind] = output
+        return guides
+
     @staticmethod
     def _wan_asset(record, kind: AssetKind) -> AssetRef:
         return AssetRef(
@@ -3849,6 +3987,16 @@ class DesktopController(QObject):
         if state == "ready" and command_id == self._krea_load_command_id:
             self._krea_loaded = True
             self._krea_load_command_id = None
+            capabilities = payload.get("capabilities", {})
+            capability_mapping = capabilities if isinstance(capabilities, dict) else {}
+            metadata = capability_mapping.get("metadata", {})
+            metadata_mapping = metadata if isinstance(metadata, dict) else {}
+            depth_models = metadata_mapping.get("depth_control_model_ids", ())
+            self._krea_depth_control_model_ids = (
+                tuple(str(item) for item in depth_models)
+                if isinstance(depth_models, (list, tuple))
+                else ()
+            )
             self._append_event("Krea model loaded in isolated worker")
             self._set_status("Krea ready for character sheets, keyframes, and frame edits")
         elif state == "complete" and command_id in self._pending_krea_jobs:

@@ -24,6 +24,7 @@ from wan2core.identity.workflows import (
     register_identity_analysis,
 )
 from wan2core.keyframes import Rectangle
+from wan2core.mannequin.workflows import GuideKind
 from wan2core.segments import SegmentState
 from wan2core.workers import AckEvent, CapabilitiesEvent, ResultEvent, WorkerResult
 from wan2core.workers import ReleaseAllModelsRequest, RuntimeStatusRequest
@@ -1177,13 +1178,21 @@ class DesktopControllerTests(unittest.TestCase):
             )
             controller.addKeyframeRegion(0, 0, 0, 0, 640, 720, "standing")
             controller.associateMannequinRegion(0)
+            controller.addMannequinProp("Chair", 0.0, 0.0, -0.5)
+            controller.addMannequinContact("wrist_l", -0.8, 1.2, 0.0)
             controller.renderCurrentMannequinGuides()
+            imported_depth = root / "blender-depth.png"
+            Image.new("L", (1280, 720), 127).save(imported_depth)
+            controller.importMannequinGuide(
+                QUrl.fromLocalFile(str(imported_depth)),
+                "depth",
+            )
 
             project = controller.session.project
             self.assertEqual(controller.mannequinNames, ["Wave setup"])
             self.assertEqual(controller.mannequinPoseNames, ["Wave"])
-            self.assertEqual(len(project.mannequin_scenes[0].guide_asset_ids), 3)
-            self.assertEqual(len(controller.mannequinGuideLabels), 3)
+            self.assertEqual(len(project.mannequin_scenes[0].guide_asset_ids), 4)
+            self.assertEqual(len(controller.mannequinGuideLabels), 4)
             self.assertIn("i2i_scaffold", controller.mannequinConditioningPath)
             self.assertTrue(controller.mannequinPreviewUrl.isLocalFile())
             scene = project.mannequin_scenes[0]
@@ -1191,6 +1200,8 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertIsNotNone(scene.camera.crop)
             self.assertEqual(scene.instances[0].body_proportions["height_scale"], 1.15)
             self.assertEqual(scene.lights[0].intensity, 2.0)
+            self.assertEqual(scene.props[0].name, "Chair")
+            self.assertEqual(scene.contact_constraints[0].joint_name, "wrist_l")
             self.assertEqual(
                 scene.instances[0].character_region_id,
                 controller._draft_keyframe_regions[0].region_id,  # noqa: SLF001
@@ -1199,6 +1210,27 @@ class DesktopControllerTests(unittest.TestCase):
                 item for item in scene.instances[0].joints if item.joint_name == "shoulder_l"
             )
             self.assertNotEqual(shoulder.rotation.w, 1.0)
+            guide_map = controller._mannequin_guide_assets(scene.scene_id)  # noqa: SLF001
+            self.assertEqual(
+                guide_map[GuideKind.DEPTH],
+                scene.guide_asset_ids[-1],
+            )
+            controller._krea_load_command_id = "load-depth-capability"  # noqa: SLF001
+            controller._handle_krea_event(  # noqa: SLF001
+                {
+                    "command_id": "load-depth-capability",
+                    "state": "ready",
+                    "message": "ready",
+                    "payload": {
+                        "capabilities": {
+                            "metadata": {
+                                "depth_control_model_ids": ["krea-depth-v1"],
+                            }
+                        }
+                    },
+                }
+            )
+            self.assertIn("depth_control", controller.mannequinConditioningPath)
 
             source = root / "blender-scene.json"
             source.write_text(

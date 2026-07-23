@@ -100,6 +100,14 @@ ApplicationWindow {
     }
 
     FileDialog {
+        id: mannequinGuideDialog
+        property string guideKind: "shaded"
+        title: "Import Blender-rendered mannequin guide"
+        nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
+        onAccepted: studio.importMannequinGuide(selectedFile, guideKind)
+    }
+
+    FileDialog {
         id: keyframeImageDialog
         title: "Import keyframe image"
         nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
@@ -1483,9 +1491,56 @@ ApplicationWindow {
                         onClicked: studio.associateMannequinRegion(mannequinRegion.value)
                     }
                 }
+                Label { text: "Scene prop / contact constraint"; color: "#aeb9cb" }
+                RowLayout {
+                    TextField { id: propName; Layout.fillWidth: true; placeholderText: "Prop name" }
+                    TextField { id: propX; Layout.fillWidth: true; text: "0"; placeholderText: "X" }
+                    TextField { id: propY; Layout.fillWidth: true; text: "0"; placeholderText: "Y" }
+                    TextField { id: propZ; Layout.fillWidth: true; text: "0"; placeholderText: "Z" }
+                    Button {
+                        text: "Add"
+                        onClicked: studio.addMannequinProp(
+                            propName.text,
+                            Number(propX.text),
+                            Number(propY.text),
+                            Number(propZ.text)
+                        )
+                    }
+                }
+                RowLayout {
+                    TextField { id: contactJoint; Layout.fillWidth: true; placeholderText: "Joint, e.g. wrist_l" }
+                    TextField { id: contactX; Layout.fillWidth: true; text: "0"; placeholderText: "X" }
+                    TextField { id: contactY; Layout.fillWidth: true; text: "0"; placeholderText: "Y" }
+                    TextField { id: contactZ; Layout.fillWidth: true; text: "0"; placeholderText: "Z" }
+                    Button {
+                        text: "Add"
+                        onClicked: studio.addMannequinContact(
+                            contactJoint.text,
+                            Number(contactX.text),
+                            Number(contactY.text),
+                            Number(contactZ.text)
+                        )
+                    }
+                }
                 RowLayout {
                     Button { text: "Render guides"; onClicked: studio.renderCurrentMannequinGuides() }
                     Button { text: "Import Blender"; onClicked: blenderSceneDialog.open() }
+                }
+                RowLayout {
+                    Button {
+                        text: "Import shaded"
+                        onClicked: {
+                            mannequinGuideDialog.guideKind = "shaded"
+                            mannequinGuideDialog.open()
+                        }
+                    }
+                    Button {
+                        text: "Import depth"
+                        onClicked: {
+                            mannequinGuideDialog.guideKind = "depth"
+                            mannequinGuideDialog.open()
+                        }
+                    }
                 }
                 Label {
                     Layout.fillWidth: true
