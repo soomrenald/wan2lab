@@ -143,6 +143,56 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertIn("appearance adapters", controller.status)
             self.assertFalse(controller.session.project.appearance_profiles[0].adapter_refs)
 
+    def test_sheet_entry_metadata_and_replacement_preserve_source_history(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.png"
+            replacement = root / "replacement.png"
+            Image.new("RGB", (256, 256), "blue").save(source)
+            Image.new("RGB", (256, 256), "green").save(replacement)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.addCharacter("Avery", "Avery identity", "Travel", "blue jacket")
+            controller.createMannequinScene("Standing")
+            controller.importSheetEntryForSheet(
+                0,
+                QUrl.fromLocalFile(str(source)),
+                "front",
+            )
+            original = controller.session.project.character_sheets[0].entries[0]
+
+            controller.updateSheetEntryMetadata(
+                0,
+                0,
+                "three_quarter_left_seated",
+                "three-quarter left",
+                "seated",
+                "full body",
+                "neutral",
+                0,
+            )
+            controller.replaceSheetEntry(
+                0,
+                0,
+                QUrl.fromLocalFile(str(replacement)),
+            )
+
+            project = controller.session.project
+            revised = project.character_sheets[0].entries[0]
+            self.assertEqual(revised.parent_entry_id, original.entry_id)
+            self.assertEqual(revised.source_type.value, "edited")
+            self.assertEqual(revised.approval_state.value, "draft")
+            self.assertEqual(revised.view_label, "three-quarter left")
+            self.assertEqual(
+                revised.mannequin_scene_id,
+                project.mannequin_scenes[0].scene_id,
+            )
+            self.assertIn(
+                original.image_asset_id,
+                {item.asset_id for item in project.assets},
+            )
+            self.assertEqual(len(controller.sheetEntryCards), 1)
+            self.assertTrue(controller.sheetEntryCards[0]["image_url"])
+
     def test_review_player_properties_resolve_latest_immutable_segment_video(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

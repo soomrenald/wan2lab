@@ -112,6 +112,101 @@ def remove_pose_view_entry(
     return Wan2LabProject.model_validate(updated.model_dump())
 
 
+def update_pose_view_metadata(
+    project: Wan2LabProject,
+    *,
+    sheet_id: str,
+    entry_id: str,
+    name: str,
+    view_label: str,
+    pose_label: str,
+    framing_label: str,
+    expression_label: str,
+    mannequin_scene_id: str | None,
+) -> Wan2LabProject:
+    if mannequin_scene_id is not None and mannequin_scene_id not in {
+        item.scene_id for item in project.mannequin_scenes
+    }:
+        raise ValueError("pose/view entry references a missing mannequin scene")
+    sheets = []
+    found = False
+    for sheet in project.character_sheets:
+        if sheet.sheet_id != sheet_id:
+            sheets.append(sheet)
+            continue
+        entries = []
+        for entry in sheet.entries:
+            if entry.entry_id != entry_id:
+                entries.append(entry)
+                continue
+            found = True
+            entries.append(
+                entry.model_copy(
+                    update={
+                        "name": name.strip(),
+                        "view_label": view_label.strip(),
+                        "pose_label": pose_label.strip(),
+                        "framing_label": framing_label.strip(),
+                        "expression_label": expression_label.strip(),
+                        "mannequin_scene_id": mannequin_scene_id,
+                    }
+                )
+            )
+        sheets.append(sheet.model_copy(update={"entries": tuple(entries)}))
+    if not found:
+        raise KeyError(entry_id)
+    return Wan2LabProject.model_validate(
+        project.model_copy(update={"character_sheets": tuple(sheets)}).model_dump()
+    )
+
+
+def replace_pose_view_entry(
+    project: Wan2LabProject,
+    *,
+    sheet_id: str,
+    source_entry_id: str,
+    replacement: PoseViewEntry,
+    asset: AssetRef,
+    provenance: ProvenanceRecord,
+) -> Wan2LabProject:
+    if asset.kind is not AssetKind.IMAGE:
+        raise ValueError("pose/view replacements require image assets")
+    if replacement.image_asset_id != asset.asset_id:
+        raise ValueError("replacement entry and image asset do not match")
+    if replacement.provenance_id != provenance.provenance_id:
+        raise ValueError("replacement entry and provenance do not match")
+    if replacement.parent_entry_id != source_entry_id:
+        raise ValueError("replacement entry must preserve its source parent")
+    sheets = []
+    found = False
+    for sheet in project.character_sheets:
+        if sheet.sheet_id != sheet_id:
+            sheets.append(sheet)
+            continue
+        entries = []
+        for entry in sheet.entries:
+            if entry.entry_id != source_entry_id:
+                entries.append(entry)
+                continue
+            found = True
+            if replacement.identity_id != sheet.identity_id:
+                raise ValueError("replacement entry identity differs from its sheet")
+            if replacement.appearance_id != sheet.appearance_id:
+                raise ValueError("replacement entry appearance differs from its sheet")
+            entries.append(replacement)
+        sheets.append(sheet.model_copy(update={"entries": tuple(entries)}))
+    if not found:
+        raise KeyError(source_entry_id)
+    updated = project.model_copy(
+        update={
+            "assets": (*project.assets, asset),
+            "generation_records": (*project.generation_records, provenance),
+            "character_sheets": tuple(sheets),
+        }
+    )
+    return Wan2LabProject.model_validate(updated.model_dump())
+
+
 def register_style_duplication(
     project: Wan2LabProject,
     *,

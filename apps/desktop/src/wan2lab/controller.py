@@ -66,9 +66,11 @@ from wan2core.keyframes.workflows import (
     register_pose_view_entry,
     register_style_duplication,
     remove_pose_view_entry,
+    replace_pose_view_entry,
     retime_timeline_keyframe,
     revise_timeline_keyframe,
     update_pose_view_entry,
+    update_pose_view_metadata,
 )
 from wan2core.identity import IdentityDriftWarning, IdentityWarningKind
 from wan2core.identity.workflows import (
@@ -416,6 +418,52 @@ class DesktopController(QObject):
             for sheet in self._session.project.character_sheets
             for entry in sheet.entries
         ]
+
+    @Property("QVariantList", notify=projectChanged)
+    def sheetEntryCards(self) -> list[dict[str, object]]:  # noqa: N802
+        assets = {item.asset_id: item for item in self._session.project.assets}
+        mannequin_indexes = {
+            item.scene_id: index
+            for index, item in enumerate(self._session.project.mannequin_scenes)
+        }
+        cards = []
+        for sheet_index, sheet in enumerate(self._session.project.character_sheets):
+            for entry_index, entry in enumerate(sheet.entries):
+                try:
+                    url = QUrl.fromLocalFile(
+                        str(self._asset_store.resolve_ref(assets[entry.image_asset_id]))
+                    ).toString()
+                except (KeyError, FileNotFoundError, ValueError):
+                    url = ""
+                metadata = " · ".join(
+                    item
+                    for item in (
+                        entry.view_label,
+                        entry.pose_label,
+                        entry.framing_label,
+                        entry.expression_label,
+                    )
+                    if item
+                )
+                cards.append(
+                    {
+                        "sheet_index": sheet_index,
+                        "entry_index": entry_index,
+                        "name": entry.name,
+                        "image_url": url,
+                        "metadata": metadata or "metadata not set",
+                        "approval_state": entry.approval_state.value,
+                        "view_label": entry.view_label,
+                        "pose_label": entry.pose_label,
+                        "framing_label": entry.framing_label,
+                        "expression_label": entry.expression_label,
+                        "mannequin_scene_index": mannequin_indexes.get(
+                            entry.mannequin_scene_id,
+                            -1,
+                        ),
+                    }
+                )
+        return cards
 
     @Property("QStringList", notify=projectChanged)
     def keyframeLabels(self) -> list[str]:  # noqa: N802
@@ -1719,6 +1767,99 @@ class DesktopController(QObject):
             f"Reviewed {entry.name} as {approval_state}; immutable image preserved"
         )
         self._set_status("Character-sheet entry review saved")
+        self.projectChanged.emit()
+
+    @Slot(int, int, str, str, str, str, str, int)
+    def updateSheetEntryMetadata(  # noqa: N802
+        self,
+        sheet_index: int,
+        entry_index: int,
+        name: str,
+        view_label: str,
+        pose_label: str,
+        framing_label: str,
+        expression_label: str,
+        mannequin_scene_index: int,
+    ) -> None:
+        try:
+            sheet = self._session.project.character_sheets[sheet_index]
+            entry = sheet.entries[entry_index]
+            mannequin_scene_id = (
+                self._session.project.mannequin_scenes[mannequin_scene_index].scene_id
+                if mannequin_scene_index >= 0
+                else None
+            )
+            self._session.project = update_pose_view_metadata(
+                self._session.project,
+                sheet_id=sheet.sheet_id,
+                entry_id=entry.entry_id,
+                name=name.strip() or entry.name,
+                view_label=view_label,
+                pose_label=pose_label,
+                framing_label=framing_label,
+                expression_label=expression_label,
+                mannequin_scene_id=mannequin_scene_id,
+            )
+        except Exception as error:
+            self._set_status(f"Sheet-entry metadata update failed: {error}")
+            return
+        self._set_status("Pose/view metadata and mannequin link saved")
+        self.projectChanged.emit()
+
+    @Slot(int, int, QUrl)
+    def replaceSheetEntry(  # noqa: N802
+        self,
+        sheet_index: int,
+        entry_index: int,
+        source_url: QUrl,
+    ) -> None:
+        try:
+            sheet = self._session.project.character_sheets[sheet_index]
+            source_entry = sheet.entries[entry_index]
+            source = Path(source_url.toLocalFile()).expanduser().resolve()
+            record = self._asset_store.create_derived(
+                source,
+                parent_asset_ids=(source_entry.image_asset_id,),
+                media_type=image_media_type(source),
+                metadata={
+                    "operation": "replace_character_sheet_entry",
+                    "source_entry_id": source_entry.entry_id,
+                },
+            )
+            asset = self._wan_asset(record, AssetKind.IMAGE)
+            provenance = ProvenanceRecord(
+                provenance_id=f"provenance-{uuid4().hex}",
+                operation="replace_character_sheet_entry",
+                created_at=datetime.now(UTC),
+                input_asset_ids=(source_entry.image_asset_id,),
+                output_asset_ids=(asset.asset_id,),
+                parameters={"source_entry_id": source_entry.entry_id},
+            )
+            replacement = source_entry.model_copy(
+                update={
+                    "entry_id": f"entry-{uuid4().hex}",
+                    "image_asset_id": asset.asset_id,
+                    "source_type": PoseViewSource.EDITED,
+                    "parent_entry_id": source_entry.entry_id,
+                    "provenance_id": provenance.provenance_id,
+                    "approval_state": ApprovalState.DRAFT,
+                }
+            )
+            self._session.project = replace_pose_view_entry(
+                self._session.project,
+                sheet_id=sheet.sheet_id,
+                source_entry_id=source_entry.entry_id,
+                replacement=replacement,
+                asset=asset,
+                provenance=provenance,
+            )
+        except Exception as error:
+            self._set_status(f"Sheet-entry replacement failed: {error}")
+            return
+        self._append_event(
+            f"Replaced {source_entry.name} non-destructively; source asset retained"
+        )
+        self._set_status("Replacement entry saved as an immutable review draft")
         self.projectChanged.emit()
 
     @Slot(int, int)

@@ -138,6 +138,13 @@ class Wan2LabProject(DomainModel):
                     raise ValueError("character-sheet entry references a missing mask asset")
                 if entry.provenance_id not in provenance_ids:
                     raise ValueError("character-sheet entry references missing provenance")
+                if (
+                    entry.mannequin_scene_id is not None
+                    and entry.mannequin_scene_id not in set(collections["mannequin scene IDs"])
+                ):
+                    raise ValueError(
+                        "character-sheet entry references a missing mannequin scene"
+                    )
         sheet_ids = set(collections["sheet IDs"])
         for identity in self.characters:
             if set(identity.character_sheet_ids) - sheet_ids:

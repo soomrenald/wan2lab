@@ -53,6 +53,17 @@ ApplicationWindow {
     }
 
     FileDialog {
+        id: sheetReplacementDialog
+        title: "Replace pose/view image non-destructively"
+        nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
+        onAccepted: studio.replaceSheetEntry(
+            sheetEntrySheet.value,
+            sheetReviewEntry.value,
+            selectedFile
+        )
+    }
+
+    FileDialog {
         id: characterAdapterDialog
         title: "Import immutable character adapter"
         nameFilters: ["Model adapters (*.safetensors *.pt *.ckpt)", "All files (*)"]
@@ -419,6 +430,62 @@ ApplicationWindow {
                     }
                 }
                 Label { text: studio.sheetEntryNames.join("\n"); color: "#aeb9cb"; wrapMode: Text.Wrap }
+                GridView {
+                    id: sheetEntryGrid
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 300
+                    cellWidth: 128
+                    cellHeight: 148
+                    clip: true
+                    model: studio.sheetEntryCards
+                    delegate: Frame {
+                        required property var modelData
+                        width: 120
+                        height: 140
+                        background: Rectangle {
+                            color: "#111822"
+                            border.color: "#43516a"
+                            radius: 5
+                        }
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            Image {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 88
+                                source: modelData.image_url
+                                fillMode: Image.PreserveAspectFit
+                                cache: false
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: modelData.name
+                                elide: Text.ElideRight
+                                color: "#e8edf5"
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: modelData.approval_state + " · " + modelData.metadata
+                                elide: Text.ElideRight
+                                color: "#8f9bb0"
+                                font.pixelSize: 10
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                sheetEntrySheet.value = modelData.sheet_index
+                                sheetReviewEntry.value = modelData.entry_index
+                                sheetReviewName.text = modelData.name
+                                sheetViewLabel.text = modelData.view_label
+                                sheetPoseLabel.text = modelData.pose_label
+                                sheetFramingLabel.text = modelData.framing_label
+                                sheetExpressionLabel.text = modelData.expression_label
+                                sheetMannequinLink.currentIndex = modelData.mannequin_scene_index + 1
+                            }
+                        }
+                    }
+                }
                 RowLayout {
                     SpinBox { id: sheetReviewEntry; from: 0; to: 999; value: 0 }
                     TextField {
@@ -429,6 +496,54 @@ ApplicationWindow {
                     ComboBox {
                         id: sheetReviewState
                         model: ["draft", "approved", "rejected"]
+                    }
+                }
+                RowLayout {
+                    TextField {
+                        id: sheetViewLabel
+                        Layout.fillWidth: true
+                        placeholderText: "View / angle"
+                    }
+                    TextField {
+                        id: sheetPoseLabel
+                        Layout.fillWidth: true
+                        placeholderText: "Pose"
+                    }
+                }
+                RowLayout {
+                    TextField {
+                        id: sheetFramingLabel
+                        Layout.fillWidth: true
+                        placeholderText: "Framing"
+                    }
+                    TextField {
+                        id: sheetExpressionLabel
+                        Layout.fillWidth: true
+                        placeholderText: "Expression"
+                    }
+                }
+                ComboBox {
+                    id: sheetMannequinLink
+                    Layout.fillWidth: true
+                    model: ["No mannequin link"].concat(studio.mannequinNames)
+                }
+                RowLayout {
+                    Button {
+                        text: "Save metadata"
+                        onClicked: studio.updateSheetEntryMetadata(
+                            sheetEntrySheet.value,
+                            sheetReviewEntry.value,
+                            sheetReviewName.text,
+                            sheetViewLabel.text,
+                            sheetPoseLabel.text,
+                            sheetFramingLabel.text,
+                            sheetExpressionLabel.text,
+                            sheetMannequinLink.currentIndex - 1
+                        )
+                    }
+                    Button {
+                        text: "Replace image"
+                        onClicked: sheetReplacementDialog.open()
                     }
                 }
                 RowLayout {
