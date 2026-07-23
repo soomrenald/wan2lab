@@ -133,11 +133,18 @@ class KreaWorkerService:
                 cancellation=cancellation,
             )
         elif kind is CommandKind.EDIT_IMAGE:
-            result = self.backend.edit_frame(
-                request,
-                progress=progress,
-                cancellation=cancellation,
-            )
+            if request.get("operation") == "edit_image":
+                result = self.backend.generate_image(
+                    request,
+                    progress=progress,
+                    cancellation=cancellation,
+                )
+            else:
+                result = self.backend.edit_frame(
+                    request,
+                    progress=progress,
+                    cancellation=cancellation,
+                )
         elif kind is CommandKind.REFINE_FACES:
             result = self.backend.refine_faces(
                 request,

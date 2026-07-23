@@ -122,6 +122,60 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(controller.session.project.assets[0].asset_id, asset_id)
             self.assertIn("non-destructively", controller.status.lower())
 
+    def test_krea_style_duplication_runs_sequentially_and_preserves_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result_root = root / "krea-results"
+            controller = DesktopController(
+                asset_base=root / "projects",
+                krea_result_root=result_root,
+            )
+            controller.addCharacter("Avery", "Avery identity", "Travel", "blue jacket")
+            for index, color in enumerate(("blue", "green")):
+                source = root / f"source-{index}.png"
+                Image.new("RGB", (64, 64), color).save(source)
+                controller.importSheetEntry(
+                    QUrl.fromLocalFile(str(source)),
+                    f"pose-{index}",
+                )
+            source_asset_ids = tuple(
+                item.image_asset_id
+                for item in controller.session.project.character_sheets[0].entries
+            )
+            controller._krea_loaded = True  # noqa: SLF001
+            controller._krea_worker.send = Mock(  # type: ignore[method-assign]  # noqa: SLF001
+                side_effect=("restyle-1", "restyle-2")
+            )
+            controller.duplicateSheetAppearance(0, "Formal", "black suit")
+            self.assertEqual(controller._krea_worker.send.call_count, 1)  # type: ignore[union-attr]  # noqa: SLF001
+
+            for index, command_id in enumerate(("restyle-1", "restyle-2"), start=1):
+                result = result_root / f"restyled-{index}.png"
+                result.parent.mkdir(parents=True, exist_ok=True)
+                Image.new("RGB", (64, 64), "black").save(result)
+                controller._handle_krea_event(  # noqa: SLF001
+                    {
+                        "command_id": command_id,
+                        "state": "complete",
+                        "message": "complete",
+                        "payload": {"asset_paths": [str(result)], "metadata": {}},
+                    }
+                )
+
+            project = controller.session.project
+            self.assertEqual(controller._krea_worker.send.call_count, 2)  # type: ignore[union-attr]  # noqa: SLF001
+            self.assertEqual(len(project.character_sheets), 2)
+            self.assertEqual(
+                tuple(item.image_asset_id for item in project.character_sheets[0].entries),
+                source_asset_ids,
+            )
+            target_entries = project.character_sheets[1].entries
+            self.assertTrue(
+                all(item.parent_entry_id is not None for item in target_entries)
+            )
+            self.assertTrue(all(item.approval_state.value == "draft" for item in target_entries))
+            self.assertIn("Restyled sheet saved", controller.status)
+
     def test_multi_character_regional_keyframe_requires_explicit_approval(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

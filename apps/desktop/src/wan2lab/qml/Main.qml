@@ -206,6 +206,27 @@ ApplicationWindow {
                         )
                     }
                 }
+                RowLayout {
+                    TextField {
+                        id: duplicateAppearanceName
+                        Layout.fillWidth: true
+                        placeholderText: "New appearance name"
+                    }
+                    TextField {
+                        id: duplicateAppearancePrompt
+                        Layout.fillWidth: true
+                        placeholderText: "New style / clothing"
+                    }
+                }
+                Button {
+                    text: "Duplicate sheet into appearance"
+                    Layout.fillWidth: true
+                    onClicked: studio.duplicateSheetAppearance(
+                        sheetEntrySheet.value,
+                        duplicateAppearanceName.text,
+                        duplicateAppearancePrompt.text
+                    )
+                }
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#344052" }
                 Label { text: "Exact-time keyframe"; font.bold: true }
                 RowLayout {

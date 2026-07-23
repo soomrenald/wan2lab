@@ -24,6 +24,7 @@ from wan2core.characters import (
     CharacterSheet,
     PoseViewEntry,
     PoseViewSource,
+    StyleDuplicationEntry,
 )
 from wan2core.export import ExportPlan, ExportState, build_export_plan
 from wan2core.editing import BoundaryPropagation, FrameEditOperation, FrameEditRecord
@@ -45,10 +46,12 @@ from wan2core.keyframes.composition import (
 from wan2core.keyframes.generation import (
     CharacterSheetImageRequest,
     ComposedKeyframeRequest,
+    RestyleEntryRequest,
 )
 from wan2core.keyframes.workflows import (
     add_timeline_keyframe,
     register_pose_view_entry,
+    register_style_duplication,
     remove_pose_view_entry,
     update_pose_view_entry,
 )
@@ -165,6 +168,7 @@ class DesktopController(QObject):
         self._krea_loaded = False
         self._krea_load_command_id: str | None = None
         self._pending_krea_jobs: dict[str, dict[str, object]] = {}
+        self._style_duplications: dict[str, dict[str, object]] = {}
         self._draft_keyframe_regions: list[CharacterRegionAssignment] = []
         self._export_runner = ExportProcessRunner(self)
         self._export_runner.progress.connect(self._handle_export_progress)
@@ -470,6 +474,96 @@ class DesktopController(QObject):
             "request": request.model_dump(mode="json"),
         }
         self._set_status("Generating immutable character-sheet entry with Krea…")
+
+    @Slot(int, str, str)
+    def duplicateSheetAppearance(  # noqa: N802
+        self,
+        sheet_index: int,
+        appearance_name: str,
+        style_prompt: str,
+    ) -> None:
+        if not self._krea_loaded:
+            self._set_status("Load Krea before duplicating a sheet appearance")
+            return
+        try:
+            source = self._session.project.character_sheets[sheet_index]
+            if not source.entries:
+                raise ValueError("source sheet has no pose/view entries")
+            if not appearance_name.strip() or not style_prompt.strip():
+                raise ValueError("appearance name and style prompt are required")
+            identity = next(
+                item
+                for item in self._session.project.characters
+                if item.identity_id == source.identity_id
+            )
+            target_profile = AppearanceProfile(
+                appearance_id=f"appearance-{uuid4().hex}",
+                identity_id=source.identity_id,
+                name=appearance_name.strip(),
+                style_prompt=style_prompt.strip(),
+            )
+            assets = {item.asset_id: item for item in self._session.project.assets}
+            jobs = []
+            for entry in source.entries:
+                request = RestyleEntryRequest(
+                    source_entry_id=entry.entry_id,
+                    source_asset_id=entry.image_asset_id,
+                    identity_prompt=identity.identity_prompt,
+                    target_appearance_prompt=target_profile.style_prompt,
+                    seed=len(jobs) + 1,
+                )
+                jobs.append(
+                    {
+                        "entry": entry,
+                        "request": request,
+                        "asset_path": str(
+                            self._asset_store.resolve_ref(assets[entry.image_asset_id])
+                        ),
+                    }
+                )
+        except Exception as error:
+            self._set_status(f"Appearance duplication failed: {error}")
+            return
+        group_id = f"style-duplication-{uuid4().hex}"
+        self._style_duplications[group_id] = {
+            "source_sheet_id": source.sheet_id,
+            "target_sheet_id": f"sheet-{uuid4().hex}",
+            "target_name": f"{identity.name} — {target_profile.name}",
+            "target_profile": target_profile,
+            "jobs": jobs,
+            "replacements": [],
+            "assets": [],
+            "provenance": [],
+        }
+        self._start_next_style_duplication(group_id)
+        self._set_status(
+            f"Restyling {len(source.entries)} immutable pose/view entries with Krea…"
+        )
+
+    def _start_next_style_duplication(self, group_id: str) -> None:
+        group = self._style_duplications[group_id]
+        jobs = group["jobs"]
+        if not isinstance(jobs, list) or not jobs:
+            self._finish_style_duplication(group_id)
+            return
+        job = jobs.pop(0)
+        request = job["request"]
+        entry = job["entry"]
+        command_id = self._krea_worker.send(
+            "edit_image",
+            {
+                "request": request.to_k2_request(),
+                "asset_paths": {entry.image_asset_id: job["asset_path"]},
+            },
+        )
+        self._pending_krea_jobs[command_id] = {
+            "operation": "style_duplication_entry",
+            "group_id": group_id,
+            "source_entry_id": entry.entry_id,
+            "source_asset_id": entry.image_asset_id,
+            "request": request.model_dump(mode="json"),
+            "input_asset_ids": (entry.image_asset_id,),
+        }
 
     @Slot(int, str, str, str, str, str)
     def loadLocalWanModel(  # noqa: N802
@@ -1745,7 +1839,9 @@ class DesktopController(QObject):
         elif state == "complete" and command_id in self._pending_krea_jobs:
             self._complete_krea_job(command_id, payload)
         elif state in {"error", "cancelled"}:
-            self._pending_krea_jobs.pop(command_id, None)
+            failed_context = self._pending_krea_jobs.pop(command_id, None)
+            if failed_context is not None and failed_context.get("group_id") is not None:
+                self._style_duplications.pop(str(failed_context["group_id"]), None)
             if command_id == self._krea_load_command_id:
                 self._krea_load_command_id = None
                 self._krea_loaded = False
@@ -1769,6 +1865,7 @@ class DesktopController(QObject):
             record = self._asset_store.register_generated(
                 source,
                 media_type=image_media_type(source),
+                parent_asset_ids=tuple(context.get("input_asset_ids", ())),
                 metadata={
                     "worker_command_id": command_id,
                     "operation": str(context["operation"]),
@@ -1832,6 +1929,31 @@ class DesktopController(QObject):
                 self._draft_keyframe_regions.clear()
                 completed_label = f"regional keyframe at {keyframe.time_ms / 1000:g}s"
                 status = "Generated keyframe saved as a draft; approve it before Wan planning"
+            elif operation == "style_duplication_entry":
+                group_id = str(context["group_id"])
+                group = self._style_duplications.get(group_id)
+                if group is None:
+                    raise RuntimeError("style duplication was cancelled after a worker result")
+                replacements = group["replacements"]
+                output_assets = group["assets"]
+                provenance_records = group["provenance"]
+                if not all(
+                    isinstance(items, list)
+                    for items in (replacements, output_assets, provenance_records)
+                ):
+                    raise RuntimeError("invalid style-duplication accumulator")
+                replacements.append(
+                    StyleDuplicationEntry(
+                        source_entry_id=str(context["source_entry_id"]),
+                        target_entry_id=f"entry-{uuid4().hex}",
+                        target_asset_id=asset.asset_id,
+                        provenance_id=provenance.provenance_id,
+                    )
+                )
+                output_assets.append(asset)
+                provenance_records.append(provenance)
+                self._start_next_style_duplication(group_id)
+                return
             else:
                 raise ValueError(f"unknown pending Krea operation: {operation}")
         except Exception as error:
@@ -1841,12 +1963,35 @@ class DesktopController(QObject):
         self._set_status(status)
         self.projectChanged.emit()
 
+    def _finish_style_duplication(self, group_id: str) -> None:
+        group = self._style_duplications.pop(group_id)
+        try:
+            self._session.project = register_style_duplication(
+                self._session.project,
+                source_sheet_id=str(group["source_sheet_id"]),
+                target_profile=group["target_profile"],
+                target_sheet_id=str(group["target_sheet_id"]),
+                target_name=str(group["target_name"]),
+                replacements=tuple(group["replacements"]),
+                assets=tuple(group["assets"]),
+                provenance=tuple(group["provenance"]),
+            )
+        except Exception as error:
+            self._set_status(f"Style duplication registration failed: {error}")
+            return
+        self._append_event(
+            f"Created non-destructive appearance sheet {group['target_name']}"
+        )
+        self._set_status("Restyled sheet saved; every derived entry remains a review draft")
+        self.projectChanged.emit()
+
     @Slot(str)
     def _handle_krea_transport_error(self, message: str) -> None:
         self._krea_status = message
         self._krea_loaded = False
         self._krea_load_command_id = None
         self._pending_krea_jobs.clear()
+        self._style_duplications.clear()
         self._append_event(message)
         self._set_status(message)
 
