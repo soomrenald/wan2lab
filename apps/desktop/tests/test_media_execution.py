@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -7,6 +8,8 @@ import unittest
 from pathlib import Path
 
 from PIL import Image
+from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtGui import QGuiApplication
 
 from wan2core.editing.workflows import plan_frame_extraction, plan_frame_revision_assembly
 from wan2core.export import build_export_plan
@@ -16,6 +19,7 @@ from wan2lab.media import (
     execute_frame_extraction,
     execute_frame_revision_assembly,
 )
+from wan2lab.frame_runner import FrameModificationProcessRunner
 
 from test_frame_workflows import source_project
 
@@ -26,6 +30,67 @@ class Token:
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg is required")
 class MediaExecutionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        cls.application = QGuiApplication.instance() or QGuiApplication([])
+
+    def test_nonblocking_frame_modification_runner_chains_ffmpeg_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.mp4"
+            subprocess.run(
+                (
+                    "ffmpeg",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=blue:s=64x64:r=16:d=0.3125",
+                    "-frames:v",
+                    "5",
+                    "-pix_fmt",
+                    "yuv420p",
+                    str(source),
+                ),
+                check=True,
+            )
+            replacement = root / "replacement.jpg"
+            Image.new("RGB", (64, 64), "red").save(replacement)
+            extraction = plan_frame_extraction(
+                ffmpeg_executable="ffmpeg",
+                source_video_path=str(source),
+                frame_index=2,
+                frame_count=5,
+                output_path=str(root / "original.png"),
+            )
+            assembly = plan_frame_revision_assembly(
+                ffmpeg_executable="ffmpeg",
+                source_video_path=str(source),
+                replacement_paths={2: str(root / "staged.png")},
+                generation_fps=16,
+                frame_count=5,
+                output_path=str(root / "revised.mp4"),
+                work_directory=str(root / "work"),
+            )
+            runner = FrameModificationProcessRunner()
+            completed = []
+            failures = []
+            loop = QEventLoop()
+            runner.completed.connect(lambda *paths: (completed.append(paths), loop.quit()))
+            runner.failed.connect(lambda message: (failures.append(message), loop.quit()))
+            QTimer.singleShot(10_000, loop.quit)
+
+            runner.start(extraction, assembly, replacement_source=replacement)
+            loop.exec()
+
+            self.assertFalse(failures)
+            self.assertEqual(len(completed), 1)
+            self.assertGreater((root / "revised.mp4").stat().st_size, 0)
+            self.assertTrue((root / "original.png").is_file())
+
     def test_extract_replace_assemble_and_fps_export(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

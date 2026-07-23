@@ -58,6 +58,19 @@ ApplicationWindow {
         onAccepted: studio.importKeyframe(selectedFile, Number(keyframeTime.text))
     }
 
+    FileDialog {
+        id: replacementFrameDialog
+        title: "Choose replacement frame"
+        nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
+        onAccepted: studio.modifyFrame(
+            selectedSegment.value,
+            replacementFrameIndex.value,
+            selectedFile,
+            replacementPrompt.text,
+            propagateBoundary.checked
+        )
+    }
+
     palette {
         window: "#11151c"
         windowText: "#e8edf5"
@@ -391,6 +404,33 @@ ApplicationWindow {
                 }
                 Label { text: "Character assignments"; color: "#aeb9cb" }
                 Label { text: "Review and provenance"; color: "#aeb9cb" }
+                RowLayout {
+                    Label { text: "Frame"; color: "#aeb9cb" }
+                    SpinBox {
+                        id: replacementFrameIndex
+                        from: 0
+                        to: 10000
+                    }
+                    CheckBox {
+                        id: propagateBoundary
+                        text: "Propagate boundary"
+                    }
+                }
+                TextField {
+                    id: replacementPrompt
+                    Layout.fillWidth: true
+                    placeholderText: "Frame modification note / prompt"
+                }
+                Button {
+                    Layout.fillWidth: true
+                    text: studio.frameModificationRunning
+                        ? "Cancel frame modification"
+                        : "Modify frame…"
+                    enabled: studio.segmentCount > 0
+                    onClicked: studio.frameModificationRunning
+                        ? studio.cancelFrameModification()
+                        : replacementFrameDialog.open()
+                }
                 RowLayout {
                     Label { text: "Output FPS"; color: "#aeb9cb" }
                     SpinBox {

@@ -9,6 +9,7 @@ from pathlib import Path
 import tempfile
 from uuid import uuid4
 
+from PIL import Image
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 
 from k2core import __version__ as k2core_version
@@ -24,6 +25,12 @@ from wan2core.characters import (
     PoseViewSource,
 )
 from wan2core.export import ExportPlan, ExportState, build_export_plan
+from wan2core.editing import BoundaryPropagation, FrameEditOperation, FrameEditRecord
+from wan2core.editing.workflows import (
+    commit_frame_edit_revision,
+    plan_frame_extraction,
+    plan_frame_revision_assembly,
+)
 from wan2core.keyframes import Keyframe, KeyframeSource
 from wan2core.keyframes.workflows import add_timeline_keyframe, register_pose_view_entry
 from wan2core.mannequin import JointPose, Quaternion
@@ -66,6 +73,7 @@ from wan2core.workers import (
 from wan2lab.backends.comfyui import BACKEND_ID
 from wan2lab.assets import LocalAssetStore, LocalComfyAssetBridge, image_media_type
 from wan2lab.export_runner import ExportProcessRunner
+from wan2lab.frame_runner import FrameModificationProcessRunner
 from wan2lab.mannequin import render_mannequin_guides
 from wan2lab.worker_client import WanWorkerProcess
 
@@ -123,6 +131,11 @@ class DesktopController(QObject):
         self._export_runner.completed.connect(self._complete_export)
         self._export_runner.failed.connect(self._fail_export)
         self._active_export_plan: ExportPlan | None = None
+        self._frame_runner = FrameModificationProcessRunner(self)
+        self._frame_runner.progress.connect(self._handle_frame_progress)
+        self._frame_runner.completed.connect(self._complete_frame_modification)
+        self._frame_runner.failed.connect(self._fail_frame_modification)
+        self._active_frame_edit: dict[str, object] | None = None
 
     @Property(str, notify=projectChanged)
     def projectName(self) -> str:  # noqa: N802 - Qt property naming
@@ -154,6 +167,10 @@ class DesktopController(QObject):
     @Property(bool, notify=statusChanged)
     def generationRunning(self) -> bool:  # noqa: N802
         return bool(self._active_wan_commands)
+
+    @Property(bool, notify=statusChanged)
+    def frameModificationRunning(self) -> bool:  # noqa: N802
+        return self._frame_runner.running
 
     @Property(str, notify=statusChanged)
     def generationBackendLabel(self) -> str:  # noqa: N802
@@ -276,8 +293,8 @@ class DesktopController(QObject):
 
     @Slot(float)
     def newProject(self, duration_seconds: float = 18.0) -> None:  # noqa: N802
-        if self._active_wan_commands:
-            self._set_status("Cancel the active Wan generation before creating a project")
+        if self._active_wan_commands or self._frame_runner.running:
+            self._set_status("Cancel active generation or modification before creating a project")
             return
         duration_ms = max(1_000, round(duration_seconds * 1000))
         self._session = self._new_session(duration_ms)
@@ -349,6 +366,7 @@ class DesktopController(QObject):
     def closeWorker(self) -> None:  # noqa: N802
         self._wan_worker.close()
         self._export_runner.cancel()
+        self._frame_runner.cancel()
 
     @Slot(str)
     def createMannequinScene(self, name: str) -> None:  # noqa: N802
@@ -792,6 +810,106 @@ class DesktopController(QObject):
         self._set_status("Local Wan generation started; review remains mandatory")
         self.projectChanged.emit()
 
+    @Slot(int, int, QUrl, str, bool)
+    def modifyFrame(  # noqa: N802
+        self,
+        segment_index: int,
+        frame_index: int,
+        replacement_url: QUrl,
+        prompt: str,
+        propagate_boundary: bool,
+    ) -> None:
+        if self._frame_runner.running:
+            self._set_status("A frame modification is already running")
+            return
+        if not 0 <= segment_index < len(self._session.project.segments):
+            self._set_status("Select an existing segment to modify")
+            return
+        segment = self._session.project.segments[segment_index]
+        if segment.state is not SegmentState.READY_FOR_REVIEW or not segment.revision_ids:
+            self._set_status("Only a reviewable segment revision can be modified")
+            return
+        revision = next(
+            item
+            for item in self._session.project.segment_revisions
+            if item.revision_id == segment.revision_ids[-1]
+        )
+        if not 0 <= frame_index < revision.source_request.frame_count:
+            self._set_status("Frame index is outside the selected revision")
+            return
+        if (
+            propagate_boundary
+            and frame_index not in {0, revision.source_request.frame_count - 1}
+        ):
+            self._set_status("Only the first or last frame can propagate as an anchor")
+            return
+        try:
+            source_asset = next(
+                item
+                for item in self._session.project.assets
+                if item.asset_id == revision.result_asset_id
+            )
+            source_video = self._asset_store.resolve_ref(source_asset)
+            replacement_source = Path(replacement_url.toLocalFile()).expanduser().resolve()
+            with Image.open(replacement_source) as replacement_image:
+                if replacement_image.size != (
+                    revision.source_request.width,
+                    revision.source_request.height,
+                ):
+                    raise ValueError(
+                        "replacement frame dimensions must match the generated segment"
+                    )
+            work = (
+                self._asset_base
+                / self._session.project.project_id
+                / ".frame-work"
+                / uuid4().hex
+            )
+            original_path = work / f"frame-{frame_index:08d}-original.png"
+            staged_replacement = work / f"frame-{frame_index:08d}-replacement.png"
+            revised_path = work / f"{revision.revision_id}-modified.mp4"
+            extraction = plan_frame_extraction(
+                ffmpeg_executable=self._session.project.project_settings.ffmpeg_executable,
+                source_video_path=str(source_video),
+                frame_index=frame_index,
+                frame_count=revision.source_request.frame_count,
+                output_path=str(original_path),
+            )
+            assembly = plan_frame_revision_assembly(
+                ffmpeg_executable=self._session.project.project_settings.ffmpeg_executable,
+                source_video_path=str(source_video),
+                replacement_paths={frame_index: str(staged_replacement)},
+                generation_fps=revision.source_request.generation_fps,
+                frame_count=revision.source_request.frame_count,
+                output_path=str(revised_path),
+                work_directory=str(work / "sequence"),
+            )
+            self._active_frame_edit = {
+                "segment_id": segment.segment_id,
+                "revision_id": revision.revision_id,
+                "source_video_asset_id": source_asset.asset_id,
+                "frame_index": frame_index,
+                "prompt": prompt.strip(),
+                "propagate": propagate_boundary,
+            }
+            self._frame_runner.start(
+                extraction,
+                assembly,
+                replacement_source=replacement_source,
+            )
+        except Exception as error:
+            self._active_frame_edit = None
+            self._set_status(f"Frame modification could not start: {error}")
+            return
+        self._append_event(
+            f"Started immutable frame {frame_index} modification for {segment.segment_id}"
+        )
+        self._set_status("Extracting and rebuilding the modified segment…")
+
+    @Slot()
+    def cancelFrameModification(self) -> None:  # noqa: N802
+        self._frame_runner.cancel()
+
     @Slot(str)
     def saveProject(self, path: str) -> None:  # noqa: N802
         project_path = Path(path).expanduser().resolve()
@@ -963,8 +1081,8 @@ class DesktopController(QObject):
 
     @Slot(str)
     def openProject(self, path: str) -> None:  # noqa: N802
-        if self._active_wan_commands:
-            self._set_status("Cancel the active Wan generation before opening a project")
+        if self._active_wan_commands or self._frame_runner.running:
+            self._set_status("Cancel active generation or modification before opening a project")
             return
         try:
             project = load_project(Path(path).expanduser())
@@ -1242,6 +1360,154 @@ class DesktopController(QObject):
     @Slot(str, int, int)
     def _handle_export_progress(self, stage: str, current: int, total: int) -> None:
         self._set_status(f"Export {stage}: {current}/{total}")
+
+    @Slot(str, int, int)
+    def _handle_frame_progress(self, stage: str, current: int, total: int) -> None:
+        self._set_status(f"Frame modification {stage}: {current}/{total}")
+
+    @Slot(str, str, str)
+    def _complete_frame_modification(
+        self,
+        original_path: str,
+        replacement_path: str,
+        revised_path: str,
+    ) -> None:
+        context = self._active_frame_edit
+        self._active_frame_edit = None
+        if context is None:
+            self._set_status("Frame modification completed without an active edit")
+            return
+        try:
+            source_revision_id = str(context["revision_id"])
+            source_video_asset_id = str(context["source_video_asset_id"])
+            frame_index = int(context["frame_index"])
+            original_record = self._asset_store.register_generated(
+                Path(original_path),
+                media_type="image/png",
+                parent_asset_ids=(source_video_asset_id,),
+                metadata={"frame_index": frame_index, "operation": "extract_frame"},
+            )
+            original_asset = self._wan_asset(original_record, AssetKind.IMAGE)
+            replacement_record = self._asset_store.create_derived(
+                Path(replacement_path),
+                parent_asset_ids=(original_asset.asset_id,),
+                media_type="image/png",
+                metadata={"frame_index": frame_index, "operation": "replace_frame"},
+            )
+            replacement_asset = self._wan_asset(replacement_record, AssetKind.IMAGE)
+            revised_record = self._asset_store.register_generated(
+                Path(revised_path),
+                media_type="video/mp4",
+                parent_asset_ids=(source_video_asset_id, replacement_asset.asset_id),
+                metadata={"operation": "assemble_frame_revision"},
+            )
+            source_revision = next(
+                item
+                for item in self._session.project.segment_revisions
+                if item.revision_id == source_revision_id
+            )
+            revised_asset = AssetRef(
+                asset_id=revised_record.asset_id,
+                kind=AssetKind.VIDEO,
+                storage_path=revised_record.relative_path,
+                sha256=revised_record.sha256,
+                width=source_revision.source_request.width,
+                height=source_revision.source_request.height,
+                frame_count=source_revision.source_request.frame_count,
+                duration_ms=(
+                    source_revision.source_request.end_ms
+                    - source_revision.source_request.start_ms
+                ),
+                parent_asset_ids=revised_record.parent_asset_ids,
+                immutable_source=False,
+            )
+            extract_provenance_id = f"provenance-{uuid4().hex}"
+            edit_provenance_id = f"provenance-{uuid4().hex}"
+            assembly_provenance_id = f"provenance-{uuid4().hex}"
+            edit = FrameEditRecord(
+                edit_id=f"frame-edit-{uuid4().hex}",
+                segment_revision_id=source_revision_id,
+                original_frame_asset_id=original_asset.asset_id,
+                replacement_frame_asset_id=replacement_asset.asset_id,
+                frame_index=frame_index,
+                operation_type=FrameEditOperation.IMAGE_EDIT,
+                prompt=str(context["prompt"]),
+                boundary_propagation=(
+                    BoundaryPropagation.PROPAGATE_AS_ANCHOR
+                    if bool(context["propagate"])
+                    else BoundaryPropagation.LOCAL_REPAIR
+                ),
+                provenance_id=edit_provenance_id,
+            )
+            provenance = (
+                ProvenanceRecord(
+                    provenance_id=extract_provenance_id,
+                    operation="extract_frame",
+                    created_at=datetime.now(UTC),
+                    input_asset_ids=(source_video_asset_id,),
+                    output_asset_ids=(original_asset.asset_id,),
+                    parameters={"frame_index": frame_index},
+                ),
+                ProvenanceRecord(
+                    provenance_id=edit_provenance_id,
+                    operation="import_frame_replacement",
+                    created_at=datetime.now(UTC),
+                    prompts={"prompt": str(context["prompt"])},
+                    input_asset_ids=(original_asset.asset_id,),
+                    output_asset_ids=(replacement_asset.asset_id,),
+                    parameters={"frame_index": frame_index},
+                ),
+                ProvenanceRecord(
+                    provenance_id=assembly_provenance_id,
+                    operation="assemble_frame_revision",
+                    created_at=datetime.now(UTC),
+                    input_asset_ids=(source_video_asset_id, replacement_asset.asset_id),
+                    output_asset_ids=(revised_asset.asset_id,),
+                    parameters={
+                        "frame_index": frame_index,
+                        "generation_fps": source_revision.source_request.generation_fps,
+                    },
+                    runtime={
+                        "ffmpeg": self._session.project.project_settings.ffmpeg_executable
+                    },
+                ),
+            )
+            project_with_original = Wan2LabProject.model_validate(
+                self._session.project.model_copy(
+                    update={
+                        "assets": (*self._session.project.assets, original_asset),
+                        "generation_records": (
+                            *self._session.project.generation_records,
+                            provenance[0],
+                        ),
+                    }
+                ).model_dump()
+            )
+            self._session.project = commit_frame_edit_revision(
+                project_with_original,
+                segment_id=str(context["segment_id"]),
+                source_revision_id=source_revision_id,
+                edit_records=(edit,),
+                replacement_assets=(replacement_asset,),
+                revised_video_asset=revised_asset,
+                provenance=provenance[1:],
+                assembly_provenance_id=assembly_provenance_id,
+                new_revision_id=f"{source_revision.segment_id}-revision-{uuid4().hex}",
+            )
+        except Exception as error:
+            self._set_status(f"Frame modification registration failed: {error}")
+            return
+        self._append_event(
+            f"Frame {frame_index} became a new immutable segment revision for review"
+        )
+        self._set_status("Modified segment ready for mandatory review")
+        self.projectChanged.emit()
+
+    @Slot(str)
+    def _fail_frame_modification(self, message: str) -> None:
+        self._active_frame_edit = None
+        self._append_event(message)
+        self._set_status(message)
 
     @Slot(str)
     def _complete_export(self, output_path: str) -> None:

@@ -78,6 +78,49 @@ class DesktopControllerTests(unittest.TestCase):
             SegmentState.READY_FOR_REVIEW,
         )
 
+    def test_completed_frame_modification_creates_a_new_reviewable_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.planMockTimeline()
+            controller.generateNextMockSegment()
+            source_revision = controller.session.project.segment_revisions[0]
+            original = root / "original.png"
+            replacement = root / "replacement.png"
+            revised = root / "revised.mp4"
+            size = (
+                source_revision.source_request.width,
+                source_revision.source_request.height,
+            )
+            Image.new("RGB", size, "blue").save(original)
+            Image.new("RGB", size, "red").save(replacement)
+            revised.write_bytes(b"immutable revised video")
+            controller._active_frame_edit = {  # noqa: SLF001
+                "segment_id": source_revision.segment_id,
+                "revision_id": source_revision.revision_id,
+                "source_video_asset_id": source_revision.result_asset_id,
+                "frame_index": 0,
+                "prompt": "repair the first frame",
+                "propagate": True,
+            }
+
+            controller._complete_frame_modification(  # noqa: SLF001
+                str(original),
+                str(replacement),
+                str(revised),
+            )
+
+            project = controller.session.project
+            self.assertEqual(len(project.segment_revisions), 2)
+            self.assertEqual(project.segment_revisions[0].review_state.value, "superseded")
+            self.assertEqual(project.segment_revisions[1].review_state.value, "ready_for_review")
+            self.assertEqual(len(project.frame_edit_records), 1)
+            self.assertEqual(
+                project.segment_revisions[1].start_frame_asset_id,
+                project.frame_edit_records[0].replacement_frame_asset_id,
+            )
+            self.assertIn("mandatory review", controller.status.lower())
+
     def test_segment_inspector_values_flow_into_generation_request(self) -> None:
         controller = DesktopController()
         controller.planMockTimeline()
