@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from wan2core.actions import ActionSpec
 from wan2core.assets import AssetRef
@@ -36,6 +37,14 @@ class ProjectSettings(DomainModel):
     default_continuation_policy: ContinuationPolicy = ContinuationPolicy.AUTHORED_ANCHOR
     ffmpeg_executable: str = "ffmpeg"
     asset_root: str = "assets"
+
+    @field_validator("asset_root")
+    @classmethod
+    def validate_asset_root(cls, value: str) -> str:
+        normalized = value.replace("\\", "/")
+        if not normalized or normalized.startswith("/") or ".." in normalized.split("/"):
+            raise ValueError("asset_root must be a project-relative directory")
+        return normalized.rstrip("/")
 
 
 class Wan2LabProject(DomainModel):
@@ -206,7 +215,24 @@ def load_project_document(document: str | bytes) -> Wan2LabProject:
 
 
 def save_project(project: Wan2LabProject, path: Path) -> None:
-    path.write_text(project_document(project) + "\n", encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(project_document(project) + "\n")
+            handle.flush()
+        temporary_path.replace(path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
 
 
 def load_project(path: Path) -> Wan2LabProject:

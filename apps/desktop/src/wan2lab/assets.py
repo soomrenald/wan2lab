@@ -13,6 +13,14 @@ from k2core.assets import AssetRecord
 from wan2core.assets import AssetRef
 
 
+def image_media_type(path: Path) -> str:
+    with Image.open(path.expanduser().resolve()) as image:
+        media_type = Image.MIME.get(image.format or "")
+    if media_type is None:
+        raise ValueError(f"unsupported image format: {path}")
+    return media_type
+
+
 class LocalAssetStore:
     def __init__(self, root: Path) -> None:
         self.root = root.expanduser().resolve()
@@ -138,4 +146,4 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-__all__ = ["LocalAssetStore"]
+__all__ = ["LocalAssetStore", "image_media_type"]

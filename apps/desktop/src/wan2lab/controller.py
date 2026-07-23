@@ -58,7 +58,7 @@ from wan2core.workers import (
     RuntimeStatusEvent,
 )
 from wan2lab.backends.comfyui import BACKEND_ID
-from wan2lab.assets import LocalAssetStore
+from wan2lab.assets import LocalAssetStore, image_media_type
 from wan2lab.export_runner import ExportProcessRunner
 from wan2lab.mannequin import render_mannequin_guides
 from wan2lab.worker_client import WanWorkerProcess
@@ -462,8 +462,9 @@ class DesktopController(QObject):
             self._set_status("Create a character before importing a sheet entry")
             return
         try:
+            source = Path(source_url.toLocalFile())
             record = self._asset_store.register_imported(
-                Path(source_url.toLocalFile()), media_type="image/png"
+                source, media_type=image_media_type(source)
             )
             asset = self._wan_asset(record, AssetKind.IMAGE)
             sheet = self._session.project.character_sheets[0]
@@ -499,8 +500,9 @@ class DesktopController(QObject):
     @Slot(QUrl, float)
     def importKeyframe(self, source_url: QUrl, time_seconds: float) -> None:  # noqa: N802
         try:
+            source = Path(source_url.toLocalFile())
             record = self._asset_store.register_imported(
-                Path(source_url.toLocalFile()), media_type="image/png"
+                source, media_type=image_media_type(source)
             )
             asset = self._wan_asset(record, AssetKind.IMAGE)
             provenance = ProvenanceRecord(
@@ -607,12 +609,25 @@ class DesktopController(QObject):
 
     @Slot(str)
     def saveProject(self, path: str) -> None:  # noqa: N802
+        project_path = Path(path).expanduser().resolve()
         try:
-            save_project(self._session.project, Path(path).expanduser())
+            physical_assets = tuple(
+                asset
+                for asset in self._session.project.assets
+                if asset.storage_path.startswith("objects/")
+            )
+            target_store = self._asset_store.copy_to(
+                project_path.parent / self._session.project.project_settings.asset_root,
+                physical_assets,
+            )
+            save_project(self._session.project, project_path)
         except Exception as error:
             self._set_status(f"Save failed: {error}")
             return
-        self._set_status(f"Saved {path}")
+        self._asset_store = target_store
+        self._project_name = project_path.stem
+        self._set_status(f"Saved {project_path}")
+        self.projectChanged.emit()
 
     @Slot(QUrl)
     def saveProjectFile(self, url: QUrl) -> None:  # noqa: N802
@@ -769,7 +784,9 @@ class DesktopController(QObject):
             self._set_status(f"Open failed: {error}")
             return
         self._session = WanStudioSession(project)
-        self._asset_store = LocalAssetStore(Path(path).expanduser().resolve().parent / "assets")
+        self._asset_store = LocalAssetStore(
+            Path(path).expanduser().resolve().parent / project.project_settings.asset_root
+        )
         self._project_name = Path(path).stem
         self._events.clear()
         self._refresh_mannequin_preview()

@@ -6,10 +6,16 @@ from pathlib import Path
 
 from PIL import Image
 
-from wan2lab.assets import LocalAssetStore
+from wan2lab.assets import LocalAssetStore, image_media_type
 
 
 class LocalAssetStoreTests(unittest.TestCase):
+    def test_image_media_type_uses_file_content(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "misleading.png"
+            Image.new("RGB", (12, 8), "orange").save(source, format="JPEG")
+            self.assertEqual(image_media_type(source), "image/jpeg")
+
     def test_import_copies_and_hash_verifies_immutable_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -115,6 +115,25 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(opened.outputFps, 30)
             self.assertEqual(opened.session.project.project_settings.output_fps, 30)
 
+    def test_save_as_copies_immutable_assets_to_portable_project_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "portrait.jpg"
+            Image.new("RGB", (64, 48), "teal").save(source)
+            controller = DesktopController(asset_base=root / "application-assets")
+            controller.importKeyframe(QUrl.fromLocalFile(str(source)), 0.0)
+            project_path = root / "portable" / "shot.wan2lab.json"
+
+            controller.saveProject(str(project_path))
+            opened = DesktopController(asset_base=root / "other-application-assets")
+            opened.openProject(str(project_path))
+
+            asset = opened.session.project.assets[0]
+            copied = project_path.parent / "assets" / asset.storage_path
+            self.assertTrue(copied.is_file())
+            self.assertEqual(copied.read_bytes(), source.read_bytes())
+            self.assertNotIn("failed", opened.status.lower())
+
     def test_integrated_mannequin_pose_guides_and_blender_import(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
