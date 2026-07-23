@@ -32,3 +32,7 @@ Model weights are external assets and are never included in this repository.
 
 The current desktop software acceptance status and remaining hardware gates are
 tracked in [docs/phase1-acceptance.md](docs/phase1-acceptance.md).
+
+The first local hardware family, Wan2.2 TI2V-5B, has a reproducible setup and
+Prompt/I2V smoke procedure in
+[docs/wan2.2-ti2v-5b-hardware.md](docs/wan2.2-ti2v-5b-hardware.md).

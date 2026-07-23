@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import MagicMock, patch
 
 from wan2core.backends import ParameterGroup, WanMode
-from wan2lab.backends.comfyui import inspect_comfyui_wan
+from wan2lab.backends.comfyui import ComfyUIClient, inspect_comfyui_wan
 
 
 def node(
@@ -62,6 +63,8 @@ def object_info() -> dict[str, object]:
             {"normalization": [["default", "minmax", "none"], {"default": "default"}]},
         ),
         "WanVideoEmptyEmbeds": node(),
+        "WanVideoEncode": node(),
+        "ImageScale": node(),
         "WanVideoImageToVideoEncode": node(
             {
                 "noise_aug_strength": ["FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0}],
@@ -88,6 +91,14 @@ def object_info() -> dict[str, object]:
 
 
 class ComfyUIBackendDiscoveryTests(unittest.TestCase):
+    def test_successful_empty_response_is_normalized_for_release_endpoint(self) -> None:
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b""
+        with patch("wan2lab.backends.comfyui.urlopen", return_value=response):
+            result = ComfyUIClient().free_models()
+
+        self.assertEqual(result, {})
+
     def test_live_registry_normalizes_modes_models_and_parameters(self) -> None:
         capabilities = inspect_comfyui_wan(
             object_info(),
@@ -158,6 +169,30 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
         capabilities = inspect_comfyui_wan(info, {"devices": []})
         self.assertEqual(capabilities.model_variants, ())
         self.assertEqual(capabilities.accelerator_vendors, frozenset({"cpu"}))
+
+    def test_unified_i2v_requires_the_wrapper_latent_encoder(self) -> None:
+        info = object_info()
+        info.pop("WanVideoEncode")
+        capabilities = inspect_comfyui_wan(info, {"devices": [{"name": "AMD Radeon"}]})
+        ti2v = next(
+            model
+            for model in capabilities.model_variants
+            if "TI2V-5B" in model.display_name
+        )
+
+        self.assertEqual(ti2v.supported_modes, frozenset({WanMode.PROMPT}))
+
+    def test_unified_i2v_requires_the_core_image_scaler(self) -> None:
+        info = object_info()
+        info.pop("ImageScale")
+        capabilities = inspect_comfyui_wan(info, {"devices": [{"name": "AMD Radeon"}]})
+        ti2v = next(
+            model
+            for model in capabilities.model_variants
+            if "TI2V-5B" in model.display_name
+        )
+
+        self.assertEqual(ti2v.supported_modes, frozenset({WanMode.PROMPT}))
 
 
 if __name__ == "__main__":

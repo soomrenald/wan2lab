@@ -76,7 +76,12 @@ class ComfyUIClient:
         )
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:  # noqa: S310
-                decoded = json.loads(response.read().decode("utf-8"))
+                raw_response = response.read()
+                decoded = (
+                    {}
+                    if not raw_response.strip()
+                    else json.loads(raw_response.decode("utf-8"))
+                )
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
             raise ComfyUIUnavailable(f"ComfyUI request failed: {method} {path}: {error}") from error
         if not isinstance(decoded, dict):
@@ -94,6 +99,8 @@ class WrapperNodes:
     decoder: str = "WanVideoDecode"
     prompt_embeds: str = "WanVideoEmptyEmbeds"
     image_embeds: str = "WanVideoImageToVideoEncode"
+    latent_encoder: str = "WanVideoEncode"
+    image_scaler: str = "ImageScale"
     animate_embeds: str = "WanVideoAnimateEmbeds"
     replace_embeds: str = "WanVideoMiniMaxRemoverEmbeds"
 
@@ -148,9 +155,20 @@ def inspect_comfyui_wan(
             executable_modes,
             descriptors,
             accelerator=detected_accelerator,
+            unified_i2v_available={
+                nodes.latent_encoder,
+                nodes.image_scaler,
+            }.issubset(available),
         )
         for name in model_names
-        if _modes_for_model(name, executable_modes)
+        if _modes_for_model(
+            name,
+            executable_modes,
+            unified_i2v_available={
+                nodes.latent_encoder,
+                nodes.image_scaler,
+            }.issubset(available),
+        )
     )
     runtime_features = {
         "object_info_probe",
@@ -184,8 +202,13 @@ def _model_capabilities(
     descriptors: tuple[ParameterDescriptor, ...],
     *,
     accelerator: str,
+    unified_i2v_available: bool,
 ) -> ModelVariantCapabilities:
-    modes = _modes_for_model(filename, wrapper_modes)
+    modes = _modes_for_model(
+        filename,
+        wrapper_modes,
+        unified_i2v_available=unified_i2v_available,
+    )
     normalized_name = filename.casefold()
     is_wan22_ti2v_5b = (
         ("wan2_2" in normalized_name or "wan2.2" in normalized_name)
@@ -268,7 +291,12 @@ def _model_capabilities(
     )
 
 
-def _modes_for_model(filename: str, wrapper_modes: set[WanMode]) -> set[WanMode]:
+def _modes_for_model(
+    filename: str,
+    wrapper_modes: set[WanMode],
+    *,
+    unified_i2v_available: bool = True,
+) -> set[WanMode]:
     name = filename.casefold()
     modes: set[WanMode] = set()
     if "animate" in name:
@@ -283,6 +311,8 @@ def _modes_for_model(filename: str, wrapper_modes: set[WanMode]) -> set[WanMode]
         modes.add(WanMode.I2V)
     if any(token in name for token in ("t2v", "text-to-video", "text_to_video")):
         modes.add(WanMode.PROMPT)
+    if "ti2v" in name and "5b" in name and not unified_i2v_available:
+        modes.discard(WanMode.I2V)
     return modes.intersection(wrapper_modes)
 
 

@@ -284,13 +284,51 @@ class ComfyWanWorkflowBuilder:
             parameters,
             {"normalization": str},
         )
-        if request.mode is WanMode.PROMPT and not unified_ti2v_5b:
+        if request.mode is WanMode.PROMPT:
             workflow["5"] = {
                 "class_type": "WanVideoEmptyEmbeds",
                 "inputs": {
                     "width": request.width,
                     "height": request.height,
                     "num_frames": request.frame_count,
+                },
+            }
+        elif unified_ti2v_5b:
+            workflow["9"] = {
+                "class_type": "LoadImage",
+                "inputs": {"image": asset_inputs[request.start_image_asset_id]},
+            }
+            workflow["11"] = {
+                "class_type": "ImageScale",
+                "inputs": {
+                    "image": ["9", 0],
+                    "upscale_method": "lanczos",
+                    "width": request.width,
+                    "height": request.height,
+                    "crop": "center",
+                },
+            }
+            workflow["10"] = {
+                "class_type": "WanVideoEncode",
+                "inputs": {
+                    "vae": ["2", 0],
+                    "image": ["11", 0],
+                    "enable_vae_tiling": bool(parameters.get("tiled_vae", False)),
+                    "tile_x": int(parameters.get("tile_x", 272)),
+                    "tile_y": int(parameters.get("tile_y", 272)),
+                    "tile_stride_x": int(parameters.get("tile_stride_x", 144)),
+                    "tile_stride_y": int(parameters.get("tile_stride_y", 128)),
+                    "noise_aug_strength": float(parameters.get("noise_aug_strength", 0.0)),
+                    "latent_strength": float(parameters.get("start_latent_strength", 1.0)),
+                },
+            }
+            workflow["5"] = {
+                "class_type": "WanVideoEmptyEmbeds",
+                "inputs": {
+                    "width": request.width,
+                    "height": request.height,
+                    "num_frames": request.frame_count,
+                    "extra_latents": ["10", 0],
                 },
             }
         else:

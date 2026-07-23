@@ -155,7 +155,7 @@ class ComfyWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(plan.output_node_id, "8")
 
-    def test_unified_ti2v_prompt_uses_matching_vae_latent_shape(self) -> None:
+    def test_unified_ti2v_prompt_uses_wrapper_5b_empty_embed_expansion(self) -> None:
         workflow_builder = builder()
         plan = workflow_builder.build(
             request(
@@ -166,24 +166,55 @@ class ComfyWorkflowTests(unittest.TestCase):
                 height=704,
                 generation_fps=24,
                 frame_count=121,
-                parameters={
-                    "batched_cfg": True,
-                    "rope_function": "default",
-                    "normalization": "minmax",
-                },
+                parameters={"batched_cfg": True, "rope_function": "default"},
             ),
             asset_inputs={},
             filename_prefix="wan2lab/ti2v-prompt",
             seed=45,
         )
 
-        self.assertEqual(plan.workflow["5"]["class_type"], "WanVideoImageToVideoEncode")
-        self.assertEqual(plan.workflow["5"]["inputs"]["vae"], ["2", 0])
-        self.assertNotIn("start_image", plan.workflow["5"]["inputs"])
+        self.assertEqual(plan.workflow["5"]["class_type"], "WanVideoEmptyEmbeds")
+        self.assertEqual(plan.workflow["5"]["inputs"]["num_frames"], 121)
         self.assertNotIn("9", plan.workflow)
         self.assertTrue(plan.workflow["6"]["inputs"]["batched_cfg"])
         self.assertEqual(plan.workflow["6"]["inputs"]["rope_function"], "default")
-        self.assertEqual(plan.workflow["7"]["inputs"]["normalization"], "minmax")
+
+    def test_unified_ti2v_i2v_uses_encoded_extra_latent(self) -> None:
+        workflow_builder = builder()
+        plan = workflow_builder.build(
+            request(
+                workflow_builder,
+                WanMode.I2V,
+                "TI2V-5B",
+                width=1280,
+                height=704,
+                generation_fps=24,
+                frame_count=5,
+                start_image_asset_id="first-frame",
+                parameters={
+                    "tiled_vae": True,
+                    "noise_aug_strength": 0.1,
+                    "start_latent_strength": 0.8,
+                },
+            ),
+            asset_inputs={"first-frame": "input/first.png"},
+            filename_prefix="wan2lab/ti2v-i2v",
+            seed=46,
+        )
+
+        self.assertEqual(plan.workflow["9"]["class_type"], "LoadImage")
+        self.assertEqual(plan.workflow["11"]["class_type"], "ImageScale")
+        self.assertEqual(plan.workflow["11"]["inputs"]["image"], ["9", 0])
+        self.assertEqual(plan.workflow["11"]["inputs"]["width"], 1280)
+        self.assertEqual(plan.workflow["11"]["inputs"]["height"], 704)
+        self.assertEqual(plan.workflow["11"]["inputs"]["crop"], "center")
+        self.assertEqual(plan.workflow["10"]["class_type"], "WanVideoEncode")
+        self.assertEqual(plan.workflow["10"]["inputs"]["image"], ["11", 0])
+        self.assertTrue(plan.workflow["10"]["inputs"]["enable_vae_tiling"])
+        self.assertEqual(plan.workflow["10"]["inputs"]["noise_aug_strength"], 0.1)
+        self.assertEqual(plan.workflow["10"]["inputs"]["latent_strength"], 0.8)
+        self.assertEqual(plan.workflow["5"]["class_type"], "WanVideoEmptyEmbeds")
+        self.assertEqual(plan.workflow["5"]["inputs"]["extra_latents"], ["10", 0])
 
     def test_first_last_graph_binds_individual_immutable_assets(self) -> None:
         workflow_builder = builder()
