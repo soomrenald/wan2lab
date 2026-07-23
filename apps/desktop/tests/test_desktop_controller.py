@@ -385,6 +385,41 @@ class DesktopControllerTests(unittest.TestCase):
             controller.planMockTimeline()
             self.assertGreater(controller.segmentCount, 0)
 
+    def test_regional_keyframe_uses_explicit_approved_i2i_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = root / "reference.png"
+            source = root / "source.png"
+            Image.new("RGB", (256, 256), "blue").save(reference)
+            Image.new("RGB", (1280, 720), "green").save(source)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.addCharacter("Avery", "Avery identity", "Travel", "blue jacket")
+            controller.importSheetEntryForSheet(
+                0,
+                QUrl.fromLocalFile(str(reference)),
+                "front",
+            )
+            controller.addKeyframeRegion(0, 0, 0, 0, 640, 720, "walking")
+            controller.importKeyframe(QUrl.fromLocalFile(str(source)), 0.0)
+            controller._krea_loaded = True  # noqa: SLF001
+            controller._krea_worker.send = Mock(return_value="derived-keyframe")  # type: ignore[method-assign]  # noqa: SLF001
+
+            controller.generateRegionalKeyframeFromSource(
+                4.0,
+                "city street",
+                "wet pavement",
+                "golden hour",
+                1,
+            )
+
+            request_payload = controller._krea_worker.send.call_args.args[1]  # type: ignore[union-attr]  # noqa: SLF001
+            self.assertEqual(len(controller.keyframeSourceLabels), 2)
+            self.assertEqual(
+                request_payload["request"]["source_asset_id"],
+                controller.session.project.keyframes[0].image_asset_id,
+            )
+            self.assertEqual(request_payload["request"]["operation"], "edit_image")
+
     def test_reject_and_regenerate_create_a_new_reviewable_revision(self) -> None:
         controller = DesktopController()
         controller.planMockTimeline()

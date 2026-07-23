@@ -357,14 +357,20 @@ ApplicationWindow {
                         placeholderText: "Lighting"
                     }
                 }
+                ComboBox {
+                    id: keyframeSource
+                    Layout.fillWidth: true
+                    model: studio.keyframeSourceLabels
+                }
                 RowLayout {
                     Button {
                         text: "Generate regional keyframe"
-                        onClicked: studio.generateRegionalKeyframe(
+                        onClicked: studio.generateRegionalKeyframeFromSource(
                             Number(keyframeTime.text),
                             keyframeScenePrompt.text,
                             keyframeEnvironmentPrompt.text,
-                            keyframeLightingPrompt.text
+                            keyframeLightingPrompt.text,
+                            keyframeSource.currentIndex
                         )
                     }
                     SpinBox { id: keyframeReviewIndex; from: 0; to: 999; value: 0 }

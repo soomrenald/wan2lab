@@ -379,6 +379,10 @@ class DesktopController(QObject):
         ]
 
     @Property("QStringList", notify=projectChanged)
+    def keyframeSourceLabels(self) -> list[str]:  # noqa: N802
+        return [label for label, _asset_id in self._keyframe_i2i_sources()]
+
+    @Property("QStringList", notify=projectChanged)
     def keyframeRegionLabels(self) -> list[str]:  # noqa: N802
         return [
             f"{item.name}: {item.rectangle.x0:g},{item.rectangle.y0:g}–"
@@ -1412,6 +1416,39 @@ class DesktopController(QObject):
         environment_prompt: str,
         lighting_prompt: str,
     ) -> None:
+        self._generate_regional_keyframe(
+            time_seconds,
+            scene_prompt,
+            environment_prompt,
+            lighting_prompt,
+            0,
+        )
+
+    @Slot(float, str, str, str, int)
+    def generateRegionalKeyframeFromSource(  # noqa: N802
+        self,
+        time_seconds: float,
+        scene_prompt: str,
+        environment_prompt: str,
+        lighting_prompt: str,
+        source_index: int,
+    ) -> None:
+        self._generate_regional_keyframe(
+            time_seconds,
+            scene_prompt,
+            environment_prompt,
+            lighting_prompt,
+            source_index,
+        )
+
+    def _generate_regional_keyframe(
+        self,
+        time_seconds: float,
+        scene_prompt: str,
+        environment_prompt: str,
+        lighting_prompt: str,
+        source_index: int,
+    ) -> None:
         if not self._krea_loaded:
             self._set_status("Load the local Krea backend before generating a keyframe")
             return
@@ -1437,7 +1474,11 @@ class DesktopController(QObject):
                 self._session.project,
                 composition_request,
             )
-            source_asset_id = None
+            source_options = self._keyframe_i2i_sources()
+            if not 0 <= source_index < len(source_options):
+                raise ValueError("select an available approved i2i source")
+            source_asset_id = source_options[source_index][1]
+            mannequin_guide_asset_id = None
             conditioning_path = None
             if self._session.project.mannequin_scenes:
                 scene = self._session.project.mannequin_scenes[-1]
@@ -1448,18 +1489,21 @@ class DesktopController(QObject):
                         capabilities=KreaMannequinCapabilities(supports_i2i=True),
                         guide_assets=guides,
                     )
-                    source_asset_id = conditioning.guide_asset_id
+                    mannequin_guide_asset_id = conditioning.guide_asset_id
+                    if source_asset_id is None:
+                        source_asset_id = mannequin_guide_asset_id
                     conditioning_path = conditioning.path.value
             request = ComposedKeyframeRequest(
                 composition=composition,
                 seed=len(self._session.project.keyframes) + 1,
                 source_asset_id=source_asset_id,
-                mannequin_guide_asset_id=source_asset_id,
+                mannequin_guide_asset_id=mannequin_guide_asset_id,
                 conditioning_path=conditioning_path,
             )
             required_asset_ids = {
                 *(item.asset_id for item in composition.adapter_routes),
                 *((source_asset_id,) if source_asset_id is not None else ()),
+                *((mannequin_guide_asset_id,) if mannequin_guide_asset_id is not None else ()),
             }
             assets = {item.asset_id: item for item in self._session.project.assets}
             asset_paths = {
@@ -1491,6 +1535,27 @@ class DesktopController(QObject):
             "input_asset_ids": tuple(sorted(required_asset_ids)),
         }
         self._set_status("Generating regional keyframe with Krea…")
+
+    def _keyframe_i2i_sources(self) -> list[tuple[str, str | None]]:
+        sources: list[tuple[str, str | None]] = [("Automatic / mannequin guidance", None)]
+        sources.extend(
+            (
+                f"Sheet: {sheet.name} / {entry.name}",
+                entry.image_asset_id,
+            )
+            for sheet in self._session.project.character_sheets
+            for entry in sheet.entries
+            if entry.approval_state is ApprovalState.APPROVED
+        )
+        sources.extend(
+            (
+                f"Keyframe: {keyframe.time_ms / 1000:g}s / {keyframe.source_type.value}",
+                keyframe.image_asset_id,
+            )
+            for keyframe in self._session.project.keyframes
+            if keyframe.approved
+        )
+        return sources
 
     @Slot(int)
     def approveKeyframe(self, keyframe_index: int) -> None:  # noqa: N802
