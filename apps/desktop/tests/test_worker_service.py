@@ -251,6 +251,23 @@ class WorkerServiceTests(unittest.TestCase):
             result.result.metadata["output_storage_keys"],
             ("output/wan2lab/segment-1/revision.mp4",),
         )
+        self.assertEqual(
+            result.result.metadata["model_filename"],
+            "wan2.2_t2v_1.3B_fp16.safetensors",
+        )
+        self.assertEqual(
+            result.result.metadata["vae_filename"],
+            "wan_2.1_vae.safetensors",
+        )
+        self.assertEqual(
+            result.result.metadata["text_encoder_filename"],
+            "umt5_xxl_fp16.safetensors",
+        )
+        self.assertEqual(result.result.metadata["precision"], "bf16")
+        self.assertEqual(result.result.metadata["quantization"], "disabled")
+        self.assertEqual(result.result.metadata["load_device"], "offload_device")
+        self.assertEqual(result.result.metadata["accelerator_vendors"], ["cuda"])
+        self.assertEqual(result.result.metadata["device"]["name"], "NVIDIA RTX")
         self.assertEqual(events[-1].progress.stage, "complete")
 
     def test_stdio_inspection_emits_parseable_json_line(self) -> None:

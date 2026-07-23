@@ -71,7 +71,25 @@ class OrchestrationTests(unittest.TestCase):
         session = WanStudioSession(project)
         session.plan(default_mock_capabilities(), model_id="wan-test")
         _job_id, revision = session.queue_next_generation(seed=9)
-        result = WorkerResult(job_id="segment-1-job-1", result_asset_id="video-1")
+        result = WorkerResult(
+            job_id="segment-1-job-1",
+            result_asset_id="video-1",
+            metadata={
+                "resolved_parameters": {"steps": 20},
+                "template_id": "wan-t2v",
+                "template_version": "2",
+                "model_filename": "wan.safetensors",
+                "vae_filename": "wan-vae.safetensors",
+                "text_encoder_filename": "umt5.safetensors",
+                "precision": "bf16",
+                "vae_precision": "fp16",
+                "text_encoder_precision": "fp16",
+                "quantization": "disabled",
+                "load_device": "offload_device",
+                "accelerator_vendors": ["cuda"],
+                "device": {"name": "NVIDIA RTX", "type": "cuda"},
+            },
+        )
         video = AssetRef(
             asset_id="video-1",
             kind=AssetKind.VIDEO,
@@ -90,7 +108,22 @@ class OrchestrationTests(unittest.TestCase):
         )
         self.assertEqual(completed.review_state, RevisionReviewState.READY_FOR_REVIEW)
         self.assertEqual(session.project.assets, (video,))
-        self.assertEqual(session.project.generation_records[0].seed, 9)
+        provenance = session.project.generation_records[0]
+        self.assertEqual(provenance.seed, 9)
+        self.assertEqual(
+            provenance.model_identifiers,
+            (
+                "wan-test",
+                "wan.safetensors",
+                "wan-vae.safetensors",
+                "umt5.safetensors",
+            ),
+        )
+        self.assertEqual(provenance.parameters["steps"], 20)
+        self.assertEqual(provenance.parameters["generation_fps"], 16.0)
+        self.assertEqual(provenance.parameters["frame_count"], 81)
+        self.assertEqual(provenance.runtime["precision"], "bf16")
+        self.assertEqual(provenance.runtime["accelerator_vendors"], ["cuda"])
 
         session.reject_current("retry")
         _job_id, retry = session.queue_rejected_generation(seed=10)

@@ -229,6 +229,9 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertIn("Revision 1", controller.reviewMetadata)
             self.assertIn("mock-wan/wan-test", controller.reviewMetadata)
             self.assertIn("seed 1", controller.reviewMetadata)
+            self.assertIn("inputs: prompt-only", controller.reviewMetadata)
+            self.assertIn("Action: none", controller.reviewMetadata)
+            self.assertIn("provenance segment-1-revision-1-provenance", controller.reviewMetadata)
 
     def test_mock_workflow_exposes_review_gate_to_qt(self) -> None:
         controller = DesktopController()

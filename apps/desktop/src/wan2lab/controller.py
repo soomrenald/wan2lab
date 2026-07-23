@@ -619,25 +619,58 @@ class DesktopController(QObject):
         if revision is None:
             return "No generated revision selected"
         request = revision.source_request
-        anchors = "/".join(
-            item
-            for item in (
-                "start" if request.start_image_asset_id else "",
-                "end" if request.end_image_asset_id else "",
+        inputs = ", ".join(
+            label
+            for label, asset_id in (
+                ("start", request.start_image_asset_id),
+                ("end", request.end_image_asset_id),
+                ("character", request.reference_character_asset_id),
+                ("driving", request.driving_video_asset_id),
+                ("source", request.source_video_asset_id),
+                ("mask", request.mask_asset_id),
             )
-            if item
+            if asset_id is not None
         ) or "prompt-only"
         parameters = ", ".join(
             f"{key}={value}" for key, value in sorted(revision.resolved_parameters.items())
         ) or "defaults"
+        action = request.action_spec
+        action_summary = (
+            "; ".join(
+                item
+                for item in (
+                    action.motion_instruction,
+                    action.character_trajectory,
+                    action.camera_trajectory,
+                    action.speed_easing,
+                )
+                if item
+            )
+            if action is not None
+            else "none"
+        ) or "none"
+        runtime = ", ".join(
+            f"{key}={value}"
+            for key, value in revision.generation_metadata.items()
+            if key
+            in {
+                "template_id",
+                "template_version",
+                "precision",
+                "quantization",
+                "load_device",
+            }
+        ) or "not reported"
         return (
             f"Revision {revision.revision_number} · {revision.review_state.value} · "
             f"{request.mode.value} · {request.backend_id}/{request.model_id} · "
             f"seed {revision.seed} · {request.frame_count} frames at "
             f"{request.generation_fps:g} fps · "
-            f"{(request.end_ms - request.start_ms) / 1000:g}s · anchors: {anchors}\n"
+            f"{(request.end_ms - request.start_ms) / 1000:g}s · inputs: {inputs}\n"
             f"Prompt: {request.prompt or '—'}\n"
-            f"Parameters: {parameters}"
+            f"Action: {action_summary}\n"
+            f"Parameters: {parameters}\n"
+            f"Runtime: {runtime} · provenance {revision.provenance_id or 'pending'}"
         )
 
     @Property(str, notify=projectChanged)
@@ -5021,10 +5054,16 @@ class DesktopController(QObject):
             self._set_status("Export completed without an active plan")
             return
         try:
+            plan_revision_ids = {item.revision_id for item in plan.segment_inputs}
+            approved_revisions = tuple(
+                revision
+                for revision in self._session.project.segment_revisions
+                if revision.revision_id in plan_revision_ids
+            )
             parent_ids = tuple(
                 revision.result_asset_id
-                for revision in self._session.project.segment_revisions
-                if revision.review_state.value == "approved" and revision.result_asset_id is not None
+                for revision in approved_revisions
+                if revision.result_asset_id is not None
             )
             record = self._asset_store.register_generated(
                 Path(output_path),
@@ -5047,15 +5086,37 @@ class DesktopController(QObject):
                 ),
                 duration_ms=self._session.project.timeline.duration_ms,
                 parent_asset_ids=record.parent_asset_ids,
+                creation_operation_id=plan.provenance_id,
+                immutable_source=False,
             )
             provenance = ProvenanceRecord(
                 provenance_id=plan.provenance_id,
                 operation="assemble_approved_segments",
                 created_at=datetime.now(UTC),
-                parameters={"output_fps": plan.output_fps},
+                parameters={
+                    "output_fps": plan.output_fps,
+                    "output_frame_count": output_asset.frame_count,
+                    "segment_inputs": [
+                        item.model_dump(mode="json") for item in plan.segment_inputs
+                    ],
+                    "fps_conversion": [
+                        item.model_dump(mode="json") for item in plan.fps_plans
+                    ],
+                    "ffmpeg_commands": [
+                        item.model_dump(mode="json") for item in plan.commands
+                    ],
+                },
                 input_asset_ids=parent_ids,
                 output_asset_ids=(output_asset.asset_id,),
-                runtime={"ffmpeg": self._session.project.project_settings.ffmpeg_executable},
+                parent_provenance_ids=tuple(
+                    item.provenance_id
+                    for item in approved_revisions
+                    if item.provenance_id is not None
+                ),
+                runtime={
+                    "ffmpeg": self._session.project.project_settings.ffmpeg_executable,
+                    "memory_policy": self._session.project.project_settings.memory_policy,
+                },
             )
             complete = plan.model_copy(update={"state": ExportState.COMPLETE})
             updated = self._session.project.model_copy(

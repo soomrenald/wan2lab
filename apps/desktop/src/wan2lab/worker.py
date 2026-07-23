@@ -222,6 +222,22 @@ class ComfyWorkerService:
                     "template_version": plan.template_version,
                     "resolved_parameters": plan.resolved_parameters,
                     "model_filename": plan.model_selection.model_filename,
+                    "vae_filename": plan.model_selection.vae_filename,
+                    "text_encoder_filename": plan.model_selection.text_encoder_filename,
+                    "precision": plan.model_selection.precision,
+                    "vae_precision": plan.model_selection.vae_precision,
+                    "text_encoder_precision": plan.model_selection.text_encoder_precision,
+                    "quantization": plan.model_selection.quantization,
+                    "load_device": plan.model_selection.load_device,
+                    "accelerator_vendors": sorted(
+                        self.capabilities.accelerator_vendors
+                    ),
+                    "device": (
+                        self.system_stats.get("devices", [{}])[0]
+                        if isinstance(self.system_stats.get("devices"), list)
+                        and self.system_stats.get("devices")
+                        else {}
+                    ),
                 },
             ),
         )

@@ -234,10 +234,32 @@ class WanStudioSession:
             provenance_id=provenance_id,
             operation="generate_segment",
             created_at=datetime.now(UTC),
-            model_identifiers=(request.model_id,),
+            model_identifiers=tuple(
+                item
+                for item in (
+                    request.model_id,
+                    str(result.metadata.get("model_filename", "")),
+                    str(result.metadata.get("vae_filename", "")),
+                    str(result.metadata.get("text_encoder_filename", "")),
+                )
+                if item
+            ),
             backend_id=request.backend_id,
             backend_version=backend_version or "",
-            parameters=revision.resolved_parameters,
+            parameters={
+                **revision.resolved_parameters,
+                "mode": request.mode.value,
+                "generation_fps": request.generation_fps,
+                "frame_count": request.frame_count,
+                "frame_rounding": request.frame_rounding.value,
+                "resolution": {"width": request.width, "height": request.height},
+                "action_spec": (
+                    request.action_spec.model_dump(mode="json")
+                    if request.action_spec is not None
+                    else None
+                ),
+                "character_identity_ids": request.character_identity_ids,
+            },
             prompts={
                 "prompt": request.prompt,
                 "negative_prompt": request.negative_prompt,
@@ -245,14 +267,36 @@ class WanStudioSession:
             seed=revision.seed,
             input_asset_ids=tuple(
                 item
-                for item in (request.start_image_asset_id, request.end_image_asset_id)
+                for item in (
+                    request.start_image_asset_id,
+                    request.end_image_asset_id,
+                    request.reference_character_asset_id,
+                    request.driving_video_asset_id,
+                    request.source_video_asset_id,
+                    request.mask_asset_id,
+                )
                 if item is not None
             ),
             output_asset_ids=(result_asset.asset_id, *result.frame_asset_ids),
             runtime={
                 key: value
                 for key, value in result.metadata.items()
-                if key in {"prompt_id", "template_id", "template_version", "model_filename"}
+                if key
+                in {
+                    "prompt_id",
+                    "template_id",
+                    "template_version",
+                    "model_filename",
+                    "vae_filename",
+                    "text_encoder_filename",
+                    "precision",
+                    "vae_precision",
+                    "text_encoder_precision",
+                    "quantization",
+                    "load_device",
+                    "accelerator_vendors",
+                    "device",
+                }
             },
         )
         self.project = self.project.model_copy(
@@ -405,12 +449,35 @@ class WanStudioSession:
             model_identifiers=(request.model_id,),
             backend_id=request.backend_id,
             backend_version=backend.capabilities().backend_version,
-            parameters=request.parameters,
-            prompts={"prompt": request.prompt},
+            parameters={
+                **request.parameters,
+                "mode": request.mode.value,
+                "generation_fps": request.generation_fps,
+                "frame_count": request.frame_count,
+                "frame_rounding": request.frame_rounding.value,
+                "resolution": {"width": request.width, "height": request.height},
+                "action_spec": (
+                    request.action_spec.model_dump(mode="json")
+                    if request.action_spec is not None
+                    else None
+                ),
+                "character_identity_ids": request.character_identity_ids,
+            },
+            prompts={
+                "prompt": request.prompt,
+                "negative_prompt": request.negative_prompt,
+            },
             seed=seed,
             input_asset_ids=tuple(
                 asset_id
-                for asset_id in (request.start_image_asset_id, request.end_image_asset_id)
+                for asset_id in (
+                    request.start_image_asset_id,
+                    request.end_image_asset_id,
+                    request.reference_character_asset_id,
+                    request.driving_video_asset_id,
+                    request.source_video_asset_id,
+                    request.mask_asset_id,
+                )
                 if asset_id is not None
             ),
             output_asset_ids=(result.result_asset_id, *result.frame_asset_ids),
