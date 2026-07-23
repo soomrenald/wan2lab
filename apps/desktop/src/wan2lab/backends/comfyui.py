@@ -186,6 +186,12 @@ def _model_capabilities(
     accelerator: str,
 ) -> ModelVariantCapabilities:
     modes = _modes_for_model(filename, wrapper_modes)
+    normalized_name = filename.casefold()
+    is_wan22_ti2v_5b = (
+        ("wan2_2" in normalized_name or "wan2.2" in normalized_name)
+        and "ti2v" in normalized_name
+        and "5b" in normalized_name
+    )
     model_id = "wan-" + re.sub(r"[^A-Za-z0-9._:-]+", "-", filename).strip("-")
     required = {
         WanMode.PROMPT: (),
@@ -199,11 +205,24 @@ def _model_capabilities(
         for descriptor in descriptors
         if descriptor.applicable_modes.intersection(modes)
     )
-    resolutions = [Resolution(width=832, height=480), Resolution(width=480, height=832)]
-    if "1.3b" not in filename.casefold():
-        resolutions.extend(
-            (Resolution(width=1280, height=720), Resolution(width=720, height=1280))
-        )
+    if is_wan22_ti2v_5b:
+        resolutions = [Resolution(width=1280, height=704), Resolution(width=704, height=1280)]
+        default_resolution = resolutions[0]
+        default_frame_count = 121
+        max_frame_count = 121
+        default_generation_fps = 24.0
+        supported_generation_fps = (24.0,)
+    else:
+        resolutions = [Resolution(width=832, height=480), Resolution(width=480, height=832)]
+        if "1.3b" not in normalized_name:
+            resolutions.extend(
+                (Resolution(width=1280, height=720), Resolution(width=720, height=1280))
+            )
+        default_resolution = Resolution(width=832, height=480)
+        default_frame_count = 81
+        max_frame_count = 1001
+        default_generation_fps = 16.0
+        supported_generation_fps = (16.0, 24.0)
     return ModelVariantCapabilities(
         model_id=model_id,
         display_name=filename,
@@ -213,14 +232,14 @@ def _model_capabilities(
             mode: ("negative_prompt", "action_spec_id", "adapters") for mode in modes
         },
         supported_resolutions=tuple(resolutions),
-        default_resolution=Resolution(width=832, height=480),
+        default_resolution=default_resolution,
         frame_count_rule=MultiplePlusOffsetFrameCount(multiple=4, offset=1),
         duration_basis=FrameDurationBasis.INTERVALS,
-        default_frame_count=81,
+        default_frame_count=default_frame_count,
         min_frame_count=1,
-        max_frame_count=1001,
-        default_generation_fps=16.0,
-        supported_generation_fps=(16.0, 24.0),
+        max_frame_count=max_frame_count,
+        default_generation_fps=default_generation_fps,
+        supported_generation_fps=supported_generation_fps,
         supported_precisions=(
             ("bf16", "fp16", "fp32", "fp16_fast")
             if accelerator == "cuda"
@@ -256,7 +275,9 @@ def _modes_for_model(filename: str, wrapper_modes: set[WanMode]) -> set[WanMode]
         modes.add(WanMode.ANIMATE)
     if any(token in name for token in ("replace", "remover")):
         modes.add(WanMode.REPLACE)
-    if any(token in name for token in ("flf2v", "first-last", "first_last")):
+    if any(token in name for token in ("ti2v", "ti-2-v", "text-image-to-video")):
+        modes.update((WanMode.PROMPT, WanMode.I2V))
+    elif any(token in name for token in ("flf2v", "first-last", "first_last")):
         modes.update((WanMode.I2V, WanMode.FIRST_LAST))
     elif "i2v" in name:
         modes.add(WanMode.I2V)

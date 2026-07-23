@@ -21,6 +21,7 @@ def object_info() -> dict[str, object]:
                         "wan2.2_flf2v_14B_fp16.safetensors",
                         "wan2.2_animate_14B_fp16.safetensors",
                         "wan2.2_replace_14B_fp16.safetensors",
+                        "Wan2_2-TI2V-5B_fp8_e4m3fn_scaled_KJ.safetensors",
                         "unclassified.safetensors",
                     ]
                 ]
@@ -83,7 +84,7 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
         )
         self.assertEqual(capabilities.accelerator_vendors, frozenset({"rocm"}))
         self.assertEqual(capabilities.wrapper_version, "test-revision")
-        self.assertEqual(len(capabilities.model_variants), 5)
+        self.assertEqual(len(capabilities.model_variants), 6)
         by_name = {item.display_name: item for item in capabilities.model_variants}
         self.assertEqual(
             by_name["wan2.2_flf2v_14B_fp16.safetensors"].supported_modes,
@@ -93,6 +94,15 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
             by_name["wan2.2_animate_14B_fp16.safetensors"].supported_modes,
             frozenset({WanMode.ANIMATE}),
         )
+        ti2v = by_name["Wan2_2-TI2V-5B_fp8_e4m3fn_scaled_KJ.safetensors"]
+        self.assertEqual(
+            ti2v.supported_modes,
+            frozenset({WanMode.PROMPT, WanMode.I2V}),
+        )
+        self.assertEqual(ti2v.default_resolution.model_dump(), {"width": 1280, "height": 704})
+        self.assertEqual(ti2v.supported_generation_fps, (24.0,))
+        self.assertEqual(ti2v.default_frame_count, 121)
+        self.assertEqual(ti2v.max_frame_count, 121)
         self.assertEqual(len(by_name["wan2.2_t2v_1.3B_fp16.safetensors"].supported_resolutions), 2)
         self.assertEqual(
             by_name["wan2.2_t2v_1.3B_fp16.safetensors"].supported_precisions,
