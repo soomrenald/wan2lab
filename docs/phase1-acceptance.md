@@ -62,22 +62,24 @@ after a segment becomes stale.
 - A different-seed, full-duration Krea-conditioned I2V candidate completed at
   30 steps. It is H.264/yuv420p at 1280x704 and 24 FPS, contains exactly 121
   frames over 5.041667 seconds, and passed a full FFmpeg decode. Both
-  mannequins raise one hand in the sampled contact sheet, but semantic and
-  visual acceptance remains a human decision.
+  mannequins raise one hand in the sampled contact sheet. The project owner
+  approved this first-family hardware output on 2026-07-23.
+- Accelerated Wan is now a primary project and per-segment control. It defaults
+  to enabled/auto/balanced, resolves only backend-declared installed compatible
+  methods, and explicitly records base-inference fallback when none is
+  executable.
+- Versioned model-to-GPU guidance is available for TI2V-5B, general 14B,
+  Animate/Replace 14B, and benchmark-justified minimum-latency 14B workloads.
 
 ## Hardware acceptance status
 
-The first-family ROCm execution gate is partially accepted: backend discovery,
-artifact selection, Prompt execution, I2V execution, output encoding, and
-structured provenance, full-duration decoding, and OOM recovery are verified.
-The short four-step and full-duration one-step renders establish runtime
-integration. The full-duration 30-step render establishes completion at the
-model's default step count but does not automatically establish production
-visual quality.
+The first-family ROCm execution gate is accepted: backend discovery, artifact
+selection, Prompt execution, I2V execution, output encoding, structured
+provenance, full-duration decoding, OOM recovery, and user visual review are
+complete.
 
-Still manually review the full-duration 30-step visual result. First/last,
-Animate, and Replace require later compatible model families because TI2V-5B
-does not advertise those modes.
+First/last, Animate, and Replace require later compatible model families
+because TI2V-5B does not advertise those modes.
 Mannequin-guided and adapter-routed multi-character handoff, identity
 correction, batch face repair, long continuation, and final export also remain
 hardware gates.
@@ -85,5 +87,5 @@ hardware gates.
 Visual quality remains a human review decision and is never inferred from file
 existence.
 
-Product Phase 2 must not start until this hardware gate is deliberately accepted
-or the project owner explicitly records a waiver.
+Product Phase 2 remains blocked by the fixed implementation sequence until all
+required Product Phase 1 acceptance work is complete.
