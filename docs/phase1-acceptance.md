@@ -51,6 +51,10 @@ after a segment becomes stale.
 - Live discovery now selects 128-pixel VAE tiles and 64-pixel strides for this
   constrained-VRAM model/host combination. The recovered full-duration run
   produced a valid 121-frame, 1280x704, 24 FPS, 5.041667-second H.264 file.
+- A local Krea two-subject keyframe completed under the safe 16 GB policy, was
+  released and staged byte-for-byte, then produced a valid Wan2.2 I2V result
+  whose first frame preserves both subjects. Exact evidence is recorded in
+  [krea-to-wan2.2-hardware.md](krea-to-wan2.2-hardware.md).
 
 ## Hardware acceptance status
 
@@ -63,8 +67,9 @@ integration only; they do not establish production visual quality.
 Still manually verify a production-quality step count and visual result for
 TI2V-5B. First/last, Animate, and Replace require later compatible model
 families because TI2V-5B does not advertise those modes.
-Mannequin/Krea-to-Wan handoff, identity correction, batch face repair, long
-continuation, and final export also remain hardware gates.
+Mannequin-guided and adapter-routed multi-character handoff, identity
+correction, batch face repair, long continuation, and final export also remain
+hardware gates.
 
 Visual quality remains a human review decision and is never inferred from file
 existence.

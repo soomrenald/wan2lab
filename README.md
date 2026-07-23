@@ -36,3 +36,5 @@ tracked in [docs/phase1-acceptance.md](docs/phase1-acceptance.md).
 The first local hardware family, Wan2.2 TI2V-5B, has a reproducible setup and
 Prompt/I2V smoke procedure in
 [docs/wan2.2-ti2v-5b-hardware.md](docs/wan2.2-ti2v-5b-hardware.md).
+The constrained-VRAM Krea keyframe to Wan I2V transition is recorded in
+[docs/krea-to-wan2.2-hardware.md](docs/krea-to-wan2.2-hardware.md).
