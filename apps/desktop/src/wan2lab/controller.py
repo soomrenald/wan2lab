@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 import math
 from pathlib import Path
 import tempfile
@@ -46,8 +47,17 @@ from wan2core.projects import (
 from wan2core.segments import SegmentState
 from wan2core.timeline import Timeline
 from wan2core.provenance import ProvenanceRecord
+from wan2core.workers import (
+    CapabilitiesEvent,
+    ErrorEvent,
+    InspectCapabilitiesRequest,
+    ModelsEvent,
+    RuntimeStatusEvent,
+)
+from wan2lab.backends.comfyui import BACKEND_ID
 from wan2lab.assets import LocalAssetStore
 from wan2lab.mannequin import render_mannequin_guides
+from wan2lab.worker_client import WanWorkerProcess
 
 
 class DesktopController(QObject):
@@ -76,6 +86,12 @@ class DesktopController(QObject):
         self._events: list[str] = []
         self._mannequin_preview_url = QUrl()
         self._mannequin_preview_revision = 0
+        self._wan_worker = WanWorkerProcess(self)
+        self._wan_worker.eventReceived.connect(self._handle_worker_event)
+        self._wan_worker.transportError.connect(self._handle_worker_transport_error)
+        self._backend_status = "Local ComfyUI backend not inspected"
+        self._backend_models: list[str] = []
+        self._backend_parameters: list[str] = []
 
     @Property(str, notify=projectChanged)
     def projectName(self) -> str:  # noqa: N802 - Qt property naming
@@ -171,6 +187,18 @@ class DesktopController(QObject):
             return "Render guides to enable Krea conditioning"
         return f"{plan.path.value}: {plan.explanation}"
 
+    @Property(str, notify=statusChanged)
+    def backendStatus(self) -> str:  # noqa: N802
+        return self._backend_status
+
+    @Property("QStringList", notify=statusChanged)
+    def backendModels(self) -> list[str]:  # noqa: N802
+        return list(self._backend_models)
+
+    @Property("QStringList", notify=statusChanged)
+    def backendParameters(self) -> list[str]:  # noqa: N802
+        return list(self._backend_parameters)
+
     @Slot(float)
     def newProject(self, duration_seconds: float = 18.0) -> None:  # noqa: N802
         duration_ms = max(1_000, round(duration_seconds * 1000))
@@ -182,6 +210,21 @@ class DesktopController(QObject):
         self._set_status("New project ready")
         self.projectChanged.emit()
         self.eventLogChanged.emit()
+
+    @Slot()
+    def inspectLocalWanBackend(self) -> None:  # noqa: N802
+        self._backend_status = "Inspecting local ComfyUI worker…"
+        self.statusChanged.emit()
+        self._wan_worker.send(
+            InspectCapabilitiesRequest(
+                command_id=f"inspect-{uuid4().hex}",
+                backend_id=BACKEND_ID,
+            )
+        )
+
+    @Slot()
+    def closeWorker(self) -> None:  # noqa: N802
+        self._wan_worker.close()
 
     @Slot(str)
     def createMannequinScene(self, name: str) -> None:  # noqa: N802
@@ -602,6 +645,43 @@ class DesktopController(QObject):
         url = QUrl.fromLocalFile(str(shaded.path))
         url.setQuery(f"revision={self._mannequin_preview_revision}")
         self._mannequin_preview_url = url
+
+    @Slot(object)
+    def _handle_worker_event(self, event) -> None:
+        if isinstance(event, CapabilitiesEvent):
+            models = event.capabilities.get("model_variants", ())
+            parameters = event.capabilities.get("parameter_descriptors", ())
+            self._backend_models = [
+                str(item.get("display_name", item.get("model_id", "unknown")))
+                for item in models
+                if isinstance(item, dict)
+            ]
+            self._backend_parameters = [
+                str(item.get("display_name", item.get("key", "unknown")))
+                for item in parameters
+                if isinstance(item, dict)
+            ]
+            vendor = ", ".join(event.capabilities.get("accelerator_vendors", ()))
+            wrapper = event.capabilities.get("wrapper_version", "unknown")
+            self._backend_status = (
+                f"ComfyUI Wan ready · {vendor or 'unknown accelerator'} · wrapper {wrapper} · "
+                f"{len(self._backend_models)} compatible model(s)"
+            )
+            self._append_event(self._backend_status)
+        elif isinstance(event, ModelsEvent):
+            self._backend_models = [str(item.get("display_name", "unknown")) for item in event.models]
+        elif isinstance(event, RuntimeStatusEvent):
+            self._backend_status = json.dumps(event.status, sort_keys=True)
+        elif isinstance(event, ErrorEvent):
+            self._backend_status = event.error.message
+            self._append_event(f"Wan worker: {event.error.message}")
+        self.statusChanged.emit()
+
+    @Slot(str)
+    def _handle_worker_transport_error(self, message: str) -> None:
+        self._backend_status = message
+        self._append_event(message)
+        self.statusChanged.emit()
 
     def _set_status(self, value: str) -> None:
         self._status = value

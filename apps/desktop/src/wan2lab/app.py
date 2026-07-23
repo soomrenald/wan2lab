@@ -28,6 +28,7 @@ def main() -> int:
     application.setApplicationName("Wan2Lab")
     application.setOrganizationName("soomrenald")
     controller = DesktopController()
+    application.aboutToQuit.connect(controller.closeWorker)
     engine = build_engine(controller)
     if not engine.rootObjects():
         return 1
@@ -35,4 +36,3 @@ def main() -> int:
 
 
 __all__ = ["build_engine", "main", "qml_path"]
-

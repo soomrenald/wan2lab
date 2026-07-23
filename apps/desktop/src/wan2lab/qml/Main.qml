@@ -125,6 +125,25 @@ ApplicationWindow {
                     text: studio.runtimeVersions
                     color: "#8dd7c4"
                 }
+                Button {
+                    text: "Inspect local Wan backend"
+                    Layout.fillWidth: true
+                    onClicked: studio.inspectLocalWanBackend()
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    text: studio.backendStatus
+                    color: "#f1bf78"
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    text: studio.backendModels.length > 0
+                        ? "Models: " + studio.backendModels.join(" · ")
+                        : "No compatible Wan model discovered"
+                    color: "#aeb9cb"
+                }
                 Item { Layout.fillHeight: true }
             }
         }
