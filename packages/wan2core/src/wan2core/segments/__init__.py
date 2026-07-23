@@ -135,7 +135,12 @@ class Segment(DomainModel):
     parameters: dict[str, object] = Field(default_factory=dict)
     action_spec_id: Identifier | None = None
     character_identity_ids: tuple[Identifier, ...] = ()
+    start_image_asset_id: Identifier | None = None
+    end_image_asset_id: Identifier | None = None
+    reference_character_asset_id: Identifier | None = None
     driving_video_asset_id: Identifier | None = None
+    source_video_asset_id: Identifier | None = None
+    mask_asset_id: Identifier | None = None
     backend_id: Identifier
     model_id: Identifier
     continuation_policy: ContinuationPolicy

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import json
 import math
+import mimetypes
 from pathlib import Path
 import tempfile
 from uuid import uuid4
@@ -94,7 +95,7 @@ from wan2core.projects import (
     save_project,
 )
 from wan2core.projects.invalidation import change_output_fps
-from wan2core.segments import SegmentState
+from wan2core.segments import ContinuationPolicy, SegmentState
 from wan2core.timeline import Timeline
 from wan2core.provenance import ProvenanceRecord
 from wan2core.workers import (
@@ -443,6 +444,26 @@ class DesktopController(QObject):
             f"Prompt: {segment.prompt or request.prompt or '—'}\n"
             f"Parameters: {parameters}"
         )
+
+    @Property(str, notify=projectChanged)
+    def segmentInputSummary(self) -> str:  # noqa: N802
+        if not self._session.project.segments:
+            return "No segment selected"
+        segment = self._session.project.segments[
+            min(self._review_segment_index, len(self._session.project.segments) - 1)
+        ]
+        values = (
+            ("start", segment.start_image_asset_id),
+            ("end", segment.end_image_asset_id),
+            ("character", segment.reference_character_asset_id),
+            ("driving", segment.driving_video_asset_id),
+            ("source", segment.source_video_asset_id),
+            ("mask", segment.mask_asset_id),
+        )
+        assigned = ", ".join(
+            f"{label}={asset_id}" for label, asset_id in values if asset_id is not None
+        ) or "no explicit overrides"
+        return f"{segment.continuation_policy.value} · {assigned}"
 
     @Property(str, notify=projectChanged)
     def mannequinConditioningPath(self) -> str:  # noqa: N802
@@ -2593,6 +2614,91 @@ class DesktopController(QObject):
             return
         self._append_event(f"Updated structured action for {segment.segment_id}")
         self._set_status("Structured action saved; supported controls will bind at generation")
+        self.projectChanged.emit()
+
+    @Slot(int, str)
+    def setSegmentContinuationPolicy(  # noqa: N802
+        self,
+        segment_index: int,
+        policy: str,
+    ) -> None:
+        try:
+            selected = ContinuationPolicy(policy)
+            segments = tuple(
+                item.model_copy(update={"continuation_policy": selected})
+                if index == segment_index
+                else item
+                for index, item in enumerate(self._session.project.segments)
+            )
+            self._session.project = Wan2LabProject.model_validate(
+                self._session.project.model_copy(update={"segments": segments}).model_dump()
+            )
+        except Exception as error:
+            self._set_status(f"Continuation policy update failed: {error}")
+            return
+        self._set_status(f"Continuation policy set to {selected.value}")
+        self.projectChanged.emit()
+
+    @Slot(int, str, QUrl)
+    def importSegmentAsset(  # noqa: N802
+        self,
+        segment_index: int,
+        role: str,
+        url: QUrl,
+    ) -> None:
+        fields = {
+            "start_image": ("start_image_asset_id", AssetKind.IMAGE),
+            "end_image": ("end_image_asset_id", AssetKind.IMAGE),
+            "reference_character": ("reference_character_asset_id", AssetKind.IMAGE),
+            "driving_video": ("driving_video_asset_id", AssetKind.VIDEO),
+            "source_video": ("source_video_asset_id", AssetKind.VIDEO),
+            "mask": ("mask_asset_id", AssetKind.IMAGE),
+        }
+        try:
+            field, kind = fields[role]
+            source = Path(url.toLocalFile()).expanduser().resolve()
+            if kind is AssetKind.IMAGE:
+                media_type = image_media_type(source)
+            else:
+                media_type = mimetypes.guess_type(source.name)[0] or "video/mp4"
+                if not media_type.startswith("video/"):
+                    raise ValueError("selected mode input is not a recognized video")
+            record = self._asset_store.register_imported(
+                source,
+                media_type=media_type,
+                metadata={"operation": "import_segment_input", "role": role},
+            )
+            asset = self._wan_asset(record, kind)
+            provenance = ProvenanceRecord(
+                provenance_id=f"provenance-{uuid4().hex}",
+                operation="import_segment_input",
+                created_at=datetime.now(UTC),
+                output_asset_ids=(asset.asset_id,),
+                parameters={"segment_index": segment_index, "role": role},
+            )
+            segments = tuple(
+                item.model_copy(update={field: asset.asset_id})
+                if index == segment_index
+                else item
+                for index, item in enumerate(self._session.project.segments)
+            )
+            self._session.project = Wan2LabProject.model_validate(
+                self._session.project.model_copy(
+                    update={
+                        "assets": (*self._session.project.assets, asset),
+                        "generation_records": (
+                            *self._session.project.generation_records,
+                            provenance,
+                        ),
+                        "segments": segments,
+                    }
+                ).model_dump()
+            )
+        except Exception as error:
+            self._set_status(f"Segment input import failed: {error}")
+            return
+        self._append_event(f"Imported immutable {role} input for segment {segment_index}")
+        self._set_status("Segment mode input saved; original assets remain immutable")
         self.projectChanged.emit()
 
     @Slot(int, str, str)

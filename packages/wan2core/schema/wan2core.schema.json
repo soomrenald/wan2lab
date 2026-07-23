@@ -2769,6 +2769,20 @@
             "default": null,
             "title": "Driving Video Asset Id"
           },
+          "end_image_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End Image Asset Id"
+          },
           "end_keyframe_id": {
             "anyOf": [
               {
@@ -2787,6 +2801,20 @@
             "minimum": 0,
             "title": "End Ms",
             "type": "integer"
+          },
+          "mask_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mask Asset Id"
           },
           "mode": {
             "$ref": "#/$defs/WanMode"
@@ -2812,6 +2840,20 @@
             "title": "Prompt",
             "type": "string"
           },
+          "reference_character_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reference Character Asset Id"
+          },
           "revision_ids": {
             "default": [],
             "items": {
@@ -2828,6 +2870,20 @@
             "title": "Segment Id",
             "type": "string"
           },
+          "source_video_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Video Asset Id"
+          },
           "stale_reason": {
             "anyOf": [
               {
@@ -2839,6 +2895,20 @@
             ],
             "default": null,
             "title": "Stale Reason"
+          },
+          "start_image_asset_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Start Image Asset Id"
           },
           "start_keyframe_id": {
             "anyOf": [

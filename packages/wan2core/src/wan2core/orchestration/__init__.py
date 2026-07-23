@@ -434,12 +434,12 @@ class WanStudioSession:
             ),
             None,
         )
-        start_asset = (
+        start_asset = segment.start_image_asset_id or (
             keyframes[segment.start_keyframe_id].image_asset_id
             if segment.start_keyframe_id is not None
             else self._previous_boundary_asset(segment)
         )
-        end_asset = (
+        end_asset = segment.end_image_asset_id or (
             keyframes[segment.end_keyframe_id].image_asset_id
             if segment.end_keyframe_id is not None
             else None
@@ -458,6 +458,10 @@ class WanStudioSession:
             frame_count=planned.frame_count,
             start_image_asset_id=start_asset,
             end_image_asset_id=end_asset,
+            reference_character_asset_id=segment.reference_character_asset_id,
+            driving_video_asset_id=segment.driving_video_asset_id,
+            source_video_asset_id=segment.source_video_asset_id,
+            mask_asset_id=segment.mask_asset_id,
             prompt=segment.prompt,
             negative_prompt=segment.negative_prompt,
             action_spec_id=segment.action_spec_id,

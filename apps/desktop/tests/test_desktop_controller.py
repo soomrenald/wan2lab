@@ -732,6 +732,54 @@ class DesktopControllerTests(unittest.TestCase):
         self.assertEqual(len(controller.session.project.actions), 1)
         self.assertTrue(any("prompt" in item for item in controller.timelineBlocks))
 
+    def test_mode_specific_assets_and_continuation_flow_into_animate_request(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = root / "character.png"
+            driving = root / "driving.mp4"
+            Image.new("RGB", (128, 128), "purple").save(reference)
+            driving.write_bytes(b"immutable driving video")
+            controller = DesktopController(asset_base=root / "projects")
+            controller.planMockTimeline()
+            controller.updateSegmentInspector(0, "animate", "turn and wave", "flicker")
+            controller.setSegmentContinuationPolicy(0, "corrected_continuation")
+            controller.importSegmentAsset(
+                0,
+                "reference_character",
+                QUrl.fromLocalFile(str(reference)),
+            )
+            controller.importSegmentAsset(
+                0,
+                "driving_video",
+                QUrl.fromLocalFile(str(driving)),
+            )
+
+            controller.generateNextMockSegment()
+
+            segment = controller.session.project.segments[0]
+            request = controller.session.project.segment_revisions[0].source_request
+            self.assertEqual(
+                segment.continuation_policy.value,
+                "corrected_continuation",
+            )
+            self.assertEqual(
+                request.reference_character_asset_id,
+                segment.reference_character_asset_id,
+            )
+            self.assertEqual(request.driving_video_asset_id, segment.driving_video_asset_id)
+            self.assertIn("character=", controller.segmentInputSummary)
+            input_ids = {
+                segment.reference_character_asset_id,
+                segment.driving_video_asset_id,
+            }
+            self.assertTrue(
+                all(
+                    item.storage_path.startswith("objects/")
+                    for item in controller.session.project.assets
+                    if item.asset_id in input_ids
+                )
+            )
+
     def test_explicit_discovered_components_are_sent_to_isolated_worker(self) -> None:
         controller = DesktopController()
         controller._wan_worker.send = Mock()  # type: ignore[method-assign]  # noqa: SLF001

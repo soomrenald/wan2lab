@@ -159,6 +159,20 @@ class Wan2LabProject(DomainModel):
         for segment in self.segments:
             if segment.action_spec_id is not None and segment.action_spec_id not in action_ids:
                 raise ValueError("segment references a missing action spec")
+            segment_assets = {
+                item
+                for item in (
+                    segment.start_image_asset_id,
+                    segment.end_image_asset_id,
+                    segment.reference_character_asset_id,
+                    segment.driving_video_asset_id,
+                    segment.source_video_asset_id,
+                    segment.mask_asset_id,
+                )
+                if item is not None
+            }
+            if segment_assets - asset_ids:
+                raise ValueError("segment references a missing mode input asset")
             if segment.start_keyframe_id and segment.start_keyframe_id not in keyframe_ids:
                 raise ValueError("segment references a missing start keyframe")
             if segment.end_keyframe_id and segment.end_keyframe_id not in keyframe_ids:

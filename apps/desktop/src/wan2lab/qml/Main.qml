@@ -76,6 +76,18 @@ ApplicationWindow {
         )
     }
 
+    FileDialog {
+        id: segmentAssetDialog
+        property string assetRole: "start_image"
+        title: "Choose immutable segment input"
+        nameFilters: ["Media (*.png *.jpg *.jpeg *.webp *.mp4 *.mov *.mkv *.webm)"]
+        onAccepted: studio.importSegmentAsset(
+            selectedSegment.value,
+            assetRole,
+            selectedFile
+        )
+    }
+
     palette {
         window: "#11151c"
         windowText: "#e8edf5"
@@ -643,6 +655,74 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         model: ["prompt", "i2v", "first_last", "animate", "replace"]
                     }
+                }
+                ComboBox {
+                    id: continuationPolicy
+                    Layout.fillWidth: true
+                    model: [
+                        "authored_anchor",
+                        "generated_last_frame",
+                        "corrected_continuation",
+                        "dual_boundary",
+                        "overlap"
+                    ]
+                    onActivated: studio.setSegmentContinuationPolicy(
+                        selectedSegment.value,
+                        currentText
+                    )
+                }
+                Label { text: "Mode inputs"; color: "#aeb9cb" }
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    Button {
+                        text: "Start image…"
+                        onClicked: {
+                            segmentAssetDialog.assetRole = "start_image"
+                            segmentAssetDialog.open()
+                        }
+                    }
+                    Button {
+                        text: "End image…"
+                        onClicked: {
+                            segmentAssetDialog.assetRole = "end_image"
+                            segmentAssetDialog.open()
+                        }
+                    }
+                    Button {
+                        text: "Character ref…"
+                        onClicked: {
+                            segmentAssetDialog.assetRole = "reference_character"
+                            segmentAssetDialog.open()
+                        }
+                    }
+                    Button {
+                        text: "Driving video…"
+                        onClicked: {
+                            segmentAssetDialog.assetRole = "driving_video"
+                            segmentAssetDialog.open()
+                        }
+                    }
+                    Button {
+                        text: "Source video…"
+                        onClicked: {
+                            segmentAssetDialog.assetRole = "source_video"
+                            segmentAssetDialog.open()
+                        }
+                    }
+                    Button {
+                        text: "Mask image…"
+                        onClicked: {
+                            segmentAssetDialog.assetRole = "mask"
+                            segmentAssetDialog.open()
+                        }
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: studio.segmentInputSummary
+                    color: "#8f9bb0"
                 }
                 TextField {
                     id: segmentPrompt
