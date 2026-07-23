@@ -14,6 +14,24 @@ ApplicationWindow {
     title: studio.projectName + " — Wan2Lab"
     color: "#11151c"
 
+    function loadSegmentInspector() {
+        segmentMode.currentIndex = Math.max(
+            0, segmentMode.find(studio.selectedSegmentMode)
+        )
+        continuationPolicy.currentIndex = Math.max(
+            0, continuationPolicy.find(studio.selectedSegmentContinuationPolicy)
+        )
+        segmentPrompt.text = studio.selectedSegmentPrompt
+        segmentNegativePrompt.text = studio.selectedSegmentNegativePrompt
+    }
+
+    Connections {
+        target: studio
+        function onProjectChanged() { window.loadSegmentInspector() }
+    }
+
+    Component.onCompleted: loadSegmentInspector()
+
     FileDialog {
         id: sheetImageDialog
         title: "Import character-sheet image"
@@ -898,7 +916,10 @@ ApplicationWindow {
                         from: 0
                         to: Math.max(0, studio.segmentCount - 1)
                         enabled: studio.segmentCount > 0
-                        onValueModified: studio.selectReviewSegment(value)
+                        onValueModified: {
+                            studio.selectReviewSegment(value)
+                            window.loadSegmentInspector()
+                        }
                     }
                     ComboBox {
                         id: segmentMode

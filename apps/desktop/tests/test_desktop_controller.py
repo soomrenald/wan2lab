@@ -939,6 +939,9 @@ class DesktopControllerTests(unittest.TestCase):
         self.assertEqual(revision.source_request.action_spec_id, segment.action_spec_id)
         self.assertEqual(len(controller.session.project.actions), 1)
         self.assertTrue(any("prompt" in item for item in controller.timelineBlocks))
+        self.assertEqual(controller.selectedSegmentMode, "prompt")
+        self.assertEqual(controller.selectedSegmentPrompt, "camera orbit")
+        self.assertEqual(controller.selectedSegmentNegativePrompt, "flicker")
 
     def test_mode_specific_assets_and_continuation_flow_into_animate_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

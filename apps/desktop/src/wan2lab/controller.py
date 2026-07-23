@@ -546,6 +546,37 @@ class DesktopController(QObject):
         ) or "no explicit overrides"
         return f"{segment.continuation_policy.value} · {assigned}"
 
+    def _selected_segment(self):
+        if not self._session.project.segments:
+            return None
+        return self._session.project.segments[
+            min(self._review_segment_index, len(self._session.project.segments) - 1)
+        ]
+
+    @Property(str, notify=projectChanged)
+    def selectedSegmentMode(self) -> str:  # noqa: N802
+        segment = self._selected_segment()
+        return segment.mode.value if segment is not None else "prompt"
+
+    @Property(str, notify=projectChanged)
+    def selectedSegmentPrompt(self) -> str:  # noqa: N802
+        segment = self._selected_segment()
+        return segment.prompt if segment is not None else ""
+
+    @Property(str, notify=projectChanged)
+    def selectedSegmentNegativePrompt(self) -> str:  # noqa: N802
+        segment = self._selected_segment()
+        return segment.negative_prompt if segment is not None else ""
+
+    @Property(str, notify=projectChanged)
+    def selectedSegmentContinuationPolicy(self) -> str:  # noqa: N802
+        segment = self._selected_segment()
+        return (
+            segment.continuation_policy.value
+            if segment is not None
+            else ContinuationPolicy.AUTHORED_ANCHOR.value
+        )
+
     @Property(str, notify=projectChanged)
     def mannequinConditioningPath(self) -> str:  # noqa: N802
         if not self._session.project.mannequin_scenes:
