@@ -9,7 +9,7 @@ description = "Review-gated local Wan video production studio"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "k2core @ git+https://github.com/soomrenald/k2core.git@502e4e6ee746ae2f7477c7b86d7b333352dc4559",
+    "k2core @ git+https://github.com/soomrenald/k2core.git@0dcdb7b1ccd18be61aafe761b56a77a2dcf11030",
     "pydantic>=2.10,<3",
     "PySide6>=6.8,<7",
     "wan2core==0.1.0",
