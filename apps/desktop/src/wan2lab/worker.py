@@ -47,7 +47,13 @@ from wan2lab.backends.comfyui import (
 
 
 class WanOutOfMemory(RuntimeError):
-    pass
+    recovery_actions = (
+        "reduce_vae_tile_size",
+        "reduce_frame_count",
+        "reduce_resolution",
+        "enable_offload",
+        "select_smaller_model",
+    )
 
 
 @dataclass(slots=True)
@@ -210,7 +216,8 @@ class ComfyWorkerService:
                 self.residency.release()
                 raise WanOutOfMemory(
                     "Wan generation exhausted accelerator memory; models were released. "
-                    "Retry with offload, lower resolution, or a smaller model."
+                    "Retry with smaller VAE tiles, fewer frames, offload, lower "
+                    "resolution, or a smaller model."
                 ) from error
             raise
         storage_keys = tuple(item.storage_key for item in execution.outputs)
@@ -353,6 +360,7 @@ class StdioWanWorker:
 
 def _error_event(request: WanWorkerRequest, error: Exception) -> ErrorEvent:
     job_id = getattr(request, "job_id", request.command_id)
+    out_of_memory = isinstance(error, WanOutOfMemory)
     return ErrorEvent(
         command_id=request.command_id,
         error=WorkerError(
@@ -364,7 +372,12 @@ def _error_event(request: WanWorkerRequest, error: Exception) -> ErrorEvent:
                 (ConnectionError, InterruptedError, TimeoutError, WanOutOfMemory),
             ),
             details={
-                "oom_recovered": isinstance(error, WanOutOfMemory),
+                "oom_recovered": out_of_memory,
+                **(
+                    {"recovery_actions": list(error.recovery_actions)}
+                    if out_of_memory
+                    else {}
+                ),
             },
         ),
     )

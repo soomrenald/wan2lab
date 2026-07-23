@@ -27,7 +27,11 @@ from wan2core.keyframes import Rectangle
 from wan2core.mannequin.workflows import GuideKind
 from wan2core.segments import SegmentState
 from wan2core.workers import AckEvent, CapabilitiesEvent, ResultEvent, WorkerResult
-from wan2core.workers import ReleaseAllModelsRequest, RuntimeStatusRequest
+from wan2core.workers import (
+    ReleaseAllModelsRequest,
+    ReleaseWanModelRequest,
+    RuntimeStatusRequest,
+)
 from wan2lab.controller import DesktopController
 
 
@@ -74,6 +78,30 @@ class DesktopControllerTests(unittest.TestCase):
             AckEvent(command_id=commands[1].command_id, message="released")
         )
         self.assertIn("released", controller.status)
+
+    def test_loading_krea_releases_selected_wan_residency_first(self) -> None:
+        controller = DesktopController()
+        controller._selected_wan_model_id = "wan-model-1"  # noqa: SLF001
+        controller._wan_worker.send = Mock()  # type: ignore[method-assign]  # noqa: SLF001
+        controller._krea_worker.send = Mock(return_value="load-krea-1")  # type: ignore[method-assign]  # noqa: SLF001
+
+        controller.loadLocalKreaBackend()
+
+        wan_command = controller._wan_worker.send.call_args.args[0]  # type: ignore[union-attr]  # noqa: SLF001
+        self.assertIsInstance(wan_command, ReleaseWanModelRequest)
+        self.assertEqual(wan_command.model_id, "wan-model-1")
+        self.assertIsNone(controller._selected_wan_model_id)  # noqa: SLF001
+        self.assertEqual(
+            controller._krea_worker.send.call_args.args,  # type: ignore[union-attr]  # noqa: SLF001
+            (
+                "load_model",
+                {
+                    "comfyui_root": str(controller._comfyui_root),  # noqa: SLF001
+                    "memory_policy": "safe_16gb",
+                },
+            ),
+        )
+        self.assertEqual(controller._krea_load_command_id, "load-krea-1")  # noqa: SLF001
 
     def test_character_adapters_are_immutable_and_model_family_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

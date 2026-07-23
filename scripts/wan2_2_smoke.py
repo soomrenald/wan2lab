@@ -10,7 +10,7 @@ from wan2core.backends import WanMode
 from wan2core.segments import SegmentRequest
 from wan2core.workers import GenerateSegmentRequest, LoadModelRequest
 from wan2lab.backends.comfyui import BACKEND_ID, ComfyUIClient
-from wan2lab.worker import ComfyWorkerService, ThreadCancellation
+from wan2lab.worker import ComfyWorkerService, ThreadCancellation, WanOutOfMemory
 
 
 MODEL_FILENAME = "Wan2_2-TI2V-5B_fp8_e4m3fn_scaled_KJ.safetensors"
@@ -34,6 +34,16 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Generate repeatedly in one worker session to exercise retained residency",
     )
+    parser.add_argument(
+        "--vae-tile-size",
+        type=int,
+        help="Override both VAE decode tile dimensions in pixels",
+    )
+    parser.add_argument(
+        "--vae-tile-stride",
+        type=int,
+        help="Override both VAE decode tile strides in pixels",
+    )
     parser.add_argument("--seed", type=int, default=20260723)
     parser.add_argument("--prompt", default="A paper windmill turns gently in a clean studio.")
     parser.add_argument("--negative-prompt", default="flicker, distortion, text, watermark")
@@ -48,6 +58,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--start-image is required for --mode i2v")
     if args.runs < 1:
         parser.error("--runs must be at least 1")
+    tile_size = args.vae_tile_size if args.vae_tile_size is not None else 272
+    tile_stride = args.vae_tile_stride if args.vae_tile_stride is not None else 144
+    if tile_stride >= tile_size:
+        parser.error("--vae-tile-stride must be smaller than --vae-tile-size")
     return args
 
 
@@ -97,6 +111,12 @@ def main() -> int:
         "rope_function": "comfy_chunked",
         "device": "cpu",
     }
+    if args.vae_tile_size is not None:
+        parameters["tile_x"] = args.vae_tile_size
+        parameters["tile_y"] = args.vae_tile_size
+    if args.vae_tile_stride is not None:
+        parameters["tile_stride_x"] = args.vae_tile_stride
+        parameters["tile_stride_y"] = args.vae_tile_stride
     if mode is WanMode.I2V:
         parameters["tiled_vae"] = True
     asset_inputs = (
@@ -113,6 +133,7 @@ def main() -> int:
             print(f"{item.stage}: {item.message}", flush=True)
             last_stage = item.stage
 
+    exit_code = 0
     try:
         for run_index in range(1, args.runs + 1):
             run_id = f"run-{run_index}"
@@ -151,10 +172,23 @@ def main() -> int:
                 progress,
             )
             print(json.dumps(result.model_dump(mode="json"), indent=2))
+    except WanOutOfMemory as error:
+        print(
+            json.dumps(
+                {
+                    "kind": "error",
+                    "recoverable": True,
+                    "message": str(error),
+                    "recovery_actions": list(error.recovery_actions),
+                },
+                indent=2,
+            )
+        )
+        exit_code = 2
     finally:
         if args.release:
             service.release("wan2-2-smoke-release")
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

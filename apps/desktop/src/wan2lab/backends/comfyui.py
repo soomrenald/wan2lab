@@ -25,6 +25,7 @@ from wan2core.backends import (
 
 
 BACKEND_ID = "comfyui-wan-video-wrapper"
+_CONSTRAINED_VRAM_GIB = 18.0
 
 
 class ComfyUIUnavailable(ConnectionError):
@@ -149,12 +150,14 @@ def inspect_comfyui_wan(
     model_names = tuple(str(item) for item in _choices(model_loader_info, "model"))
     descriptors = _workflow_descriptors(object_info, frozenset(executable_modes), nodes)
     detected_accelerator = accelerator_vendor(system_stats)
+    total_vram_gib = _total_vram_gib(system_stats)
     variants = tuple(
         _model_capabilities(
             name,
             executable_modes,
             descriptors,
             accelerator=detected_accelerator,
+            total_vram_gib=total_vram_gib,
             unified_i2v_available={
                 nodes.latent_encoder,
                 nodes.image_scaler,
@@ -202,6 +205,7 @@ def _model_capabilities(
     descriptors: tuple[ParameterDescriptor, ...],
     *,
     accelerator: str,
+    total_vram_gib: float | None,
     unified_i2v_available: bool,
 ) -> ModelVariantCapabilities:
     modes = _modes_for_model(
@@ -228,6 +232,32 @@ def _model_capabilities(
         for descriptor in descriptors
         if descriptor.applicable_modes.intersection(modes)
     )
+    if (
+        is_wan22_ti2v_5b
+        and total_vram_gib is not None
+        and total_vram_gib <= _CONSTRAINED_VRAM_GIB
+    ):
+        safe_defaults = {
+            "enable_vae_tiling": True,
+            "tile_x": 128,
+            "tile_y": 128,
+            "tile_stride_x": 64,
+            "tile_stride_y": 64,
+        }
+        applicable = tuple(
+            descriptor.model_copy(
+                update={
+                    "default": safe_defaults[descriptor.key],
+                    "help_text": (
+                        f"{descriptor.help_text} "
+                        "Wan2Lab selected a constrained-VRAM default for this host."
+                    ).strip(),
+                }
+            )
+            if descriptor.key in safe_defaults
+            else descriptor
+            for descriptor in applicable
+        )
     if is_wan22_ti2v_5b:
         resolutions = [Resolution(width=1280, height=704), Resolution(width=704, height=1280)]
         default_resolution = resolutions[0]
@@ -455,6 +485,15 @@ def accelerator_vendor(system_stats: Mapping[str, object]) -> str:
     if any(token in text for token in ("nvidia", "cuda")):
         return "cuda"
     return "cpu"
+
+
+def _total_vram_gib(system_stats: Mapping[str, object]) -> float | None:
+    devices = system_stats.get("devices", ())
+    device = devices[0] if isinstance(devices, list) and devices else {}
+    total = _mapping(device).get("vram_total")
+    if not isinstance(total, (int, float)) or total <= 0:
+        return None
+    return float(total) / (1024**3)
 
 
 def _node(object_info: Mapping[str, object], name: str) -> Mapping[str, object]:

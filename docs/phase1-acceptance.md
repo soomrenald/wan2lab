@@ -46,19 +46,25 @@ after a segment becomes stale.
 - Two sequential Prompt jobs completed through one worker selection without an
   intervening release; the second reused ComfyUI's cached T5/model work and
   produced a distinct revision from its incremented seed.
+- A default-tile 121-frame decode produced a real HIP OOM; Wan2Lab returned a
+  recoverable structured error, released model state, and left ComfyUI healthy.
+- Live discovery now selects 128-pixel VAE tiles and 64-pixel strides for this
+  constrained-VRAM model/host combination. The recovered full-duration run
+  produced a valid 121-frame, 1280x704, 24 FPS, 5.041667-second H.264 file.
 
 ## Hardware acceptance status
 
 The first-family ROCm execution gate is partially accepted: backend discovery,
 artifact selection, Prompt execution, I2V execution, output encoding, and
-structured provenance are verified. The short four-step smoke renders establish
-runtime integration only; they do not establish production visual quality.
+structured provenance, full-duration decoding, and OOM recovery are verified.
+The short four-step and full-duration one-step renders establish runtime
+integration only; they do not establish production visual quality.
 
-Still manually verify full 121-frame production settings for TI2V-5B.
-First/last, Animate, and Replace require later compatible model families because
-TI2V-5B does not advertise those modes. OOM recovery, mannequin/Krea-to-Wan
-handoff, identity correction, batch face repair, long continuation, and final
-export also remain hardware gates.
+Still manually verify a production-quality step count and visual result for
+TI2V-5B. First/last, Animate, and Replace require later compatible model
+families because TI2V-5B does not advertise those modes.
+Mannequin/Krea-to-Wan handoff, identity correction, batch face repair, long
+continuation, and final export also remain hardware gates.
 
 Visual quality remains a human review decision and is never inferred from file
 existence.

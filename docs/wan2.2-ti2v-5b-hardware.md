@@ -102,6 +102,10 @@ export PYTHONPATH=apps/desktop/src:packages/wan2core/src:/home/wolfhard/k2core/s
 For I2V, `--start-image` is relative to the ComfyUI input directory.
 Use `--runs 2` (or more) to submit sequential regenerations through one worker
 session and `--release` to free the selection after the final run.
+For a 121-frame render on a 16 GB device, use
+`--vae-tile-size 128 --vae-tile-stride 64`. Wan2Lab selects those decode
+defaults automatically when live discovery reports at most 18 GiB of total
+VRAM; larger hosts retain the wrapper defaults.
 
 ## Output evidence
 
@@ -131,6 +135,34 @@ log omitted transformer format detection, T5 parameter loading, and T5
 encoding. It reused the cached graph outputs and host-resident model, while the
 configured offload policy still copied transformer weights to the GPU for
 sampling. The second job then completed with a new seed and distinct output.
+
+## Full-length memory recovery
+
+A 121-frame, 1280x704 Prompt graph completed its single denoising step with a
+27,280-token input sequence, a 6.352 GB peak sampler allocation, and a 7.264 GB
+peak reservation. The wrapper-default 272-pixel VAE tiles then exhausted the
+16 GB device during decode: HIP requested another 7.62 GiB with 2.60 GiB free.
+
+Wan2Lab converted ComfyUI's failure into a recoverable `WanOutOfMemory`, called
+the explicit model-release path, and returned the host to 16,351,494,144 bytes
+of free VRAM without terminating ComfyUI. This is live hardware evidence for
+the structured OOM and recovery path.
+
+The retry with 128-pixel tiles and 64-pixel strides completed:
+
+| Prompt ID | Output | Bytes | SHA-256 | ComfyUI time |
+| --- | --- | ---: | --- | ---: |
+| `e4d9346e-514f-4098-b0ed-1ddee2e3f616` | `output/wan2lab/hardware/wan2_2_ti2v_prompt_121f_1step_smalltiles_00001.mp4` | 1,172,907 | `976f24e040553c3cc387b242d4f19cde5e4541361815d7f356e91fed83adb14b` | 21 min 13 s |
+
+The output is H.264/yuv420p, 1280x704, 24 FPS, exactly 121 frames, and
+5.041667 seconds long. FFmpeg decoded every frame without error. Sampling took
+4 minutes 50 seconds and peaked at 6.322 GB allocated and 7.246 GB reserved;
+the 45-tile VAE decode took 16 minutes 8 seconds. The smaller working set trades
+decode speed and possible tile seams for completion on this host.
+
+This one-step render proves the model's advertised full-duration graph, memory
+recovery, decode, and output path. It is intentionally not a production-quality
+or visual-quality acceptance render.
 
 ## Explicit release evidence
 

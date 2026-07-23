@@ -16,7 +16,9 @@ from wan2lab.backends.comfyui import BACKEND_ID, inspect_comfyui_wan
 from test_comfyui_backend import object_info
 
 
-def builder() -> ComfyWanWorkflowBuilder:
+def builder(
+    system_stats: dict[str, object] | None = None,
+) -> ComfyWanWorkflowBuilder:
     info = object_info()
     info.update(
         {
@@ -29,7 +31,7 @@ def builder() -> ComfyWanWorkflowBuilder:
     )
     capabilities = inspect_comfyui_wan(
         info,
-        {"devices": [{"name": "NVIDIA CUDA"}]},
+        system_stats or {"devices": [{"name": "NVIDIA CUDA"}]},
         executable_specialized_modes=frozenset({WanMode.ANIMATE, WanMode.REPLACE}),
     )
     selections = {
@@ -178,6 +180,40 @@ class ComfyWorkflowTests(unittest.TestCase):
         self.assertNotIn("9", plan.workflow)
         self.assertTrue(plan.workflow["6"]["inputs"]["batched_cfg"])
         self.assertEqual(plan.workflow["6"]["inputs"]["rope_function"], "default")
+
+    def test_unified_ti2v_uses_constrained_vram_decode_defaults(self) -> None:
+        workflow_builder = builder(
+            {
+                "devices": [
+                    {
+                        "name": "AMD Radeon",
+                        "type": "rocm",
+                        "vram_total": 16 * 1024**3,
+                    }
+                ]
+            }
+        )
+        plan = workflow_builder.build(
+            request(
+                workflow_builder,
+                WanMode.PROMPT,
+                "TI2V-5B",
+                width=1280,
+                height=704,
+                generation_fps=24,
+                frame_count=121,
+            ),
+            asset_inputs={},
+            filename_prefix="wan2lab/ti2v-low-vram",
+            seed=46,
+        )
+
+        self.assertTrue(plan.workflow["7"]["inputs"]["enable_vae_tiling"])
+        self.assertEqual(plan.workflow["7"]["inputs"]["tile_x"], 128)
+        self.assertEqual(plan.workflow["7"]["inputs"]["tile_y"], 128)
+        self.assertEqual(plan.workflow["7"]["inputs"]["tile_stride_x"], 64)
+        self.assertEqual(plan.workflow["7"]["inputs"]["tile_stride_y"], 64)
+        self.assertEqual(plan.resolved_parameters["tile_x"], 128)
 
     def test_unified_ti2v_i2v_uses_encoded_extra_latent(self) -> None:
         workflow_builder = builder()

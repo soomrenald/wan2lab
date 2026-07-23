@@ -17,6 +17,7 @@ from wan2lab.worker import (
     StdioWanWorker,
     ThreadCancellation,
     WanOutOfMemory,
+    _error_event,
 )
 
 from test_comfy_workflow import model_id, request
@@ -156,7 +157,7 @@ class WorkerServiceTests(unittest.TestCase):
             WanMode.PROMPT,
             "t2v",
         )
-        with self.assertRaises(WanOutOfMemory):
+        with self.assertRaises(WanOutOfMemory) as raised:
             service.generate(
                 GenerateSegmentRequest(
                     command_id="generate",
@@ -168,8 +169,31 @@ class WorkerServiceTests(unittest.TestCase):
                 ThreadCancellation(),
                 lambda _event: None,
             )
+        self.assertIn("smaller VAE tiles", str(raised.exception))
+        self.assertIn("reduce_vae_tile_size", raised.exception.recovery_actions)
         self.assertEqual(client.frees, 1)
         self.assertIsNone(service.residency.resident)
+
+    def test_runtime_oom_event_reports_structured_recovery_actions(self) -> None:
+        request_event = InspectCapabilitiesRequest(
+            command_id="inspect-oom",
+            backend_id=BACKEND_ID,
+        )
+
+        event = _error_event(request_event, WanOutOfMemory("out of memory"))
+
+        self.assertTrue(event.error.recoverable)
+        self.assertTrue(event.error.details["oom_recovered"])
+        self.assertEqual(
+            event.error.details["recovery_actions"],
+            [
+                "reduce_vae_tile_size",
+                "reduce_frame_count",
+                "reduce_resolution",
+                "enable_offload",
+                "select_smaller_model",
+            ],
+        )
 
     def test_model_load_preflight_requires_offload_when_vram_is_constrained(self) -> None:
         service = ComfyWorkerService(WorkerClient(free_vram_gib=8), poll_interval_seconds=0)

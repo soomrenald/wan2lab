@@ -194,6 +194,71 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
 
         self.assertEqual(ti2v.supported_modes, frozenset({WanMode.PROMPT}))
 
+    def test_unified_5b_uses_safe_vae_tiles_on_constrained_vram(self) -> None:
+        capabilities = inspect_comfyui_wan(
+            object_info(),
+            {
+                "devices": [
+                    {
+                        "name": "AMD Radeon",
+                        "type": "rocm",
+                        "vram_total": 16 * 1024**3,
+                    }
+                ]
+            },
+        )
+        ti2v = next(
+            model
+            for model in capabilities.model_variants
+            if "TI2V-5B" in model.display_name
+        )
+        parameters = {
+            item.key: item
+            for item in capabilities.parameters_for(ti2v.model_id, WanMode.PROMPT)
+        }
+
+        self.assertTrue(parameters["enable_vae_tiling"].default)
+        self.assertEqual(parameters["tile_x"].default, 128)
+        self.assertEqual(parameters["tile_y"].default, 128)
+        self.assertEqual(parameters["tile_stride_x"].default, 64)
+        self.assertEqual(parameters["tile_stride_y"].default, 64)
+        self.assertEqual(
+            next(
+                item.default
+                for item in capabilities.parameter_descriptors
+                if item.key == "tile_x"
+            ),
+            272,
+        )
+        performance_capabilities = inspect_comfyui_wan(
+            object_info(),
+            {
+                "devices": [
+                    {
+                        "name": "NVIDIA RTX",
+                        "type": "cuda",
+                        "vram_total": 24 * 1024**3,
+                    }
+                ]
+            },
+        )
+        performance_ti2v = next(
+            model
+            for model in performance_capabilities.model_variants
+            if "TI2V-5B" in model.display_name
+        )
+        self.assertEqual(
+            next(
+                item.default
+                for item in performance_capabilities.parameters_for(
+                    performance_ti2v.model_id,
+                    WanMode.PROMPT,
+                )
+                if item.key == "tile_x"
+            ),
+            272,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
