@@ -9,7 +9,7 @@ from pydantic import Field, model_validator
 
 from wan2core.base import DomainModel, Identifier
 from wan2core.fps import FpsConversionPlan, plan_fps_conversion
-from wan2core.segments import Segment, SegmentRevision, SegmentState
+from wan2core.segments import ContinuationPolicy, Segment, SegmentRevision, SegmentState
 
 
 class SegmentExportInput(DomainModel):
@@ -19,6 +19,8 @@ class SegmentExportInput(DomainModel):
     duration_ms: int = Field(gt=0)
     generation_fps: float = Field(gt=0.0)
     frame_count: int = Field(gt=0)
+    drop_leading_boundary_frame: bool = False
+    continuation_policy: ContinuationPolicy
 
 
 class FfmpegCommand(DomainModel):
@@ -83,6 +85,7 @@ def build_export_plan(
     fps_plans: list[FpsConversionPlan] = []
     commands: list[FfmpegCommand] = []
     manifest: list[str] = []
+    previous_revision: SegmentRevision | None = None
     for index, segment in enumerate(ordered, start=1):
         if segment.start_ms != cursor:
             raise ValueError("export segments contain a gap or overlap")
@@ -100,6 +103,25 @@ def build_export_plan(
             raise ValueError(f"missing source path for asset {revision.result_asset_id}")
         request = revision.source_request
         duration_ms = segment.end_ms - segment.start_ms
+        previous_boundary_assets = (
+            {
+                item
+                for item in (
+                    previous_revision.source_request.end_image_asset_id,
+                    previous_revision.end_frame_asset_id,
+                )
+                if item is not None
+            }
+            if previous_revision is not None
+            else set()
+        )
+        drop_leading_boundary = (
+            request.start_image_asset_id is not None
+            and request.start_image_asset_id in previous_boundary_assets
+        ) or (
+            previous_revision is not None
+            and segment.continuation_policy is ContinuationPolicy.OVERLAP
+        )
         item = SegmentExportInput(
             segment_id=segment.segment_id,
             revision_id=revision_id,
@@ -107,6 +129,8 @@ def build_export_plan(
             duration_ms=duration_ms,
             generation_fps=request.generation_fps,
             frame_count=request.frame_count,
+            drop_leading_boundary_frame=drop_leading_boundary,
+            continuation_policy=segment.continuation_policy,
         )
         fps_plan = plan_fps_conversion(
             duration_ms=duration_ms,
@@ -115,6 +139,21 @@ def build_export_plan(
             output_fps=output_fps,
         )
         normalized = str(PurePosixPath(work_directory) / f"segment-{index:04d}.mp4")
+        duration_seconds = duration_ms / 1000.0
+        filters = [fps_plan.filter_expression]
+        if drop_leading_boundary:
+            filters.extend(
+                (
+                    "trim=start_frame=1",
+                    f"tpad=stop_mode=clone:stop_duration={1 / output_fps:.9g}",
+                )
+            )
+        filters.extend(
+            (
+                f"trim=duration={duration_seconds:.9g}",
+                "setpts=PTS-STARTPTS",
+            )
+        )
         commands.append(
             FfmpegCommand(
                 stage=f"normalize_segment_{index}",
@@ -126,7 +165,7 @@ def build_export_plan(
                     "-i",
                     source_path,
                     "-vf",
-                    fps_plan.filter_expression,
+                    ",".join(filters),
                     "-an",
                     normalized,
                 ),
@@ -136,6 +175,7 @@ def build_export_plan(
         inputs.append(item)
         fps_plans.append(fps_plan)
         manifest.append(normalized)
+        previous_revision = revision
 
     manifest_path = str(PurePosixPath(work_directory) / "segments.txt")
     commands.append(

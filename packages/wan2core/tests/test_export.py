@@ -8,7 +8,14 @@ from wan2core.review import approve_revision, complete_generation, queue_revisio
 from wan2core.segments import ContinuationPolicy, Segment, SegmentRequest
 
 
-def approved(number: int, start_ms: int, end_ms: int):
+def approved(
+    number: int,
+    start_ms: int,
+    end_ms: int,
+    *,
+    start_asset_id: str | None = None,
+    end_asset_id: str | None = None,
+):
     segment = Segment(
         segment_id=f"segment-{number}",
         start_ms=start_ms,
@@ -30,6 +37,8 @@ def approved(number: int, start_ms: int, end_ms: int):
         height=720,
         generation_fps=16.0,
         frame_count=81,
+        start_image_asset_id=start_asset_id,
+        end_image_asset_id=end_asset_id,
     )
     segment, revision = queue_revision(
         segment,
@@ -49,8 +58,13 @@ def approved(number: int, start_ms: int, end_ms: int):
 
 class ExportPlanTests(unittest.TestCase):
     def test_export_uses_argument_arrays_and_only_approved_revisions(self) -> None:
-        first, first_revision = approved(1, 0, 5_000)
-        second, second_revision = approved(2, 5_000, 10_000)
+        first, first_revision = approved(1, 0, 5_000, end_asset_id="shared-boundary")
+        second, second_revision = approved(
+            2,
+            5_000,
+            10_000,
+            start_asset_id="shared-boundary",
+        )
         plan = build_export_plan(
             export_id="export-1",
             segments=(first, second),
@@ -65,6 +79,13 @@ class ExportPlanTests(unittest.TestCase):
         self.assertEqual(plan.commands[-1].arguments[0], "ffmpeg")
         self.assertNotIn(";", plan.commands[-1].arguments)
         self.assertEqual(plan.fps_plans[0].output_frame_count, 120)
+        self.assertFalse(plan.segment_inputs[0].drop_leading_boundary_frame)
+        self.assertTrue(plan.segment_inputs[1].drop_leading_boundary_frame)
+        self.assertEqual(
+            plan.commands[1].arguments[plan.commands[1].arguments.index("-vf") + 1],
+            "fps=24,trim=start_frame=1,tpad=stop_mode=clone:stop_duration=0.0416666667,"
+            "trim=duration=5,setpts=PTS-STARTPTS",
+        )
 
     def test_export_rejects_unapproved_segments(self) -> None:
         draft = Segment(
@@ -91,4 +112,3 @@ class ExportPlanTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

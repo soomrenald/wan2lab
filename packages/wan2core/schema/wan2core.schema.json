@@ -2980,6 +2980,14 @@
       "SegmentExportInput": {
         "additionalProperties": false,
         "properties": {
+          "continuation_policy": {
+            "$ref": "#/$defs/ContinuationPolicy"
+          },
+          "drop_leading_boundary_frame": {
+            "default": false,
+            "title": "Drop Leading Boundary Frame",
+            "type": "boolean"
+          },
           "duration_ms": {
             "exclusiveMinimum": 0,
             "title": "Duration Ms",
@@ -3019,7 +3027,8 @@
           "source_path",
           "duration_ms",
           "generation_fps",
-          "frame_count"
+          "frame_count",
+          "continuation_policy"
         ],
         "title": "SegmentExportInput",
         "type": "object"
