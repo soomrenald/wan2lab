@@ -38,7 +38,12 @@ from wan2lab.backends.comfy_workflow import (
     ComfyWanWorkflowBuilder,
     ModeWorkflowTemplate,
 )
-from wan2lab.backends.comfyui import BACKEND_ID, ComfyUIClient, inspect_comfyui_wan
+from wan2lab.backends.comfyui import (
+    BACKEND_ID,
+    ComfyUIClient,
+    accelerator_vendor,
+    inspect_comfyui_wan,
+)
 
 
 class WanOutOfMemory(RuntimeError):
@@ -222,12 +227,31 @@ class ComfyWorkerService:
         )
 
     def status(self, command_id: str) -> RuntimeStatusEvent:
+        self.system_stats = self.client.system_stats()
+        devices = self.system_stats.get("devices", ())
+        normalized_devices = tuple(
+            {
+                key: value
+                for key, value in device.items()
+                if key in {"name", "type", "index", "vram_total", "vram_free"}
+            }
+            for device in devices
+            if isinstance(device, Mapping)
+        ) if isinstance(devices, list) else ()
         return RuntimeStatusEvent(
             command_id=command_id,
             status={
                 **self.residency.status(),
                 "backend_id": BACKEND_ID,
                 "capabilities_inspected": self.capabilities is not None,
+                "accelerator_vendor": accelerator_vendor(self.system_stats),
+                "devices": normalized_devices,
+                "system": {
+                    str(key): value
+                    for key, value in self.system_stats.get("system", {}).items()
+                }
+                if isinstance(self.system_stats.get("system"), Mapping)
+                else {},
             },
         )
 

@@ -26,10 +26,26 @@ from wan2core.identity.workflows import (
 from wan2core.keyframes import Rectangle
 from wan2core.segments import SegmentState
 from wan2core.workers import AckEvent, CapabilitiesEvent, ResultEvent, WorkerResult
+from wan2core.workers import ReleaseAllModelsRequest, RuntimeStatusRequest
 from wan2lab.controller import DesktopController
 
 
 class DesktopControllerTests(unittest.TestCase):
+    def test_runtime_diagnostics_and_explicit_release_use_typed_worker_commands(self) -> None:
+        controller = DesktopController()
+        controller._wan_worker.send = Mock()  # type: ignore[method-assign]  # noqa: SLF001
+
+        controller.inspectWanRuntimeStatus()
+        controller.releaseAllModels()
+
+        commands = [item.args[0] for item in controller._wan_worker.send.call_args_list]  # type: ignore[union-attr]  # noqa: SLF001
+        self.assertIsInstance(commands[0], RuntimeStatusRequest)
+        self.assertIsInstance(commands[1], ReleaseAllModelsRequest)
+        controller._handle_worker_event(  # noqa: SLF001
+            AckEvent(command_id=commands[1].command_id, message="released")
+        )
+        self.assertIn("released", controller.status)
+
     def test_character_adapters_are_immutable_and_model_family_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

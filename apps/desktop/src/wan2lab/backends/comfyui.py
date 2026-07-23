@@ -162,7 +162,7 @@ def inspect_comfyui_wan(
     return BackendCapabilities(
         backend_id=BACKEND_ID,
         backend_version=backend_version,
-        accelerator_vendors=frozenset({_accelerator_vendor(system_stats)}),
+        accelerator_vendors=frozenset({accelerator_vendor(system_stats)}),
         model_variants=variants,
         runtime_features=frozenset(runtime_features),
         parameter_descriptors=descriptors,
@@ -350,7 +350,7 @@ def _node_descriptors(
     return tuple(descriptors)
 
 
-def _accelerator_vendor(system_stats: Mapping[str, object]) -> str:
+def accelerator_vendor(system_stats: Mapping[str, object]) -> str:
     devices = system_stats.get("devices", ())
     device = devices[0] if isinstance(devices, list) and devices else {}
     text = " ".join(str(value) for value in _mapping(device).values()).casefold()

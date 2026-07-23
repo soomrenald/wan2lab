@@ -538,6 +538,19 @@ ApplicationWindow {
                     onClicked: studio.inspectLocalWanBackend()
                 }
                 RowLayout {
+                    Layout.fillWidth: true
+                    Button {
+                        text: "Runtime status"
+                        Layout.fillWidth: true
+                        onClicked: studio.inspectWanRuntimeStatus()
+                    }
+                    Button {
+                        text: "Release all models"
+                        Layout.fillWidth: true
+                        onClicked: studio.releaseAllModels()
+                    }
+                }
+                RowLayout {
                     Button {
                         text: "Inspect Krea"
                         Layout.fillWidth: true

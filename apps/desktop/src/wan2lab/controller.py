@@ -111,9 +111,11 @@ from wan2core.workers import (
     LoadModelRequest,
     ModelsEvent,
     ProgressEvent,
+    ReleaseAllModelsRequest,
     ReleaseWanModelRequest,
     ResultEvent,
     RuntimeStatusEvent,
+    RuntimeStatusRequest,
 )
 from wan2lab.backends.comfyui import BACKEND_ID
 from wan2lab.assets import LocalAssetStore, LocalComfyAssetBridge, image_media_type
@@ -190,6 +192,7 @@ class DesktopController(QObject):
         self._selected_wan_model_id: str | None = None
         self._pending_model_command_id: str | None = None
         self._pending_wan_model_id: str | None = None
+        self._pending_release_command_id: str | None = None
         self._active_wan_commands: dict[str, str] = {}
         self._active_wan_jobs: dict[str, str] = {}
         self._krea_status = "Local Krea worker not inspected"
@@ -640,6 +643,27 @@ class DesktopController(QObject):
                 backend_id=BACKEND_ID,
             )
         )
+
+    @Slot()
+    def inspectWanRuntimeStatus(self) -> None:  # noqa: N802
+        self._wan_worker.send(
+            RuntimeStatusRequest(command_id=f"runtime-status-{uuid4().hex}")
+        )
+        self._set_status("Refreshing accelerator and model-residency diagnostics…")
+
+    @Slot()
+    def releaseAllModels(self) -> None:  # noqa: N802
+        if self._active_wan_commands or self.frameModificationRunning:
+            self._set_status("Cancel active generation or editing before releasing models")
+            return
+        command_id = f"release-all-{uuid4().hex}"
+        self._pending_release_command_id = command_id
+        self._wan_worker.send(ReleaseAllModelsRequest(command_id=command_id))
+        if self._krea_loaded or self._krea_load_command_id is not None:
+            self._krea_worker.send("shutdown")
+            self._krea_loaded = False
+            self._krea_load_command_id = None
+        self._set_status("Releasing Wan and Krea accelerator residency…")
 
     @Slot()
     def inspectLocalKreaBackend(self) -> None:  # noqa: N802
@@ -3364,6 +3388,11 @@ class DesktopController(QObject):
                 )
                 self._pending_model_command_id = None
                 self._pending_wan_model_id = None
+                self.projectChanged.emit()
+            if event.command_id == self._pending_release_command_id:
+                self._pending_release_command_id = None
+                self._selected_wan_model_id = None
+                self._set_status("All accelerator models released")
                 self.projectChanged.emit()
         self.statusChanged.emit()
 

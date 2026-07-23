@@ -180,6 +180,15 @@ class WorkerServiceTests(unittest.TestCase):
             )
         )
 
+    def test_runtime_status_reports_accelerator_and_vram_diagnostics(self) -> None:
+        service = ComfyWorkerService(WorkerClient(free_vram_gib=8), poll_interval_seconds=0)
+
+        event = service.status("runtime-status")
+
+        self.assertEqual(event.status["accelerator_vendor"], "cuda")
+        self.assertEqual(event.status["devices"][0]["name"], "NVIDIA RTX")
+        self.assertEqual(event.status["devices"][0]["vram_free"], round(8 * 1024**3))
+
     def test_service_requires_explicit_components_and_returns_typed_result(self) -> None:
         client = WorkerClient()
         service = ComfyWorkerService(client, poll_interval_seconds=0)
