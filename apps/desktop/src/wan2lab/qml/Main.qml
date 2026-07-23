@@ -312,6 +312,110 @@ ApplicationWindow {
                         placeholderText: "Region prompt"
                     }
                 }
+                Rectangle {
+                    id: regionCanvas
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.max(
+                        120,
+                        width * studio.projectHeight / studio.projectWidth
+                    )
+                    color: "#0b1018"
+                    border.color: "#44526a"
+                    border.width: 1
+                    clip: true
+                    property real dragStartX: 0
+                    property real dragStartY: 0
+                    property real dragCurrentX: 0
+                    property real dragCurrentY: 0
+                    property bool dragging: false
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: "Drag a character region"
+                        color: "#647086"
+                        visible: studio.keyframeRegionRectangles.length === 0
+                            && !regionCanvas.dragging
+                    }
+                    Repeater {
+                        model: studio.keyframeRegionRectangles
+                        delegate: Rectangle {
+                            required property var modelData
+                            x: modelData.x0 / studio.projectWidth * regionCanvas.width
+                            y: modelData.y0 / studio.projectHeight * regionCanvas.height
+                            width: (modelData.x1 - modelData.x0)
+                                / studio.projectWidth * regionCanvas.width
+                            height: (modelData.y1 - modelData.y0)
+                                / studio.projectHeight * regionCanvas.height
+                            color: "#286957d9"
+                            border.color: "#a89cff"
+                            border.width: 2
+                            Label {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.margins: 3
+                                text: modelData.name
+                                color: "white"
+                                elide: Text.ElideRight
+                                width: parent.width - 6
+                            }
+                        }
+                    }
+                    Rectangle {
+                        visible: regionCanvas.dragging
+                        x: Math.min(regionCanvas.dragStartX, regionCanvas.dragCurrentX)
+                        y: Math.min(regionCanvas.dragStartY, regionCanvas.dragCurrentY)
+                        width: Math.abs(regionCanvas.dragCurrentX - regionCanvas.dragStartX)
+                        height: Math.abs(regionCanvas.dragCurrentY - regionCanvas.dragStartY)
+                        color: "#306957d9"
+                        border.color: "#c4baff"
+                        border.width: 2
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onPressed: function(mouse) {
+                            regionCanvas.dragStartX = mouse.x
+                            regionCanvas.dragStartY = mouse.y
+                            regionCanvas.dragCurrentX = mouse.x
+                            regionCanvas.dragCurrentY = mouse.y
+                            regionCanvas.dragging = true
+                        }
+                        onPositionChanged: function(mouse) {
+                            if (!regionCanvas.dragging)
+                                return
+                            regionCanvas.dragCurrentX = Math.max(
+                                0, Math.min(regionCanvas.width, mouse.x)
+                            )
+                            regionCanvas.dragCurrentY = Math.max(
+                                0, Math.min(regionCanvas.height, mouse.y)
+                            )
+                        }
+                        onReleased: function(mouse) {
+                            regionCanvas.dragCurrentX = Math.max(
+                                0, Math.min(regionCanvas.width, mouse.x)
+                            )
+                            regionCanvas.dragCurrentY = Math.max(
+                                0, Math.min(regionCanvas.height, mouse.y)
+                            )
+                            regionX0.value = Math.round(
+                                Math.min(regionCanvas.dragStartX, regionCanvas.dragCurrentX)
+                                / regionCanvas.width * studio.projectWidth
+                            )
+                            regionY0.value = Math.round(
+                                Math.min(regionCanvas.dragStartY, regionCanvas.dragCurrentY)
+                                / regionCanvas.height * studio.projectHeight
+                            )
+                            regionX1.value = Math.max(regionX0.value + 1, Math.round(
+                                Math.max(regionCanvas.dragStartX, regionCanvas.dragCurrentX)
+                                / regionCanvas.width * studio.projectWidth
+                            ))
+                            regionY1.value = Math.max(regionY0.value + 1, Math.round(
+                                Math.max(regionCanvas.dragStartY, regionCanvas.dragCurrentY)
+                                / regionCanvas.height * studio.projectHeight
+                            ))
+                            regionCanvas.dragging = false
+                        }
+                    }
+                }
                 TextField {
                     id: regionAdapters
                     Layout.fillWidth: true

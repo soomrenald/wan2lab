@@ -231,6 +231,14 @@ class DesktopController(QObject):
         return self._session.project.timeline.duration_ms / 1000.0
 
     @Property(int, notify=projectChanged)
+    def projectWidth(self) -> int:  # noqa: N802
+        return self._session.project.project_settings.width
+
+    @Property(int, notify=projectChanged)
+    def projectHeight(self) -> int:  # noqa: N802
+        return self._session.project.project_settings.height
+
+    @Property(int, notify=projectChanged)
     def segmentCount(self) -> int:  # noqa: N802
         return len(self._session.project.segments)
 
@@ -387,6 +395,19 @@ class DesktopController(QObject):
         return [
             f"{item.name}: {item.rectangle.x0:g},{item.rectangle.y0:g}–"
             f"{item.rectangle.x1:g},{item.rectangle.y1:g}"
+            for item in self._draft_keyframe_regions
+        ]
+
+    @Property("QVariantList", notify=projectChanged)
+    def keyframeRegionRectangles(self) -> list[dict[str, object]]:  # noqa: N802
+        return [
+            {
+                "name": item.name,
+                "x0": item.rectangle.x0,
+                "y0": item.rectangle.y0,
+                "x1": item.rectangle.x1,
+                "y1": item.rectangle.y1,
+            }
             for item in self._draft_keyframe_regions
         ]
 

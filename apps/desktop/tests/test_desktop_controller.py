@@ -81,6 +81,9 @@ class DesktopControllerTests(unittest.TestCase):
                 controller._draft_keyframe_regions[0].adapters[0].strength,  # noqa: SLF001
                 0.65,
             )
+            self.assertEqual(controller.projectWidth, 1280)
+            self.assertEqual(controller.projectHeight, 720)
+            self.assertEqual(controller.keyframeRegionRectangles[0]["x1"], 640)
 
             controller.importCharacterAdapter(
                 0,
