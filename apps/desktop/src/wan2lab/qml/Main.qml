@@ -788,6 +788,10 @@ ApplicationWindow {
                             Number(keyframeTime.text)
                         )
                     }
+                    Button {
+                        text: "Fit canvas"
+                        onClicked: studio.fitKeyframeToCanvas(keyframeReviewIndex.value)
+                    }
                 }
                 Label { text: "Keyframe face refinement"; color: "#aeb9cb" }
                 RowLayout {

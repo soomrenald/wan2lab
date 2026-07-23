@@ -11,7 +11,7 @@ import shutil
 import tempfile
 from uuid import uuid4
 
-from PIL import Image
+from PIL import Image, ImageOps
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 
 from k2core import __version__ as k2core_version
@@ -568,9 +568,22 @@ class DesktopController(QObject):
             min(self._preview_keyframe_index, len(self._session.project.keyframes) - 1)
         ]
         state = "approved / locked" if keyframe.approved and keyframe.locked else "draft review"
+        asset = next(
+            (
+                item
+                for item in self._session.project.assets
+                if item.asset_id == keyframe.image_asset_id
+            ),
+            None,
+        )
+        dimensions = (
+            f"{asset.width}x{asset.height}"
+            if asset is not None and asset.width is not None and asset.height is not None
+            else "dimensions unavailable"
+        )
         return (
             f"{keyframe.time_ms / 1000:g}s · {keyframe.source_type.value} · {state} · "
-            f"{len(keyframe.region_assignments)} region(s)"
+            f"{dimensions} · {len(keyframe.region_assignments)} region(s)"
         )
 
     @Property(QUrl, notify=projectChanged)
@@ -2518,6 +2531,100 @@ class DesktopController(QObject):
             self._session.project.model_copy(update={"keyframes": keyframes}).model_dump()
         )
         self._set_status("Keyframe approved and locked for Wan planning")
+        self.projectChanged.emit()
+
+    @Slot(int)
+    def fitKeyframeToCanvas(self, keyframe_index: int) -> None:  # noqa: N802
+        try:
+            source_keyframe = self._session.project.keyframes[keyframe_index]
+            source_asset = next(
+                item
+                for item in self._session.project.assets
+                if item.asset_id == source_keyframe.image_asset_id
+            )
+            settings = self._session.project.project_settings
+            target_size = (settings.width, settings.height)
+            if (source_asset.width, source_asset.height) == target_size:
+                self._set_status("Keyframe already matches the project canvas")
+                return
+            source_path = self._asset_store.resolve_ref(source_asset)
+            provenance_id = f"provenance-{uuid4().hex}"
+            with tempfile.TemporaryDirectory(prefix="wan2lab-keyframe-fit-") as directory:
+                output_path = Path(directory) / "canvas-fit.png"
+                with Image.open(source_path) as source_image:
+                    normalized = ImageOps.exif_transpose(source_image).convert("RGB")
+                    fitted = ImageOps.pad(
+                        normalized,
+                        target_size,
+                        method=Image.Resampling.LANCZOS,
+                        color=(0, 0, 0),
+                        centering=(0.5, 0.5),
+                    )
+                    fitted.save(output_path, format="PNG", optimize=False)
+                record = self._asset_store.create_derived(
+                    output_path,
+                    parent_asset_ids=(source_asset.asset_id,),
+                    media_type="image/png",
+                    metadata={
+                        "operation": "fit_keyframe_to_canvas",
+                        "fit_mode": "contain_pad",
+                        "pad_color": "#000000",
+                    },
+                )
+            asset = self._wan_asset(record, AssetKind.IMAGE).model_copy(
+                update={
+                    "creation_operation_id": provenance_id,
+                    "immutable_source": False,
+                }
+            )
+            provenance = ProvenanceRecord(
+                provenance_id=provenance_id,
+                operation="fit_keyframe_to_canvas",
+                created_at=datetime.now(UTC),
+                parameters={
+                    "source_dimensions": {
+                        "width": source_asset.width,
+                        "height": source_asset.height,
+                    },
+                    "target_dimensions": {
+                        "width": settings.width,
+                        "height": settings.height,
+                    },
+                    "fit_mode": "contain_pad",
+                    "pad_color": "#000000",
+                    "resampling": "lanczos",
+                },
+                input_asset_ids=(source_asset.asset_id,),
+                output_asset_ids=(asset.asset_id,),
+                parent_provenance_ids=(source_keyframe.provenance_id,),
+            )
+            revised_keyframe = source_keyframe.model_copy(
+                update={
+                    "keyframe_id": f"keyframe-{uuid4().hex}",
+                    "image_asset_id": asset.asset_id,
+                    "source_type": KeyframeSource.EDITED,
+                    "provenance_id": provenance.provenance_id,
+                    "approved": False,
+                    "locked": False,
+                    "parent_keyframe_id": source_keyframe.keyframe_id,
+                    "source_frame_asset_id": source_asset.asset_id,
+                }
+            )
+            self._session.project = revise_timeline_keyframe(
+                self._session.project,
+                source_keyframe_id=source_keyframe.keyframe_id,
+                revised_keyframe=revised_keyframe,
+                asset=asset,
+                provenance=provenance,
+            )
+            self._session.segment_plan = None
+        except Exception as error:
+            self._set_status(f"Keyframe canvas fit failed: {error}")
+            return
+        self._append_event(
+            f"Derived {settings.width}x{settings.height} keyframe; source asset preserved"
+        )
+        self._set_status("Canvas-fitted keyframe is a draft; approve and replan")
         self.projectChanged.emit()
 
     @Slot(int, float)
@@ -4918,6 +5025,7 @@ class DesktopController(QObject):
                     asset=asset,
                     provenance=provenance,
                 )
+                self._session.segment_plan = None
                 completed_label = (
                     f"face-refined keyframe at {keyframe.time_ms / 1000:g}s"
                 )

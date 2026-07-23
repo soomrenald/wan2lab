@@ -543,6 +543,49 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertTrue(controller.keyframePreviewUrl.isLocalFile())
             self.assertIn("4.25s", controller.keyframePreviewMetadata)
 
+    def test_keyframe_canvas_fit_is_non_destructive_and_generation_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "small-keyframe.png"
+            Image.new("RGB", (64, 48), "teal").save(source)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.importKeyframe(QUrl.fromLocalFile(str(source)), 0.0)
+            original_keyframe = controller.session.project.keyframes[0]
+            original_asset = controller.session.project.assets[0]
+            controller.planMockTimeline()
+
+            controller.fitKeyframeToCanvas(0)
+
+            project = controller.session.project
+            fitted_keyframe = project.keyframes[0]
+            fitted_asset = next(
+                item
+                for item in project.assets
+                if item.asset_id == fitted_keyframe.image_asset_id
+            )
+            self.assertIn(original_asset.asset_id, {item.asset_id for item in project.assets})
+            self.assertEqual(
+                fitted_keyframe.parent_keyframe_id,
+                original_keyframe.keyframe_id,
+            )
+            self.assertEqual(fitted_asset.parent_asset_ids, (original_asset.asset_id,))
+            self.assertEqual(
+                (fitted_asset.width, fitted_asset.height),
+                (controller.projectWidth, controller.projectHeight),
+            )
+            self.assertFalse(fitted_keyframe.approved)
+            self.assertIsNone(project.segment_plan)
+            self.assertIsNone(controller.session.segment_plan)
+            with Image.open(controller._asset_store.resolve_ref(fitted_asset)) as image:  # noqa: SLF001
+                self.assertEqual(image.size, (1280, 720))
+
+            controller.approveKeyframe(0)
+            controller.planMockTimeline()
+            controller.generateNextMockSegment()
+
+            request = controller.session.project.segment_revisions[0].source_request
+            self.assertEqual(request.start_image_asset_id, fitted_asset.asset_id)
+
     def test_reject_and_regenerate_create_a_new_reviewable_revision(self) -> None:
         controller = DesktopController()
         controller.planMockTimeline()

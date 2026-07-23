@@ -363,6 +363,7 @@ def revise_timeline_keyframe(
                 "keyframes": keyframes,
                 "segments": segments,
                 "timeline": timeline,
+                "segment_plan": None,
                 "generation_records": (*project.generation_records, provenance),
             }
         ).model_dump()
