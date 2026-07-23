@@ -12,6 +12,7 @@ from wan2core.base import DomainModel, Identifier, require_unique
 from wan2core.characters import AppearanceProfile, CharacterIdentity, CharacterSheet
 from wan2core.editing import FrameEditRecord
 from wan2core.export import ExportPlan
+from wan2core.identity import CheckpointProposal, IdentityDriftWarning
 from wan2core.keyframes import Keyframe
 from wan2core.mannequin import MannequinPose, MannequinScene
 from wan2core.provenance import ProvenanceRecord
@@ -54,6 +55,8 @@ class Wan2LabProject(DomainModel):
     segment_revisions: tuple[SegmentRevision, ...] = ()
     generation_records: tuple[ProvenanceRecord, ...] = ()
     frame_edit_records: tuple[FrameEditRecord, ...] = ()
+    identity_warnings: tuple[IdentityDriftWarning, ...] = ()
+    checkpoint_proposals: tuple[CheckpointProposal, ...] = ()
     exports: tuple[ExportPlan, ...] = ()
 
     @model_validator(mode="after")
@@ -73,6 +76,10 @@ class Wan2LabProject(DomainModel):
             "revision IDs": [item.revision_id for item in self.segment_revisions],
             "provenance IDs": [item.provenance_id for item in self.generation_records],
             "frame edit IDs": [item.edit_id for item in self.frame_edit_records],
+            "identity warning IDs": [item.warning_id for item in self.identity_warnings],
+            "checkpoint proposal IDs": [
+                item.proposal_id for item in self.checkpoint_proposals
+            ],
             "export IDs": [item.export_id for item in self.exports],
         }
         for label, values in collections.items():
@@ -176,6 +183,17 @@ class Wan2LabProject(DomainModel):
                 raise ValueError("frame edit references a missing asset")
             if edit.provenance_id not in provenance_ids:
                 raise ValueError("frame edit references missing provenance")
+        warning_ids = set(collections["identity warning IDs"])
+        for warning in self.identity_warnings:
+            if warning.segment_revision_id not in revision_by_id:
+                raise ValueError("identity warning references a missing revision")
+            if warning.identity_id not in identity_ids:
+                raise ValueError("identity warning references a missing character")
+        for proposal in self.checkpoint_proposals:
+            if proposal.segment_id not in segment_ids:
+                raise ValueError("checkpoint proposal references a missing segment")
+            if set(proposal.warning_ids) - warning_ids:
+                raise ValueError("checkpoint proposal references a missing warning")
         return self
 
 

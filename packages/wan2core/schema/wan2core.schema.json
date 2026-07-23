@@ -1155,6 +1155,66 @@
         "title": "CharacterSheet",
         "type": "object"
       },
+      "CheckpointProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "proposal_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "propose_keyframe": {
+            "default": true,
+            "title": "Propose Keyframe",
+            "type": "boolean"
+          },
+          "propose_segment_split": {
+            "default": true,
+            "title": "Propose Segment Split",
+            "type": "boolean"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "segment_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "time_ms": {
+            "minimum": 0,
+            "title": "Time Ms",
+            "type": "integer"
+          },
+          "user_approved": {
+            "default": false,
+            "title": "User Approved",
+            "type": "boolean"
+          },
+          "warning_ids": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+              "type": "string"
+            },
+            "title": "Warning Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "segment_id",
+          "time_ms",
+          "reason",
+          "warning_ids"
+        ],
+        "title": "CheckpointProposal",
+        "type": "object"
+      },
       "ContactConstraint": {
         "additionalProperties": false,
         "properties": {
@@ -1529,6 +1589,94 @@
           "ceil"
         ],
         "title": "FrameRounding",
+        "type": "string"
+      },
+      "IdentityDriftWarning": {
+        "additionalProperties": false,
+        "properties": {
+          "association_confirmed": {
+            "default": false,
+            "title": "Association Confirmed",
+            "type": "boolean"
+          },
+          "frame_index": {
+            "minimum": 0,
+            "title": "Frame Index",
+            "type": "integer"
+          },
+          "identity_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Identity Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/IdentityWarningKind"
+          },
+          "message": {
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "proposed_region": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rectangle"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Score"
+          },
+          "segment_revision_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Segment Revision Id",
+            "type": "string"
+          },
+          "warning_id": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Warning Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "warning_id",
+          "segment_revision_id",
+          "frame_index",
+          "identity_id",
+          "kind",
+          "message"
+        ],
+        "title": "IdentityDriftWarning",
+        "type": "object"
+      },
+      "IdentityWarningKind": {
+        "enum": [
+          "uncertain",
+          "missing",
+          "swapped",
+          "drifting",
+          "occlusion",
+          "position_exchange"
+        ],
+        "title": "IdentityWarningKind",
         "type": "string"
       },
       "JointPose": {
@@ -3246,6 +3394,14 @@
         "title": "Characters",
         "type": "array"
       },
+      "checkpoint_proposals": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/CheckpointProposal"
+        },
+        "title": "Checkpoint Proposals",
+        "type": "array"
+      },
       "exports": {
         "default": [],
         "items": {
@@ -3268,6 +3424,14 @@
           "$ref": "#/$defs/ProvenanceRecord"
         },
         "title": "Generation Records",
+        "type": "array"
+      },
+      "identity_warnings": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/IdentityDriftWarning"
+        },
+        "title": "Identity Warnings",
         "type": "array"
       },
       "keyframes": {
