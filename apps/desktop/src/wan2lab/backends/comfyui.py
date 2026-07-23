@@ -165,7 +165,7 @@ def inspect_comfyui_wan(
                 nodes.latent_encoder,
                 nodes.image_scaler,
             }.issubset(available),
-            acceleration_nodes=frozenset(available),
+            acceleration_node_info=object_info,
         )
         for name in model_names
         if _modes_for_model(
@@ -211,7 +211,7 @@ def _model_capabilities(
     accelerator: str,
     total_vram_gib: float | None,
     unified_i2v_available: bool,
-    acceleration_nodes: frozenset[str],
+    acceleration_node_info: Mapping[str, object],
 ) -> ModelVariantCapabilities:
     modes = _modes_for_model(
         filename,
@@ -335,7 +335,7 @@ def _model_capabilities(
         estimated_memory_profiles={"safe_16gb": 16.0, "performance_24gb": 24.0},
         parameter_descriptors=applicable,
         acceleration_methods=_cache_acceleration_methods(
-            acceleration_nodes,
+            acceleration_node_info,
             model_id=model_id,
             modes=frozenset(modes),
             accelerator=accelerator,
@@ -344,7 +344,7 @@ def _model_capabilities(
 
 
 def _cache_acceleration_methods(
-    available_nodes: frozenset[str],
+    object_info: Mapping[str, object],
     *,
     model_id: str,
     modes: frozenset[WanMode],
@@ -407,32 +407,45 @@ def _cache_acceleration_methods(
             "Time-embedding cache with wrapper-provided Wan coefficients.",
         ),
     )
-    return tuple(
-        WanAccelerationMethodCapabilities(
-            method_id=method_id,
-            display_name=display_name,
-            kind=WanAccelerationKind.CACHE,
-            supported_modes=cache_modes,
-            supported_model_ids=(model_id,),
-            accelerator_vendors=frozenset({accelerator}),
-            supported_quality_profiles=qualities,
-            rank=rank,
-            default_parameters=parameters,
-            schedule_description=description,
-            speed_summary="Skips compatible diffusion-model work through a cache node.",
-            quality_tradeoff="Higher cache thresholds may reduce temporal or fine detail.",
+    methods = []
+    for (
+        node_name,
+        method_id,
+        display_name,
+        rank,
+        qualities,
+        parameters,
+        description,
+    ) in declarations:
+        node_info = object_info.get(node_name)
+        if not isinstance(node_info, Mapping):
+            continue
+        inputs = node_info.get("input")
+        accepted_inputs = set()
+        if isinstance(inputs, Mapping):
+            for group_name in ("required", "optional"):
+                group = inputs.get(group_name)
+                if isinstance(group, Mapping):
+                    accepted_inputs.update(str(key) for key in group)
+        if not set(parameters) <= accepted_inputs:
+            continue
+        methods.append(
+            WanAccelerationMethodCapabilities(
+                method_id=method_id,
+                display_name=display_name,
+                kind=WanAccelerationKind.CACHE,
+                supported_modes=cache_modes,
+                supported_model_ids=(model_id,),
+                accelerator_vendors=frozenset({accelerator}),
+                supported_quality_profiles=qualities,
+                rank=rank,
+                default_parameters=parameters,
+                schedule_description=description,
+                speed_summary="Skips compatible diffusion-model work through a cache node.",
+                quality_tradeoff="Higher cache thresholds may reduce temporal or fine detail.",
+            )
         )
-        for (
-            node_name,
-            method_id,
-            display_name,
-            rank,
-            qualities,
-            parameters,
-            description,
-        ) in declarations
-        if node_name in available_nodes
-    )
+    return tuple(methods)
 
 
 def _modes_for_model(

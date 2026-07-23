@@ -176,8 +176,25 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
                         "cache_device": [["main_device", "offload_device"]],
                     }
                 ),
-                "WanVideoMagCache": node(),
-                "WanVideoTeaCache": node(),
+                "WanVideoMagCache": node(
+                    {
+                        "magcache_thresh": ["FLOAT", {"default": 0.02}],
+                        "magcache_K": ["INT", {"default": 4}],
+                        "start_step": ["INT", {"default": 1}],
+                        "end_step": ["INT", {"default": -1}],
+                        "cache_device": [["main_device", "offload_device"]],
+                    }
+                ),
+                "WanVideoTeaCache": node(
+                    {
+                        "rel_l1_thresh": ["FLOAT", {"default": 0.3}],
+                        "start_step": ["INT", {"default": 1}],
+                        "end_step": ["INT", {"default": -1}],
+                        "cache_device": [["main_device", "offload_device"]],
+                        "use_coefficients": ["BOOLEAN", {"default": True}],
+                    },
+                    {"mode": [["e", "e0"]]},
+                ),
             }
         )
         capabilities = inspect_comfyui_wan(
