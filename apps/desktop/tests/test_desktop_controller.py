@@ -1162,6 +1162,21 @@ class DesktopControllerTests(unittest.TestCase):
             controller.setMannequinArmPose(65.0, -20.0)
             controller.setMannequinFocalLength(70.0)
             controller.saveCurrentMannequinPose("Wave")
+            controller.setMannequinArmPose(0.0, 0.0)
+            controller.applySavedMannequinPose(0)
+            controller.setMannequinCamera(0.5, 1.1, 7.0, 12.0, -4.0, 0.8)
+            controller.setMannequinProportions(1.15, 0.9, 1.1)
+            controller.setMannequinLight(2.0, 3.0, 4.0, 5.0)
+            reference = root / "mannequin-reference.png"
+            Image.new("RGB", (256, 256), "blue").save(reference)
+            controller.addCharacter("Avery", "Avery identity", "Travel", "blue jacket")
+            controller.importSheetEntryForSheet(
+                0,
+                QUrl.fromLocalFile(str(reference)),
+                "front",
+            )
+            controller.addKeyframeRegion(0, 0, 0, 0, 640, 720, "standing")
+            controller.associateMannequinRegion(0)
             controller.renderCurrentMannequinGuides()
 
             project = controller.session.project
@@ -1171,6 +1186,19 @@ class DesktopControllerTests(unittest.TestCase):
             self.assertEqual(len(controller.mannequinGuideLabels), 3)
             self.assertIn("i2i_scaffold", controller.mannequinConditioningPath)
             self.assertTrue(controller.mannequinPreviewUrl.isLocalFile())
+            scene = project.mannequin_scenes[0]
+            self.assertEqual(scene.camera.position.x, 0.5)
+            self.assertIsNotNone(scene.camera.crop)
+            self.assertEqual(scene.instances[0].body_proportions["height_scale"], 1.15)
+            self.assertEqual(scene.lights[0].intensity, 2.0)
+            self.assertEqual(
+                scene.instances[0].character_region_id,
+                controller._draft_keyframe_regions[0].region_id,  # noqa: SLF001
+            )
+            shoulder = next(
+                item for item in scene.instances[0].joints if item.joint_name == "shoulder_l"
+            )
+            self.assertNotEqual(shoulder.rotation.w, 1.0)
 
             source = root / "blender-scene.json"
             source.write_text(

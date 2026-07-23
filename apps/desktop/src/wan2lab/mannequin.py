@@ -60,7 +60,24 @@ def _scene_geometry(
                         f"{instance.instance_id}:{joint.joint_name}",
                     )
                 )
-            offset = _rotate(parent_rotation, joint.rest_offset)
+            proportions = instance.body_proportions
+            limb_scale = proportions.get("limb_scale", 1.0)
+            is_limb = any(
+                token in joint.joint_name
+                for token in ("shoulder", "elbow", "wrist", "hip", "knee", "ankle")
+            )
+            offset = _rotate(
+                parent_rotation,
+                Vector3(
+                    x=joint.rest_offset.x
+                    * proportions.get("width_scale", 1.0)
+                    * (limb_scale if is_limb else 1.0),
+                    y=joint.rest_offset.y
+                    * proportions.get("height_scale", 1.0)
+                    * (limb_scale if is_limb else 1.0),
+                    z=joint.rest_offset.z * proportions.get("width_scale", 1.0),
+                ),
+            )
             position = tuple(parent_position[index] + offset[index] for index in range(3))
             world_positions[joint.joint_name] = position
             world_rotations[joint.joint_name] = _multiply(parent_rotation, local_rotation)
@@ -85,6 +102,12 @@ def _render(scene, points, bones, kind: GuideKind) -> Image.Image:
     depths = [item[2] for item in projected.values()]
     low, high = (min(depths), max(depths)) if depths else (0.0, 1.0)
     span = max(high - low, 1e-6)
+    light_gain = 1.0
+    if scene.lights:
+        light = scene.lights[0]
+        position = light.transform.translation
+        distance = math.sqrt(position.x**2 + position.y**2 + position.z**2)
+        light_gain = max(0.25, min(1.75, 0.65 + light.intensity / (1.0 + distance)))
     for start, end in sorted(bones, key=lambda bone: projected[bone[0]][2], reverse=True):
         x0, y0, depth0 = projected[start]
         x1, y1, depth1 = projected[end]
@@ -96,7 +119,8 @@ def _render(scene, points, bones, kind: GuideKind) -> Image.Image:
             color = (value, value, value)
             line_width = max(8, width // 52)
         else:
-            value = round(95 + 110 * (1.0 - (((depth0 + depth1) / 2 - low) / span)))
+            base = 95 + 110 * (1.0 - (((depth0 + depth1) / 2 - low) / span))
+            value = max(0, min(255, round(base * light_gain)))
             color = (value, min(235, value + 18), min(245, value + 28))
             line_width = max(7, width // 55)
         draw.line((x0, y0, x1, y1), fill=color, width=line_width)
@@ -115,9 +139,15 @@ def _project(scene: MannequinScene, point: tuple[float, float, float]) -> tuple[
     camera_space = _rotate(_conjugate(camera.orientation), relative)
     depth = max(0.01, -camera_space[2])
     focal_pixels = camera.focal_length_mm / 36.0 * camera.frame_width
+    x = camera.frame_width / 2 + camera_space[0] * focal_pixels / depth
+    y = camera.frame_height / 2 - camera_space[1] * focal_pixels / depth
+    if camera.crop is not None:
+        x0, y0, x1, y1 = camera.crop
+        x = (x / camera.frame_width - x0) / (x1 - x0) * camera.frame_width
+        y = (y / camera.frame_height - y0) / (y1 - y0) * camera.frame_height
     return (
-        camera.frame_width / 2 + camera_space[0] * focal_pixels / depth,
-        camera.frame_height / 2 - camera_space[1] * focal_pixels / depth,
+        x,
+        y,
         depth,
     )
 

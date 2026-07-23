@@ -78,10 +78,11 @@ from wan2core.identity.workflows import (
     propose_checkpoint_from_warnings,
     register_identity_analysis,
 )
-from wan2core.mannequin import JointPose, Quaternion
+from wan2core.mannequin import JointPose, Quaternion, SceneLight, Transform, Vector3
 from wan2core.mannequin.workflows import (
     GuideKind,
     KreaMannequinCapabilities,
+    apply_pose,
     attach_rendered_guides,
     default_mannequin_scene,
     import_blender_scene_document,
@@ -630,6 +631,18 @@ class DesktopController(QObject):
             return "Render guides to enable Krea conditioning"
         return f"{plan.path.value}: {plan.explanation}"
 
+    @Property(str, notify=projectChanged)
+    def mannequinSceneSummary(self) -> str:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            return "No mannequin scene"
+        scene = self._session.project.mannequin_scenes[-1]
+        instance = scene.instances[0]
+        region = instance.character_region_id or "unassigned"
+        return (
+            f"{scene.name} · {len(scene.instances)} mannequin(s) · "
+            f"{len(scene.lights)} light(s) · region {region}"
+        )
+
     @Property(str, notify=statusChanged)
     def backendStatus(self) -> str:  # noqa: N802
         return self._backend_status
@@ -1037,6 +1050,156 @@ class DesktopController(QObject):
             self._session.project, scene.model_copy(update={"camera": camera})
         )
         self._refresh_mannequin_preview()
+        self.projectChanged.emit()
+
+    @Slot(float, float, float, float, float, float)
+    def setMannequinCamera(  # noqa: N802
+        self,
+        x: float,
+        y: float,
+        z: float,
+        yaw_degrees: float,
+        pitch_degrees: float,
+        framing_scale: float,
+    ) -> None:
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            if not 0.2 <= framing_scale <= 1.0:
+                raise ValueError("camera framing scale must be between 0.2 and 1.0")
+            scene = self._session.project.mannequin_scenes[-1]
+            margin = (1.0 - framing_scale) / 2
+            camera = scene.camera.model_copy(
+                update={
+                    "position": Vector3(x=x, y=y, z=z),
+                    "orientation": self._camera_rotation(yaw_degrees, pitch_degrees),
+                    "crop": (
+                        None
+                        if framing_scale >= 0.999
+                        else (margin, margin, 1.0 - margin, 1.0 - margin)
+                    ),
+                }
+            )
+            self._session.project = save_mannequin_scene(
+                self._session.project,
+                scene.model_copy(update={"camera": camera}),
+            )
+        except Exception as error:
+            self._set_status(f"Mannequin camera update failed: {error}")
+            return
+        self._refresh_mannequin_preview()
+        self._set_status("Mannequin camera angle, position, and framing updated")
+        self.projectChanged.emit()
+
+    @Slot(float, float, float)
+    def setMannequinProportions(  # noqa: N802
+        self,
+        height_scale: float,
+        width_scale: float,
+        limb_scale: float,
+    ) -> None:
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            if any(not 0.5 <= value <= 1.75 for value in (height_scale, width_scale, limb_scale)):
+                raise ValueError("mannequin proportions must be between 0.5 and 1.75")
+            scene = self._session.project.mannequin_scenes[-1]
+            instance = scene.instances[0].model_copy(
+                update={
+                    "body_proportions": {
+                        **scene.instances[0].body_proportions,
+                        "height_scale": height_scale,
+                        "width_scale": width_scale,
+                        "limb_scale": limb_scale,
+                    }
+                }
+            )
+            changed = scene.model_copy(
+                update={"instances": (instance, *scene.instances[1:])}
+            )
+            self._session.project = save_mannequin_scene(self._session.project, changed)
+        except Exception as error:
+            self._set_status(f"Mannequin proportion update failed: {error}")
+            return
+        self._refresh_mannequin_preview()
+        self._set_status("Mannequin proportions updated")
+        self.projectChanged.emit()
+
+    @Slot(float, float, float, float)
+    def setMannequinLight(  # noqa: N802
+        self,
+        intensity: float,
+        x: float,
+        y: float,
+        z: float,
+    ) -> None:
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            scene = self._session.project.mannequin_scenes[-1]
+            light = SceneLight(
+                light_id=f"{scene.scene_id}-key-light",
+                kind="point",
+                transform=Transform(translation=Vector3(x=x, y=y, z=z)),
+                intensity=intensity,
+            )
+            self._session.project = save_mannequin_scene(
+                self._session.project,
+                scene.model_copy(update={"lights": (light,)}),
+            )
+        except Exception as error:
+            self._set_status(f"Mannequin light update failed: {error}")
+            return
+        self._refresh_mannequin_preview()
+        self._set_status("Mannequin guide light updated")
+        self.projectChanged.emit()
+
+    @Slot(int)
+    def applySavedMannequinPose(self, pose_index: int) -> None:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            pose = self._session.project.mannequin_poses[pose_index]
+            scene = self._session.project.mannequin_scenes[-1]
+            instance = apply_pose(scene.instances[0], pose)
+            self._session.project = save_mannequin_scene(
+                self._session.project,
+                scene.model_copy(
+                    update={"instances": (instance, *scene.instances[1:])}
+                ),
+            )
+        except Exception as error:
+            self._set_status(f"Saved pose could not be applied: {error}")
+            return
+        self._refresh_mannequin_preview()
+        self._set_status(f"Applied reusable pose {pose.name}")
+        self.projectChanged.emit()
+
+    @Slot(int)
+    def associateMannequinRegion(self, region_index: int) -> None:  # noqa: N802
+        if not self._session.project.mannequin_scenes:
+            self._set_status("Create a mannequin scene first")
+            return
+        try:
+            region = self._draft_keyframe_regions[region_index]
+            scene = self._session.project.mannequin_scenes[-1]
+            instance = scene.instances[0].model_copy(
+                update={"character_region_id": region.region_id}
+            )
+            self._session.project = save_mannequin_scene(
+                self._session.project,
+                scene.model_copy(
+                    update={"instances": (instance, *scene.instances[1:])}
+                ),
+            )
+        except Exception as error:
+            self._set_status(f"Mannequin region association failed: {error}")
+            return
+        self._set_status(f"Mannequin associated with {region.name}")
         self.projectChanged.emit()
 
     @Slot(str)
@@ -3434,6 +3597,17 @@ class DesktopController(QObject):
     def _z_rotation(degrees: float) -> Quaternion:
         half = math.radians(max(-180.0, min(180.0, degrees))) / 2
         return Quaternion(z=math.sin(half), w=math.cos(half))
+
+    @staticmethod
+    def _camera_rotation(yaw_degrees: float, pitch_degrees: float) -> Quaternion:
+        yaw = math.radians(max(-180.0, min(180.0, yaw_degrees))) / 2
+        pitch = math.radians(max(-89.0, min(89.0, pitch_degrees))) / 2
+        return Quaternion(
+            x=math.cos(yaw) * math.sin(pitch),
+            y=math.sin(yaw) * math.cos(pitch),
+            z=-math.sin(yaw) * math.sin(pitch),
+            w=math.cos(yaw) * math.cos(pitch),
+        )
 
     def _refresh_mannequin_preview(self) -> None:
         if not self._session.project.mannequin_scenes:

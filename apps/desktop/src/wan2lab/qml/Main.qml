@@ -1398,6 +1398,58 @@ ApplicationWindow {
                     from: 18; to: 120; value: 50
                     onMoved: studio.setMannequinFocalLength(value)
                 }
+                Label { text: "Camera position / angle / framing"; color: "#aeb9cb" }
+                RowLayout {
+                    TextField { id: cameraX; Layout.fillWidth: true; text: "0"; placeholderText: "X" }
+                    TextField { id: cameraY; Layout.fillWidth: true; text: "0.9"; placeholderText: "Y" }
+                    TextField { id: cameraZ; Layout.fillWidth: true; text: "6"; placeholderText: "Z" }
+                }
+                RowLayout {
+                    TextField { id: cameraYaw; Layout.fillWidth: true; text: "0"; placeholderText: "Yaw°" }
+                    TextField { id: cameraPitch; Layout.fillWidth: true; text: "0"; placeholderText: "Pitch°" }
+                    TextField { id: cameraFraming; Layout.fillWidth: true; text: "1"; placeholderText: "Frame 0.2–1" }
+                    Button {
+                        text: "Apply"
+                        onClicked: studio.setMannequinCamera(
+                            Number(cameraX.text),
+                            Number(cameraY.text),
+                            Number(cameraZ.text),
+                            Number(cameraYaw.text),
+                            Number(cameraPitch.text),
+                            Number(cameraFraming.text)
+                        )
+                    }
+                }
+                Label { text: "Body height / width / limb scale"; color: "#aeb9cb" }
+                RowLayout {
+                    TextField { id: bodyHeight; Layout.fillWidth: true; text: "1" }
+                    TextField { id: bodyWidth; Layout.fillWidth: true; text: "1" }
+                    TextField { id: limbScale; Layout.fillWidth: true; text: "1" }
+                    Button {
+                        text: "Apply"
+                        onClicked: studio.setMannequinProportions(
+                            Number(bodyHeight.text),
+                            Number(bodyWidth.text),
+                            Number(limbScale.text)
+                        )
+                    }
+                }
+                Label { text: "Key light intensity / position"; color: "#aeb9cb" }
+                RowLayout {
+                    TextField { id: lightIntensity; Layout.fillWidth: true; text: "1" }
+                    TextField { id: lightX; Layout.fillWidth: true; text: "2" }
+                    TextField { id: lightY; Layout.fillWidth: true; text: "4" }
+                    TextField { id: lightZ; Layout.fillWidth: true; text: "4" }
+                    Button {
+                        text: "Apply"
+                        onClicked: studio.setMannequinLight(
+                            Number(lightIntensity.text),
+                            Number(lightX.text),
+                            Number(lightY.text),
+                            Number(lightZ.text)
+                        )
+                    }
+                }
                 RowLayout {
                     TextField {
                         id: poseName
@@ -1407,12 +1459,43 @@ ApplicationWindow {
                     Button { text: "Save pose"; onClicked: studio.saveCurrentMannequinPose(poseName.text) }
                 }
                 RowLayout {
+                    ComboBox {
+                        id: savedMannequinPose
+                        Layout.fillWidth: true
+                        model: studio.mannequinPoseNames
+                    }
+                    Button {
+                        text: "Apply pose"
+                        enabled: savedMannequinPose.currentIndex >= 0
+                        onClicked: studio.applySavedMannequinPose(savedMannequinPose.currentIndex)
+                    }
+                }
+                RowLayout {
+                    SpinBox {
+                        id: mannequinRegion
+                        from: 0
+                        to: Math.max(0, studio.keyframeRegionRectangles.length - 1)
+                        enabled: studio.keyframeRegionRectangles.length > 0
+                    }
+                    Button {
+                        text: "Associate region"
+                        enabled: mannequinRegion.enabled
+                        onClicked: studio.associateMannequinRegion(mannequinRegion.value)
+                    }
+                }
+                RowLayout {
                     Button { text: "Render guides"; onClicked: studio.renderCurrentMannequinGuides() }
                     Button { text: "Import Blender"; onClicked: blenderSceneDialog.open() }
                 }
                 Label {
                     Layout.fillWidth: true
                     text: studio.mannequinConditioningPath
+                    color: "#8dd7c4"
+                    wrapMode: Text.Wrap
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: studio.mannequinSceneSummary
                     color: "#8dd7c4"
                     wrapMode: Text.Wrap
                 }
