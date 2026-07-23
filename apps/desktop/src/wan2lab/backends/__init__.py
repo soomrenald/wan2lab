@@ -1,0 +1,2 @@
+"""Desktop-owned backend adapters."""
+
