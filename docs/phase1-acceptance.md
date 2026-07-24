@@ -68,6 +68,12 @@ after a segment becomes stale.
   to enabled/auto/balanced, resolves only backend-declared installed compatible
   methods, and explicitly records base-inference fallback when none is
   executable.
+- The installed EasyCache, MagCache, and TeaCache node schemas are discovered
+  and validated. A 17-frame, 30-step EasyCache I2V hardware run completed
+  13.5% faster end-to-end and 15.8% faster in sampling than the comparable
+  base candidate, with complete typed acceleration provenance and a valid
+  fully decoded MP4. Evidence is recorded in
+  [wan-cache-acceleration.md](wan-cache-acceleration.md).
 - Versioned model-to-GPU guidance is available for TI2V-5B, general 14B,
   Animate/Replace 14B, and benchmark-justified minimum-latency 14B workloads.
 
@@ -83,6 +89,9 @@ because TI2V-5B does not advertise those modes.
 Mannequin-guided and adapter-routed multi-character handoff, identity
 correction, batch face repair, long continuation, and final export also remain
 hardware gates.
+
+The EasyCache candidate has no gross corruption in its sampled contact sheet,
+but its semantic/visual quality remains a separate user review decision.
 
 Visual quality remains a human review decision and is never inferred from file
 existence.

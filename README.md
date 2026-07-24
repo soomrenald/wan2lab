@@ -38,3 +38,6 @@ Prompt/I2V smoke procedure in
 [docs/wan2.2-ti2v-5b-hardware.md](docs/wan2.2-ti2v-5b-hardware.md).
 The constrained-VRAM Krea keyframe to Wan I2V transition is recorded in
 [docs/krea-to-wan2.2-hardware.md](docs/krea-to-wan2.2-hardware.md).
+Installed Wan cache discovery, binding, provenance, and the first EasyCache
+hardware comparison are recorded in
+[docs/wan-cache-acceleration.md](docs/wan-cache-acceleration.md).
