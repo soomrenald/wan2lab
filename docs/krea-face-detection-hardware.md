@@ -81,3 +81,28 @@ artifact is retained only as diagnostic evidence under:
 ```text
 /home/wolfhard/.cache/wan2lab/krea-face-refinement/
 ```
+
+## Compatible-identity candidate
+
+The accepted regional adapter keyframe provides a safe alternative: its left
+character is already associated with the checksum-verified `lface` identity
+LoKr. Production detection on that immutable 768x432 keyframe returned:
+
+| Candidate | Character | Box `(x0, y0, x1, y1)` | Score |
+| --- | --- | --- | ---: |
+| 0 | Left, blue, `lface` | `(142.0941, 43.2801, 202.4097, 107.0598)` | 0.6044554 |
+| 1 | Right, orange, unrelated identity | `(513.6829, 32.0473, 578.0296, 100.6600)` | 0.5611747 |
+
+The annotated evidence uses a green box for candidate 0 and a yellow box for
+candidate 1:
+
+```text
+/home/wolfhard/ComfyUI/output/wan2lab/hardware/
+  lface_batch_face_candidates.png
+```
+
+It is 768x432, 468,884 bytes, with SHA-256
+`45c4d74d670a6e988d74cece914928859c5373d50fc01cae15733b09597e2ec8`.
+Candidate 0 requires a new explicit project-owner confirmation because it is
+not the previously confirmed synthetic Animate face. After confirmation, it
+can use `krea_lface_tonly.safetensors` without changing identity.
