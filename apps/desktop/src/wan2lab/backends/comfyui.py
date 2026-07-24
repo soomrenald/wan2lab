@@ -259,7 +259,7 @@ def _model_capabilities(
         if descriptor.applicable_modes.intersection(modes)
     )
     if (
-        is_wan22_ti2v_5b
+        (is_wan22_ti2v_5b or "14b" in normalized_name)
         and total_vram_gib is not None
         and total_vram_gib <= _CONSTRAINED_VRAM_GIB
     ):
@@ -361,9 +361,7 @@ def _cache_acceleration_methods(
     modes: frozenset[WanMode],
     accelerator: str,
 ) -> tuple[WanAccelerationMethodCapabilities, ...]:
-    cache_modes = modes.intersection(
-        {WanMode.PROMPT, WanMode.I2V, WanMode.FIRST_LAST}
-    )
+    cache_modes = modes.intersection(frozenset(WanMode))
     if not cache_modes:
         return ()
     declarations = (
@@ -520,6 +518,18 @@ def _workflow_descriptors(
                 "augment_empty_frames",
             ),
             modes.intersection({WanMode.I2V, WanMode.FIRST_LAST}),
+        ),
+        (
+            nodes.animate_embeds,
+            (
+                "force_offload",
+                "frame_window_size",
+                "colormatch",
+                "pose_strength",
+                "face_strength",
+                "tiled_vae",
+            ),
+            modes.intersection({WanMode.ANIMATE, WanMode.REPLACE}),
         ),
         (
             nodes.decoder,

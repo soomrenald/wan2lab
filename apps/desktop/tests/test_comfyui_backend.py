@@ -33,7 +33,13 @@ def object_info() -> dict[str, object]:
         ),
         "WanVideoVAELoader": node(),
         "LoadWanVideoT5TextEncoder": node(),
-        "WanVideoTextEncode": node(),
+        "WanVideoTextEncode": node(
+            {},
+            {
+                "use_disk_cache": ["BOOLEAN", {"default": False}],
+                "device": [["gpu", "cpu"], {"default": "gpu"}],
+            },
+        ),
         "WanVideoSampler": node(
             {
                 "steps": ["INT", {"default": 30, "min": 1, "max": 100}],
@@ -90,7 +96,16 @@ def object_info() -> dict[str, object]:
             {"clip_name": [["clip_vision_h.safetensors"]]}
         ),
         "WanVideoBlockSwap": node(),
-        "WanVideoAnimateEmbeds": node(),
+        "WanVideoAnimateEmbeds": node(
+            {
+                "force_offload": ["BOOLEAN", {"default": True}],
+                "frame_window_size": ["INT", {"default": 77, "min": 1}],
+                "colormatch": [["disabled", "mkl"], {"default": "disabled"}],
+                "pose_strength": ["FLOAT", {"default": 1.0, "min": 0.0}],
+                "face_strength": ["FLOAT", {"default": 1.0, "min": 0.0}],
+            },
+            {"tiled_vae": ["BOOLEAN", {"default": False}]},
+        ),
         "WanVideoMiniMaxRemoverEmbeds": node(),
     }
 
@@ -169,7 +184,7 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
             frozenset({WanMode.I2V, WanMode.FIRST_LAST}),
         )
 
-    def test_installed_cache_nodes_are_declared_only_for_standard_wan_modes(self) -> None:
+    def test_installed_cache_nodes_are_declared_for_every_executable_wan_mode(self) -> None:
         info = object_info()
         info.update(
             {
@@ -226,11 +241,12 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
                 "comfy-wan-teacache",
             ],
         )
+        self.assertTrue(animate.acceleration_methods)
         self.assertTrue(
-            all(
-                WanMode.ANIMATE not in method.supported_modes
-                for method in animate.acceleration_methods
-            )
+            all(WanMode.ANIMATE in method.supported_modes for method in animate.acceleration_methods)
+        )
+        self.assertTrue(
+            all(WanMode.REPLACE in method.supported_modes for method in animate.acceleration_methods)
         )
 
     def test_missing_required_wrapper_node_is_rejected_before_queueing(self) -> None:

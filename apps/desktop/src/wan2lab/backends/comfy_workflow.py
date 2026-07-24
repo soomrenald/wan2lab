@@ -22,6 +22,11 @@ class ComfyModelSelection:
     vae_filename: str
     text_encoder_filename: str
     clip_vision_filename: str | None = None
+    vitpose_filename: str | None = None
+    yolo_filename: str | None = None
+    sam2_filename: str | None = None
+    onnx_device: str = "CPUExecutionProvider"
+    sam_device: str = "cuda"
     precision: str = "bf16"
     vae_precision: str = "bf16"
     text_encoder_precision: str = "bf16"
@@ -40,6 +45,313 @@ class ModeWorkflowTemplate:
     workflow: Mapping[str, object]
     output_node_id: str
     required_nodes: frozenset[str]
+
+
+def default_specialized_templates() -> dict[WanMode, ModeWorkflowTemplate]:
+    """Return maintained API-format templates for the unified Wan Animate model."""
+
+    return {
+        mode: _wan_animate_template(mode)
+        for mode in (WanMode.ANIMATE, WanMode.REPLACE)
+    }
+
+
+def _wan_animate_template(mode: WanMode) -> ModeWorkflowTemplate:
+    if mode not in {WanMode.ANIMATE, WanMode.REPLACE}:
+        raise ValueError("Wan Animate templates support only animate and replace")
+    source_asset = (
+        "$asset.driving_video" if mode is WanMode.ANIMATE else "$asset.source_video"
+    )
+    required_nodes = {
+        "WanVideoModelLoader",
+        "WanVideoVAELoader",
+        "LoadWanVideoT5TextEncoder",
+        "WanVideoTextEncode",
+        "LoadImage",
+        "ImageResizeKJv2",
+        "CLIPVisionLoader",
+        "WanVideoClipVisionEncode",
+        "VHS_LoadVideo",
+        "OnnxDetectionModelLoader",
+        "PoseAndFaceDetection",
+        "DrawViTPose",
+        "WanVideoAnimateEmbeds",
+        "WanVideoSampler",
+        "WanVideoDecode",
+        "VHS_VideoCombine",
+        "WanVideoBlockSwap",
+    }
+    workflow: dict[str, object] = {
+        "1": {
+            "class_type": "WanVideoModelLoader",
+            "inputs": {
+                "model": "$model.filename",
+                "base_precision": "$model.precision",
+                "quantization": "$model.quantization",
+                "load_device": "$model.load_device",
+                "block_swap_args": ["17", 0],
+            },
+        },
+        "2": {
+            "class_type": "WanVideoVAELoader",
+            "inputs": {
+                "model_name": "$model.vae_filename",
+                "precision": "$model.vae_precision",
+            },
+        },
+        "3": {
+            "class_type": "LoadWanVideoT5TextEncoder",
+            "inputs": {
+                "model_name": "$model.text_encoder_filename",
+                "precision": "$model.text_encoder_precision",
+                "load_device": "$model.load_device",
+                "quantization": "disabled",
+            },
+        },
+        "4": {
+            "class_type": "WanVideoTextEncode",
+            "inputs": {
+                "positive_prompt": "$request.prompt",
+                "negative_prompt": "$request.negative_prompt",
+                "t5": ["3", 0],
+                "force_offload": "$parameter.force_offload",
+                "model_to_offload": ["1", 0],
+                "use_disk_cache": "$parameter.use_disk_cache",
+                "device": "$parameter.device",
+            },
+        },
+        "5": {
+            "class_type": "LoadImage",
+            "inputs": {"image": "$asset.reference_character"},
+        },
+        "6": {
+            "class_type": "ImageResizeKJv2",
+            "inputs": {
+                "image": ["5", 0],
+                "width": "$request.width",
+                "height": "$request.height",
+                "upscale_method": "lanczos",
+                "keep_proportion": "pad_edge_pixel",
+                "pad_color": "0, 0, 0",
+                "crop_position": "top",
+                "divisible_by": 16,
+                "device": "cpu",
+            },
+        },
+        "7": {
+            "class_type": "CLIPVisionLoader",
+            "inputs": {"clip_name": "$model.clip_vision_filename"},
+        },
+        "8": {
+            "class_type": "WanVideoClipVisionEncode",
+            "inputs": {
+                "clip_vision": ["7", 0],
+                "image_1": ["6", 0],
+                "strength_1": 1.0,
+                "strength_2": 1.0,
+                "crop": "center",
+                "combine_embeds": "average",
+                "force_offload": True,
+                "tiles": 0,
+                "ratio": 0.5,
+            },
+        },
+        "9": {
+            "class_type": "VHS_LoadVideo",
+            "inputs": {
+                "video": source_asset,
+                "force_rate": "$request.generation_fps",
+                "custom_width": "$request.width",
+                "custom_height": "$request.height",
+                "frame_load_cap": "$request.frame_count",
+                "skip_first_frames": 0,
+                "select_every_nth": 1,
+                "format": "Wan",
+            },
+        },
+        "10": {
+            "class_type": "OnnxDetectionModelLoader",
+            "inputs": {
+                "vitpose_model": "$model.vitpose_filename",
+                "yolo_model": "$model.yolo_filename",
+                "onnx_device": "$model.onnx_device",
+            },
+        },
+        "11": {
+            "class_type": "PoseAndFaceDetection",
+            "inputs": {
+                "model": ["10", 0],
+                "images": ["9", 0],
+                "width": "$request.width",
+                "height": "$request.height",
+                "face_padding": 0,
+            },
+        },
+        "12": {
+            "class_type": "DrawViTPose",
+            "inputs": {
+                "pose_data": ["11", 0],
+                "width": "$request.width",
+                "height": "$request.height",
+                "retarget_padding": 16,
+                "body_stick_width": -1,
+                "hand_stick_width": -1,
+                "draw_head": True,
+            },
+        },
+        "13": {
+            "class_type": "WanVideoAnimateEmbeds",
+            "inputs": {
+                "vae": ["2", 0],
+                "clip_embeds": ["8", 0],
+                "ref_images": ["6", 0],
+                "pose_images": ["12", 0],
+                "face_images": ["11", 1],
+                "width": "$request.width",
+                "height": "$request.height",
+                "num_frames": "$request.frame_count",
+                "force_offload": "$parameter.force_offload",
+                "frame_window_size": "$parameter.frame_window_size",
+                "colormatch": "$parameter.colormatch",
+                "pose_strength": "$parameter.pose_strength",
+                "face_strength": "$parameter.face_strength",
+                "tiled_vae": "$parameter.tiled_vae",
+            },
+        },
+        "14": {
+            "class_type": "WanVideoSampler",
+            "inputs": {
+                "model": ["1", 0],
+                "image_embeds": ["13", 0],
+                "text_embeds": ["4", 0],
+                "steps": "$parameter.steps",
+                "cfg": "$parameter.cfg",
+                "shift": "$parameter.shift",
+                "seed": "$revision.seed",
+                "force_offload": "$parameter.force_offload",
+                "scheduler": "$parameter.scheduler",
+                "riflex_freq_index": "$parameter.riflex_freq_index",
+                "batched_cfg": "$parameter.batched_cfg",
+                "rope_function": "$parameter.rope_function",
+                "start_step": "$parameter.start_step",
+                "end_step": "$parameter.end_step",
+                "add_noise_to_samples": "$parameter.add_noise_to_samples",
+            },
+        },
+        "15": {
+            "class_type": "WanVideoDecode",
+            "inputs": {
+                "vae": ["2", 0],
+                "samples": ["14", 0],
+                "enable_vae_tiling": "$parameter.enable_vae_tiling",
+                "tile_x": "$parameter.tile_x",
+                "tile_y": "$parameter.tile_y",
+                "tile_stride_x": "$parameter.tile_stride_x",
+                "tile_stride_y": "$parameter.tile_stride_y",
+                "normalization": "$parameter.normalization",
+            },
+        },
+        "16": {
+            "class_type": "VHS_VideoCombine",
+            "inputs": {
+                "images": ["15", 0],
+                "audio": ["9", 2],
+                "frame_rate": "$request.generation_fps",
+                "loop_count": 0,
+                "filename_prefix": "$output.filename_prefix",
+                "format": "video/h264-mp4",
+                "pingpong": False,
+                "save_output": True,
+            },
+        },
+        "17": {
+            "class_type": "WanVideoBlockSwap",
+            "inputs": {
+                "blocks_to_swap": "$model.blocks_to_swap",
+                "offload_img_emb": False,
+                "offload_txt_emb": False,
+                "use_non_blocking": True,
+                "prefetch_blocks": 0,
+                "block_swap_debug": False,
+            },
+        },
+    }
+    if mode is WanMode.REPLACE:
+        required_nodes.update(
+            {
+                "DownloadAndLoadSAM2Model",
+                "Sam2Segmentation",
+                "GrowMaskWithBlur",
+                "BlockifyMask",
+                "DrawMaskOnImage",
+            }
+        )
+        workflow.update(
+            {
+                "18": {
+                    "class_type": "DownloadAndLoadSAM2Model",
+                    "inputs": {
+                        "model": "$model.sam2_filename",
+                        "segmentor": "video",
+                        "device": "$model.sam_device",
+                        "precision": "fp16",
+                    },
+                },
+                "19": {
+                    "class_type": "Sam2Segmentation",
+                    "inputs": {
+                        "sam2_model": ["18", 0],
+                        "image": ["9", 0],
+                        "bboxes": ["11", 3],
+                        "keep_model_loaded": False,
+                        "individual_objects": False,
+                    },
+                },
+                "20": {
+                    "class_type": "GrowMaskWithBlur",
+                    "inputs": {
+                        "mask": ["19", 0],
+                        "expand": 10,
+                        "incremental_expandrate": 0.0,
+                        "tapered_corners": True,
+                        "flip_input": False,
+                        "blur_radius": 0.0,
+                        "lerp_alpha": 1.0,
+                        "decay_factor": 1.0,
+                        "fill_holes": False,
+                    },
+                },
+                "21": {
+                    "class_type": "BlockifyMask",
+                    "inputs": {
+                        "masks": ["20", 0],
+                        "block_size": 32,
+                        "device": "cpu",
+                    },
+                },
+                "22": {
+                    "class_type": "DrawMaskOnImage",
+                    "inputs": {
+                        "image": ["9", 0],
+                        "mask": ["21", 0],
+                        "color": "0, 0, 0",
+                        "device": "cpu",
+                    },
+                },
+            }
+        )
+        embed_inputs = workflow["13"]["inputs"]
+        assert isinstance(embed_inputs, dict)
+        embed_inputs["bg_images"] = ["22", 0]
+        embed_inputs["mask"] = ["21", 0]
+    return ModeWorkflowTemplate(
+        mode=mode,
+        template_id=f"wan2lab-wan2.2-{mode.value}",
+        template_version="1",
+        workflow=workflow,
+        output_node_id="16",
+        required_nodes=frozenset(required_nodes),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -521,6 +833,11 @@ def _template_context(
         "model.vae_filename": selection.vae_filename,
         "model.text_encoder_filename": selection.text_encoder_filename,
         "model.clip_vision_filename": selection.clip_vision_filename,
+        "model.vitpose_filename": selection.vitpose_filename,
+        "model.yolo_filename": selection.yolo_filename,
+        "model.sam2_filename": selection.sam2_filename,
+        "model.onnx_device": selection.onnx_device,
+        "model.sam_device": selection.sam_device,
         "model.precision": selection.precision,
         "model.vae_precision": selection.vae_precision,
         "model.text_encoder_precision": selection.text_encoder_precision,
@@ -599,4 +916,5 @@ __all__ = [
     "ComfyWorkflowPlan",
     "ModeWorkflowTemplate",
     "WorkflowBindingError",
+    "default_specialized_templates",
 ]

@@ -1080,7 +1080,11 @@ class DesktopController(QObject):
     @Property(bool, notify=projectChanged)
     def wanClipVisionRequired(self) -> bool:  # noqa: N802
         model = self._wan_model_control()
-        return model is not None and WanMode.FIRST_LAST in model.supported_modes
+        return model is not None and bool(
+            model.supported_modes.intersection(
+                {WanMode.FIRST_LAST, WanMode.ANIMATE, WanMode.REPLACE}
+            )
+        )
 
     @Property(str, notify=projectChanged)
     def wanModelCompatibility(self) -> str:  # noqa: N802
@@ -1437,7 +1441,9 @@ class DesktopController(QObject):
             if text_encoder not in self._backend_text_encoder_models:
                 raise ValueError("select an installed Wan text encoder")
             if (
-                WanMode.FIRST_LAST in model.supported_modes
+                model.supported_modes.intersection(
+                    {WanMode.FIRST_LAST, WanMode.ANIMATE, WanMode.REPLACE}
+                )
                 and clip_vision not in self._backend_clip_vision_models
             ):
                 raise ValueError("select an installed CLIP vision model")

@@ -41,6 +41,7 @@ from wan2lab.backends.comfy_workflow import (
     ComfyModelSelection,
     ComfyWanWorkflowBuilder,
     ModeWorkflowTemplate,
+    default_specialized_templates,
 )
 from wan2lab.backends.comfyui import (
     BACKEND_ID,
@@ -75,7 +76,9 @@ class ThreadCancellation:
 @dataclass(slots=True)
 class ComfyWorkerService:
     client: ComfyUIClient
-    specialized_templates: Mapping[WanMode, ModeWorkflowTemplate] = field(default_factory=dict)
+    specialized_templates: Mapping[WanMode, ModeWorkflowTemplate] = field(
+        default_factory=default_specialized_templates
+    )
     poll_interval_seconds: float = 0.25
     object_info: dict[str, object] = field(default_factory=dict, init=False)
     system_stats: dict[str, object] = field(default_factory=dict, init=False)
@@ -101,6 +104,23 @@ class ComfyWorkerService:
             ),
             "clip_vision": list(
                 _node_choices(self.object_info, "CLIPVisionLoader", "clip_name")
+            ),
+            "vitpose": list(
+                _node_choices(
+                    self.object_info,
+                    "OnnxDetectionModelLoader",
+                    "vitpose_model",
+                )
+            ),
+            "yolo": list(
+                _node_choices(
+                    self.object_info,
+                    "OnnxDetectionModelLoader",
+                    "yolo_model",
+                )
+            ),
+            "sam2": list(
+                _node_choices(self.object_info, "DownloadAndLoadSAM2Model", "model")
             ),
         }
         return CapabilitiesEvent(
@@ -148,7 +168,12 @@ class ComfyWorkerService:
             raise ValueError("selected offload mode is unsupported")
         _guard_memory_capacity(model.estimated_memory_profiles, self.system_stats, load_device)
         required_components = {"vae", "text_encoder"}
-        if WanMode.FIRST_LAST in model.supported_modes:
+        specialized = bool(
+            model.supported_modes.intersection(
+                {WanMode.ANIMATE, WanMode.REPLACE}
+            )
+        )
+        if WanMode.FIRST_LAST in model.supported_modes or specialized:
             required_components.add("clip_vision")
         if missing := required_components - set(request.component_model_ids):
             raise ValueError(
@@ -158,6 +183,33 @@ class ComfyWorkerService:
         vae = request.component_model_ids["vae"]
         text_encoder = request.component_model_ids["text_encoder"]
         clip_vision = request.component_model_ids.get("clip_vision")
+        vitpose = _preferred_component(
+            request.component_model_ids.get("vitpose"),
+            _node_choices(
+                self.object_info,
+                "OnnxDetectionModelLoader",
+                "vitpose_model",
+            ),
+            preferred_token="vitpose-l-wholebody.onnx",
+        )
+        yolo = _preferred_component(
+            request.component_model_ids.get("yolo"),
+            _node_choices(
+                self.object_info,
+                "OnnxDetectionModelLoader",
+                "yolo_model",
+            ),
+            preferred_token="yolov10m.onnx",
+        )
+        sam2 = _preferred_component(
+            request.component_model_ids.get("sam2"),
+            _node_choices(
+                self.object_info,
+                "DownloadAndLoadSAM2Model",
+                "model",
+            ),
+            preferred_token="sam2.1_hiera_base_plus.safetensors",
+        )
         if vae not in _node_choices(self.object_info, "WanVideoVAELoader", "model_name"):
             raise ValueError("selected Wan VAE is not installed")
         if text_encoder not in _node_choices(
@@ -165,11 +217,18 @@ class ComfyWorkerService:
         ):
             raise ValueError("selected Wan text encoder is not installed")
         if (
-            WanMode.FIRST_LAST in model.supported_modes
+            (WanMode.FIRST_LAST in model.supported_modes or specialized)
             and clip_vision
             not in _node_choices(self.object_info, "CLIPVisionLoader", "clip_name")
         ):
             raise ValueError("selected CLIP vision model is not installed")
+        if specialized and (vitpose is None or yolo is None):
+            raise ValueError(
+                "Wan Animate/Replace requires installed ViTPose and YOLO "
+                "preprocessing models"
+            )
+        if WanMode.REPLACE in model.supported_modes and sam2 is None:
+            raise ValueError("Wan Replace requires an installed SAM2 model declaration")
         blocks_to_swap = _recommended_blocks_to_swap(
             model.display_name,
             self.system_stats,
@@ -181,6 +240,13 @@ class ComfyWorkerService:
             vae_filename=vae,
             text_encoder_filename=text_encoder,
             clip_vision_filename=clip_vision,
+            vitpose_filename=vitpose,
+            yolo_filename=yolo,
+            sam2_filename=sam2,
+            onnx_device=(
+                "CUDAExecutionProvider" if vendor == "cuda" else "CPUExecutionProvider"
+            ),
+            sam_device="cuda",
             precision=request.precision,
             quantization=quantization,
             load_device=load_device,
@@ -276,6 +342,11 @@ class ComfyWorkerService:
                     "vae_filename": plan.model_selection.vae_filename,
                     "text_encoder_filename": plan.model_selection.text_encoder_filename,
                     "clip_vision_filename": plan.model_selection.clip_vision_filename,
+                    "vitpose_filename": plan.model_selection.vitpose_filename,
+                    "yolo_filename": plan.model_selection.yolo_filename,
+                    "sam2_filename": plan.model_selection.sam2_filename,
+                    "onnx_device": plan.model_selection.onnx_device,
+                    "sam_device": plan.model_selection.sam_device,
                     "precision": plan.model_selection.precision,
                     "vae_precision": plan.model_selection.vae_precision,
                     "text_encoder_precision": plan.model_selection.text_encoder_precision,
@@ -332,10 +403,16 @@ class ComfyWorkerService:
     def _refresh(self) -> None:
         self.object_info = self.client.object_info()
         self.system_stats = self.client.system_stats()
+        executable_modes = frozenset(
+            mode
+            for mode, template in self.specialized_templates.items()
+            if template.required_nodes <= set(self.object_info)
+            and _specialized_components_available(mode, self.object_info)
+        )
         self.capabilities = inspect_comfyui_wan(
             self.object_info,
             self.system_stats,
-            executable_specialized_modes=frozenset(self.specialized_templates),
+            executable_specialized_modes=executable_modes,
         )
 
 
@@ -491,6 +568,46 @@ def _node_choices(
     specification = required.get(input_name) if isinstance(required, Mapping) else None
     choices = specification[0] if isinstance(specification, (list, tuple)) and specification else ()
     return tuple(str(item) for item in choices) if isinstance(choices, (list, tuple)) else ()
+
+
+def _preferred_component(
+    selected: str | None,
+    choices: tuple[str, ...],
+    *,
+    preferred_token: str,
+) -> str | None:
+    if selected is not None:
+        if selected not in choices:
+            raise ValueError(f"selected preprocessing component is unavailable: {selected}")
+        return selected
+    preferred = preferred_token.casefold()
+    return next(
+        (item for item in choices if item.casefold().endswith(preferred)),
+        choices[0] if choices else None,
+    )
+
+
+def _specialized_components_available(
+    mode: WanMode,
+    object_info: Mapping[str, object],
+) -> bool:
+    if not _node_choices(object_info, "CLIPVisionLoader", "clip_name"):
+        return False
+    if not _node_choices(
+        object_info,
+        "OnnxDetectionModelLoader",
+        "vitpose_model",
+    ):
+        return False
+    if not _node_choices(
+        object_info,
+        "OnnxDetectionModelLoader",
+        "yolo_model",
+    ):
+        return False
+    return mode is not WanMode.REPLACE or bool(
+        _node_choices(object_info, "DownloadAndLoadSAM2Model", "model")
+    )
 
 
 def main() -> int:

@@ -937,7 +937,7 @@ ApplicationWindow {
                     visible: studio.wanClipVisionRequired
                     displayText: count > 0
                         ? currentText
-                        : "CLIP vision model required for first/last"
+                        : "CLIP vision model required for this pipeline"
                 }
                 RowLayout {
                     ComboBox {

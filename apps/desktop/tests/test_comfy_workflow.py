@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from wan2core.actions import ActionSpec
@@ -15,6 +16,7 @@ from wan2lab.backends.comfy_workflow import (
     ComfyWanWorkflowBuilder,
     ModeWorkflowTemplate,
     WorkflowBindingError,
+    default_specialized_templates,
 )
 from wan2lab.backends.comfyui import BACKEND_ID, inspect_comfyui_wan
 
@@ -437,6 +439,99 @@ class ComfyWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(replace_plan.template_version, "2")
         self.assertEqual(replace_plan.workflow["1"]["inputs"]["mask"], "input/mask.png")
+
+    def test_builtin_animate_and_replace_templates_bind_preprocessing_and_cache(self) -> None:
+        workflow_builder = builder(easycache=True)
+        workflow_builder.object_info.update(
+            {
+                name: node()
+                for name in (
+                    "ImageResizeKJv2",
+                    "VHS_LoadVideo",
+                    "OnnxDetectionModelLoader",
+                    "PoseAndFaceDetection",
+                    "DrawViTPose",
+                    "DownloadAndLoadSAM2Model",
+                    "Sam2Segmentation",
+                    "GrowMaskWithBlur",
+                    "BlockifyMask",
+                    "DrawMaskOnImage",
+                )
+            }
+        )
+        workflow_builder.specialized_templates = default_specialized_templates()
+        animate_model_id = model_id(workflow_builder, "animate")
+        selection = workflow_builder.model_selections[animate_model_id]
+        workflow_builder.model_selections = {
+            **workflow_builder.model_selections,
+            animate_model_id: replace(
+                selection,
+                vitpose_filename="vitpose-l-wholebody.onnx",
+                yolo_filename="yolov10m.onnx",
+                sam2_filename="sam2.1_hiera_base_plus.safetensors",
+                blocks_to_swap=25,
+            ),
+        }
+        model = workflow_builder.capabilities.model(animate_model_id)
+        acceleration = resolve_wan_acceleration(
+            project_policy=WanAccelerationPolicy(),
+            segment_policy=SegmentAccelerationPolicy(),
+            methods=model.acceleration_methods,
+            model_id=model.model_id,
+            model_family=model.model_family,
+            mode=WanMode.ANIMATE,
+            accelerator_vendor="cuda",
+        )
+        animate_plan = workflow_builder.build(
+            request(
+                workflow_builder,
+                WanMode.ANIMATE,
+                "animate",
+                reference_character_asset_id="character",
+                driving_video_asset_id="driving",
+            ),
+            asset_inputs={
+                "character": "input/reference.png",
+                "driving": "input/driving.mp4",
+            },
+            filename_prefix="wan2lab/animate",
+            seed=47,
+            acceleration=acceleration,
+        )
+
+        self.assertEqual(animate_plan.template_id, "wan2lab-wan2.2-animate")
+        self.assertEqual(animate_plan.workflow["9"]["inputs"]["video"], "input/driving.mp4")
+        self.assertEqual(animate_plan.workflow["11"]["inputs"]["images"], ["9", 0])
+        self.assertEqual(animate_plan.workflow["13"]["inputs"]["pose_images"], ["12", 0])
+        self.assertEqual(animate_plan.workflow["14"]["inputs"]["seed"], 47)
+        self.assertEqual(animate_plan.workflow["17"]["inputs"]["blocks_to_swap"], 25)
+        cache_node = next(
+            key
+            for key, value in animate_plan.workflow.items()
+            if value["class_type"] == "WanVideoEasyCache"
+        )
+        self.assertEqual(animate_plan.workflow["14"]["inputs"]["cache_args"], [cache_node, 0])
+
+        replace_plan = workflow_builder.build(
+            request(
+                workflow_builder,
+                WanMode.REPLACE,
+                "animate",
+                reference_character_asset_id="character",
+                source_video_asset_id="source",
+            ),
+            asset_inputs={
+                "character": "input/reference.png",
+                "source": "input/source.mp4",
+            },
+            filename_prefix="wan2lab/replace",
+            seed=48,
+        )
+        self.assertEqual(replace_plan.template_id, "wan2lab-wan2.2-replace")
+        self.assertEqual(replace_plan.workflow["19"]["inputs"]["bboxes"], ["11", 3])
+        self.assertEqual(replace_plan.workflow["22"]["inputs"]["mask"], ["21", 0])
+        self.assertEqual(replace_plan.workflow["13"]["inputs"]["bg_images"], ["22", 0])
+        self.assertEqual(replace_plan.workflow["13"]["inputs"]["mask"], ["21", 0])
 
     def test_unsafe_asset_path_and_unknown_parameters_fail_before_queue(self) -> None:
         workflow_builder = builder()

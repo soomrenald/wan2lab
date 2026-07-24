@@ -52,6 +52,11 @@ class ResidentWanModel:
     vae_filename: str
     text_encoder_filename: str
     clip_vision_filename: str | None
+    vitpose_filename: str | None
+    yolo_filename: str | None
+    sam2_filename: str | None
+    onnx_device: str
+    sam_device: str
     precision: str
     quantization: str
     load_device: str
@@ -70,6 +75,11 @@ class ModelResidencyManager:
             vae_filename=selection.vae_filename,
             text_encoder_filename=selection.text_encoder_filename,
             clip_vision_filename=selection.clip_vision_filename,
+            vitpose_filename=selection.vitpose_filename,
+            yolo_filename=selection.yolo_filename,
+            sam2_filename=selection.sam2_filename,
+            onnx_device=selection.onnx_device,
+            sam_device=selection.sam_device,
             precision=selection.precision,
             quantization=selection.quantization,
             load_device=selection.load_device,
@@ -97,6 +107,11 @@ class ModelResidencyManager:
                     "vae_filename": self.resident.vae_filename,
                     "text_encoder_filename": self.resident.text_encoder_filename,
                     "clip_vision_filename": self.resident.clip_vision_filename,
+                    "vitpose_filename": self.resident.vitpose_filename,
+                    "yolo_filename": self.resident.yolo_filename,
+                    "sam2_filename": self.resident.sam2_filename,
+                    "onnx_device": self.resident.onnx_device,
+                    "sam_device": self.resident.sam_device,
                     "precision": self.resident.precision,
                     "quantization": self.resident.quantization,
                     "load_device": self.resident.load_device,

@@ -103,6 +103,71 @@ class WorkerClient:
 
 
 class WorkerServiceTests(unittest.TestCase):
+    def test_builtin_specialized_templates_require_and_select_preprocessors(self) -> None:
+        client = WorkerClient()
+        client.info.update(
+            {
+                name: node()
+                for name in (
+                    "ImageResizeKJv2",
+                    "VHS_LoadVideo",
+                    "PoseAndFaceDetection",
+                    "DrawViTPose",
+                    "DownloadAndLoadSAM2Model",
+                    "Sam2Segmentation",
+                    "GrowMaskWithBlur",
+                    "BlockifyMask",
+                    "DrawMaskOnImage",
+                )
+            }
+        )
+        client.info["OnnxDetectionModelLoader"] = node(
+            {
+                "vitpose_model": [["vitpose-l-wholebody.onnx"]],
+                "yolo_model": [["yolov10m.onnx"]],
+            }
+        )
+        client.info["DownloadAndLoadSAM2Model"] = node(
+            {"model": [["sam2.1_hiera_base_plus.safetensors"]]}
+        )
+        service = ComfyWorkerService(client, poll_interval_seconds=0)
+        service.inspect("inspect-specialized")
+        assert service.capabilities is not None
+        animate = next(
+            model
+            for model in service.capabilities.model_variants
+            if "animate" in model.display_name
+        )
+        self.assertEqual(
+            animate.supported_modes,
+            frozenset({WanMode.ANIMATE, WanMode.REPLACE}),
+        )
+
+        service.load(
+            LoadModelRequest(
+                command_id="load-specialized",
+                backend_id=BACKEND_ID,
+                model_id=animate.model_id,
+                precision="bf16",
+                quantization="disabled",
+                offload_mode="offload_device",
+                component_model_ids={
+                    "vae": "wan_2.1_vae.safetensors",
+                    "text_encoder": "umt5_xxl_fp16.safetensors",
+                    "clip_vision": "clip_vision_h.safetensors",
+                },
+            )
+        )
+
+        selection = service.selections[animate.model_id]
+        self.assertEqual(selection.vitpose_filename, "vitpose-l-wholebody.onnx")
+        self.assertEqual(selection.yolo_filename, "yolov10m.onnx")
+        self.assertEqual(
+            selection.sam2_filename,
+            "sam2.1_hiera_base_plus.safetensors",
+        )
+        self.assertEqual(selection.onnx_device, "CUDAExecutionProvider")
+
     def test_model_load_rejects_missing_gpu_before_materialization(self) -> None:
         class CpuWorkerClient(WorkerClient):
             def system_stats(self):
@@ -301,6 +366,9 @@ class WorkerServiceTests(unittest.TestCase):
                 "vae": ["wan_2.1_vae.safetensors"],
                 "text_encoder": ["umt5_xxl_fp16.safetensors"],
                 "clip_vision": ["clip_vision_h.safetensors"],
+                "vitpose": [],
+                "yolo": [],
+                "sam2": [],
             },
         )
         self.assertTrue(result.result.result_asset_id.startswith("comfy-video-"))
