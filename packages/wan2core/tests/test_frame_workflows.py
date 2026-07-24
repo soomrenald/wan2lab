@@ -16,6 +16,8 @@ from wan2core.editing.workflows import (
     plan_frame_extraction,
     plan_frame_revision_assembly,
 )
+from wan2core.keyframes import AdapterSelection, Rectangle
+from wan2core.keyframes.composition import KreaAdapterRouteSpec
 from wan2core.projects import ProjectSettings, Wan2LabProject
 from wan2core.provenance import ProvenanceRecord
 from wan2core.segments import (
@@ -301,6 +303,21 @@ class FrameWorkflowTests(unittest.TestCase):
                 NormalizedFrameEditRequest(
                     source_frame_asset_id="frame-1",
                     operation_type=FrameEditOperation.FACE_REFINEMENT,
+                    adapters=(
+                        AdapterSelection(adapter_id="identity-adapter", strength=0.8),
+                    ),
+                    adapter_routes=(
+                        KreaAdapterRouteSpec(
+                            route_id="identity-adapter:confirmed-face",
+                            adapter_id="identity-adapter",
+                            asset_id="identity-adapter-asset",
+                            model_family="krea2",
+                            strength=0.8,
+                            region_ids=("confirmed-face",),
+                            routing_mode="character_identity",
+                            trigger_phrase="avery_token",
+                        ),
+                    ),
                     user_confirmed_face_region=True,
                 ),
                 progress=lambda *_args: None,
@@ -308,6 +325,45 @@ class FrameWorkflowTests(unittest.TestCase):
             )
         self.assertEqual(output.asset_paths, (result,))
         self.assertEqual(backend.face_calls, 1)
+
+    def test_face_edit_preserves_resolved_identity_adapter_route(self) -> None:
+        request = NormalizedFrameEditRequest(
+            source_frame_asset_id="frame-1",
+            operation_type=FrameEditOperation.FACE_REFINEMENT,
+            region=Rectangle(x0=10, y0=12, x1=80, y1=90),
+            adapters=(AdapterSelection(adapter_id="identity-adapter", strength=0.8),),
+            adapter_routes=(
+                KreaAdapterRouteSpec(
+                    route_id="identity-adapter:confirmed-face",
+                    adapter_id="identity-adapter",
+                    asset_id="identity-adapter-asset",
+                    model_family="krea2",
+                    strength=0.8,
+                    region_ids=("confirmed-face",),
+                    routing_mode="character_identity",
+                    trigger_phrase="avery_token",
+                ),
+            ),
+            user_confirmed_face_region=True,
+        )
+
+        payload = request.to_k2_request()
+
+        self.assertEqual(
+            payload["adapters"],
+            [
+                {
+                    "id": "identity-adapter:confirmed-face",
+                    "name": "identity-adapter",
+                    "path": "identity-adapter-asset",
+                    "strength": 0.8,
+                    "global": False,
+                    "region_ids": ["confirmed-face"],
+                    "routing_mode": "character_identity",
+                    "trigger_phrase": "avery_token",
+                }
+            ],
+        )
 
 
 if __name__ == "__main__":

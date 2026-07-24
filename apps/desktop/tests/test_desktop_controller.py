@@ -390,8 +390,10 @@ class DesktopControllerTests(unittest.TestCase):
             result_root = root / "krea-results"
             source = root / "source.png"
             reference = root / "reference.png"
+            adapter = root / "identity.safetensors"
             Image.new("RGB", (128, 128), "blue").save(source)
             Image.new("RGB", (128, 128), "purple").save(reference)
+            adapter.write_bytes(b"immutable identity adapter")
             controller = DesktopController(
                 asset_base=root / "projects",
                 krea_result_root=result_root,
@@ -401,6 +403,16 @@ class DesktopControllerTests(unittest.TestCase):
                 "averyface, stable identity",
                 "Travel clothes",
                 "blue jacket",
+            )
+            controller.importCharacterAdapter(
+                0,
+                "identity",
+                QUrl.fromLocalFile(str(adapter)),
+                "krea",
+                "lora",
+                "krea2",
+                "avery_token",
+                0.8,
             )
             controller.importSheetEntry(
                 QUrl.fromLocalFile(str(reference)),
@@ -416,6 +428,8 @@ class DesktopControllerTests(unittest.TestCase):
             request = controller._krea_worker.send.call_args.args[1]["request"]  # noqa: SLF001
             self.assertEqual(request["operation"], "face_refinement")
             self.assertTrue(request["user_confirmed_face_region"])
+            self.assertEqual(request["adapters"][0]["region_ids"], ["confirmed-face"])
+            self.assertEqual(request["adapters"][0]["trigger_phrase"], "avery_token")
             result_root.mkdir(parents=True)
             result = result_root / "refined.png"
             Image.new("RGB", (128, 128), "green").save(result)
@@ -860,6 +874,77 @@ class DesktopControllerTests(unittest.TestCase):
                 for item in controller.session.project.identity_warnings
             )
         )
+
+    def test_confirmed_face_batch_resolves_full_identity_adapter_route(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapter_file = root / "identity.safetensors"
+            reference_image = root / "reference.png"
+            adapter_file.write_bytes(b"immutable adapter weights")
+            Image.new("RGB", (256, 256), "blue").save(reference_image)
+            controller = DesktopController(asset_base=root / "projects")
+            controller.addCharacter(
+                "Avery",
+                "averyface, stable identity",
+                "Travel clothes",
+                "blue jacket",
+            )
+            controller.importCharacterAdapter(
+                0,
+                "identity",
+                QUrl.fromLocalFile(str(adapter_file)),
+                "krea",
+                "lora",
+                "krea2",
+                "avery_token",
+                0.8,
+            )
+            controller.importSheetEntryForSheet(
+                0,
+                QUrl.fromLocalFile(str(reference_image)),
+                "front",
+            )
+            controller.planMockTimeline()
+            controller.generateNextMockSegment()
+            identity = controller.session.project.characters[0]
+            revision = controller.session.project.segment_revisions[0]
+            segment = controller.session.project.segments[0]
+            proposal = confirm_face_proposal(
+                FaceProposal(
+                    proposal_id="face-0",
+                    frame_index=0,
+                    identity_id=identity.identity_id,
+                    region_id="face-region-0",
+                    box=Rectangle(x0=10, y0=12, x1=80, y1=90),
+                    score=0.91,
+                    prompt=identity.identity_prompt,
+                )
+            )
+            controller._face_batch_draft = {  # noqa: SLF001
+                "mode": "face_detection",
+                "segment_id": segment.segment_id,
+                "segment_index": 0,
+                "revision_id": revision.revision_id,
+                "source_video_asset_id": revision.result_asset_id,
+                "source_video": root / "source.mp4",
+                "selection": BatchFrameSelection(frame_indices=(0,)),
+                "identity_id": identity.identity_id,
+                "identity_prompt": identity.identity_prompt,
+                "confirmed": {0: proposal},
+            }
+            controller._frame_extraction_runner.start = Mock()  # type: ignore[method-assign]  # noqa: SLF001
+
+            controller.refineConfirmedFaceBatch("sharpen facial detail", 0, False)
+
+            context = controller._active_batch_frame_edit  # noqa: SLF001
+            self.assertIsNotNone(context)
+            route = context["adapter_routes"][0]  # type: ignore[index]
+            adapter = identity.adapter_refs[0]
+            self.assertEqual(route.adapter_id, adapter.adapter_id)
+            self.assertEqual(route.asset_id, adapter.asset_id)
+            self.assertEqual(route.region_ids, ("confirmed-face",))
+            self.assertEqual(route.trigger_phrase, "avery_token")
+            self.assertEqual(context["adapter_paths"].keys(), {adapter.asset_id})  # type: ignore[index]
 
     def test_approved_identity_checkpoint_requires_explicit_apply_before_staling(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

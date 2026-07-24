@@ -15,6 +15,7 @@ from PIL import Image, ImageOps
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 
 from k2core import __version__ as k2core_version
+from k2core.lora import CHARACTER_IDENTITY_LORA_ROUTING
 from wan2core.actions import ActionSpec
 from wan2core import __version__ as wan2core_version
 from wan2core.assets import AssetKind, AssetRef
@@ -64,6 +65,7 @@ from wan2core.keyframes import (
     Rectangle,
 )
 from wan2core.keyframes.composition import (
+    KreaAdapterRouteSpec,
     KeyframeCompositionRequest,
     compile_keyframe_composition,
 )
@@ -2989,13 +2991,26 @@ class DesktopController(QObject):
                     )
                     for item in adapter_refs
                 ),
+                adapter_routes=tuple(
+                    KreaAdapterRouteSpec(
+                        route_id=f"{item.adapter_id}:confirmed-face",
+                        adapter_id=item.adapter_id,
+                        asset_id=item.asset_id,
+                        model_family=item.model_family,
+                        strength=item.default_strength,
+                        region_ids=("confirmed-face",),
+                        routing_mode=CHARACTER_IDENTITY_LORA_ROUTING,
+                        trigger_phrase=item.trigger,
+                    )
+                    for item in adapter_refs
+                ),
                 user_confirmed_face_region=True,
             )
             asset_paths = {
                 source_asset.asset_id: str(self._asset_store.resolve_ref(source_asset)),
                 "identity-reference": str(self._asset_store.resolve_ref(reference_asset)),
                 **{
-                    item.adapter_id: str(self._asset_store.resolve_ref(assets[item.asset_id]))
+                    item.asset_id: str(self._asset_store.resolve_ref(assets[item.asset_id]))
                     for item in adapter_refs
                 },
             }
@@ -3814,7 +3829,7 @@ class DesktopController(QObject):
             )
             project_assets = {item.asset_id: item for item in self._session.project.assets}
             adapter_paths = {
-                item.adapter_id: str(self._asset_store.resolve_ref(project_assets[item.asset_id]))
+                item.asset_id: str(self._asset_store.resolve_ref(project_assets[item.asset_id]))
                 for item in adapter_refs
             }
         except Exception as error:
@@ -3836,6 +3851,19 @@ class DesktopController(QObject):
                 AdapterSelection(
                     adapter_id=item.adapter_id,
                     strength=item.default_strength,
+                )
+                for item in adapter_refs
+            ),
+            "adapter_routes": tuple(
+                KreaAdapterRouteSpec(
+                    route_id=f"{item.adapter_id}:confirmed-face",
+                    adapter_id=item.adapter_id,
+                    asset_id=item.asset_id,
+                    model_family=item.model_family,
+                    strength=item.default_strength,
+                    region_ids=("confirmed-face",),
+                    routing_mode=CHARACTER_IDENTITY_LORA_ROUTING,
+                    trigger_phrase=item.trigger,
                 )
                 for item in adapter_refs
             ),
@@ -4027,6 +4055,9 @@ class DesktopController(QObject):
             region=proposal.box if proposal is not None else None,
             identity_id=(str(context["identity_id"]) if is_face_refinement else None),
             adapters=(context["adapters"] if is_face_refinement else ()),
+            adapter_routes=(
+                context.get("adapter_routes", ()) if is_face_refinement else ()
+            ),
             user_confirmed_face_region=is_face_refinement,
         )
         command_id = self._krea_worker.send(

@@ -23,6 +23,7 @@ from wan2core.editing import (
     FrameEditRecord,
 )
 from wan2core.keyframes import AdapterSelection, Rectangle
+from wan2core.keyframes.composition import KreaAdapterRouteSpec
 from wan2core.projects import Wan2LabProject
 from wan2core.provenance import ProvenanceRecord
 from wan2core.review import begin_modification, complete_modification
@@ -77,6 +78,7 @@ class NormalizedFrameEditRequest(DomainModel):
     identity_id: Identifier | None = None
     appearance_id: Identifier | None = None
     adapters: tuple[AdapterSelection, ...] = ()
+    adapter_routes: tuple[KreaAdapterRouteSpec, ...] = ()
     user_confirmed_face_region: bool = False
 
     @model_validator(mode="after")
@@ -86,9 +88,25 @@ class NormalizedFrameEditRequest(DomainModel):
             and not self.user_confirmed_face_region
         ):
             raise ValueError("face refinement requires a user-confirmed region")
+        if (
+            self.operation_type is FrameEditOperation.FACE_REFINEMENT
+            and not self.adapter_routes
+        ):
+            raise ValueError(
+                "identity face refinement requires a resolved compatible adapter route"
+            )
+        selected = {item.adapter_id for item in self.adapters}
+        routed = {item.adapter_id for item in self.adapter_routes}
+        if not routed.issubset(selected):
+            raise ValueError("frame adapter routes must reference selected adapters")
         return self
 
     def to_k2_request(self) -> dict[str, object]:
+        adapter_payload = (
+            [item.to_k2_payload() for item in self.adapter_routes]
+            if self.adapter_routes
+            else [item.model_dump(mode="json") for item in self.adapters]
+        )
         return {
             "operation": self.operation_type.value,
             "source_asset_id": self.source_frame_asset_id,
@@ -98,7 +116,7 @@ class NormalizedFrameEditRequest(DomainModel):
             "mask_asset_id": self.mask_asset_id,
             "identity_id": self.identity_id,
             "appearance_id": self.appearance_id,
-            "adapters": [item.model_dump(mode="json") for item in self.adapters],
+            "adapters": adapter_payload,
             "user_confirmed_face_region": self.user_confirmed_face_region,
         }
 
