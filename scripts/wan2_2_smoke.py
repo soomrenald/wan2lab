@@ -44,6 +44,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="Override both VAE decode tile strides in pixels",
     )
+    parser.add_argument(
+        "--text-encoder-device",
+        choices=("cpu", "gpu"),
+        default="cpu",
+        help="Run T5 prompt encoding on CPU or GPU (default: cpu)",
+    )
     parser.add_argument("--seed", type=int, default=20260723)
     parser.add_argument("--prompt", default="A paper windmill turns gently in a clean studio.")
     parser.add_argument("--negative-prompt", default="flicker, distortion, text, watermark")
@@ -109,7 +115,7 @@ def main() -> int:
         "force_offload": True,
         "enable_vae_tiling": True,
         "rope_function": "comfy_chunked",
-        "device": "cpu",
+        "device": args.text_encoder_device,
     }
     if args.vae_tile_size is not None:
         parameters["tile_x"] = args.vae_tile_size
