@@ -271,6 +271,7 @@ def _wan_animate_template(mode: WanMode) -> ModeWorkflowTemplate:
                 "offload_img_emb": False,
                 "offload_txt_emb": False,
                 "use_non_blocking": True,
+                "vace_blocks_to_swap": 0,
                 "prefetch_blocks": 0,
                 "block_swap_debug": False,
             },
@@ -644,6 +645,9 @@ class ComfyWanWorkflowBuilder:
                     "offload_img_emb": False,
                     "offload_txt_emb": False,
                     "use_non_blocking": True,
+                    "vace_blocks_to_swap": 0,
+                    "prefetch_blocks": 0,
+                    "block_swap_debug": False,
                 },
             }
             workflow["1"]["inputs"]["block_swap_args"] = ["13", 0]
