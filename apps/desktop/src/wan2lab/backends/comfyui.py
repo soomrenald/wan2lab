@@ -142,6 +142,7 @@ def inspect_comfyui_wan(
         if {
             nodes.clip_vision_encoder,
             nodes.clip_vision_loader,
+            nodes.image_scaler,
         }.issubset(available) and _choices(
             _node(object_info, nodes.clip_vision_loader),
             "clip_name",

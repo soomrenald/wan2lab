@@ -292,6 +292,22 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
 
         self.assertEqual(flf2v.supported_modes, frozenset({WanMode.I2V}))
 
+    def test_first_last_requires_the_core_image_scaler(self) -> None:
+        info = object_info()
+        info.pop("ImageScale")
+
+        capabilities = inspect_comfyui_wan(
+            info,
+            {"devices": [{"name": "AMD Radeon", "type": "rocm"}]},
+        )
+        flf2v = next(
+            model
+            for model in capabilities.model_variants
+            if "flf2v" in model.display_name
+        )
+
+        self.assertEqual(flf2v.supported_modes, frozenset({WanMode.I2V}))
+
     def test_unified_i2v_requires_the_core_image_scaler(self) -> None:
         info = object_info()
         info.pop("ImageScale")

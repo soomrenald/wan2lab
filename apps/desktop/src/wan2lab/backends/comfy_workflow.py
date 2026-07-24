@@ -745,6 +745,26 @@ class ComfyWanWorkflowBuilder:
                     "class_type": "LoadImage",
                     "inputs": {"image": asset_inputs[request.end_image_asset_id]},
                 }
+                workflow["14"] = {
+                    "class_type": "ImageScale",
+                    "inputs": {
+                        "image": ["9", 0],
+                        "upscale_method": "lanczos",
+                        "width": request.width,
+                        "height": request.height,
+                        "crop": "center",
+                    },
+                }
+                workflow["15"] = {
+                    "class_type": "ImageScale",
+                    "inputs": {
+                        "image": ["10", 0],
+                        "upscale_method": "lanczos",
+                        "width": request.width,
+                        "height": request.height,
+                        "crop": "center",
+                    },
+                }
                 workflow["11"] = {
                     "class_type": "CLIPVisionLoader",
                     "inputs": {"clip_name": selection.clip_vision_filename},
@@ -753,8 +773,8 @@ class ComfyWanWorkflowBuilder:
                     "class_type": "WanVideoClipVisionEncode",
                     "inputs": {
                         "clip_vision": ["11", 0],
-                        "image_1": ["9", 0],
-                        "image_2": ["10", 0],
+                        "image_1": ["14", 0],
+                        "image_2": ["15", 0],
                         "strength_1": 1.0,
                         "strength_2": 1.0,
                         "crop": "center",
@@ -764,7 +784,8 @@ class ComfyWanWorkflowBuilder:
                         "ratio": 0.5,
                     },
                 }
-                inputs["end_image"] = ["10", 0]
+                inputs["start_image"] = ["14", 0]
+                inputs["end_image"] = ["15", 0]
                 inputs["clip_embeds"] = ["12", 0]
                 inputs["fun_or_fl2v_model"] = True
             _bind_optional_parameters(
