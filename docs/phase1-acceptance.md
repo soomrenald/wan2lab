@@ -76,6 +76,14 @@ after a segment becomes stale.
   [wan-cache-acceleration.md](wan-cache-acceleration.md).
 - Versioned model-to-GPU guidance is available for TI2V-5B, general 14B,
   Animate/Replace 14B, and benchmark-justified minimum-latency 14B workloads.
+- Wan2.1 FLF2V-14B completed a distinct-family, accelerated first/last-frame
+  run at 832x480, 17 frames, and 30 steps. The H.264 output has exactly 17
+  decoded frames, passed a complete FFmpeg decode, and records model,
+  component, acceleration, timing, and resource provenance. Exact evidence is
+  recorded in [wan2.1-flf2v-hardware.md](wan2.1-flf2v-hardware.md).
+- Live ComfyUI now exposes the installed Wan Animate/Replace preprocessing and
+  SAM2 nodes. The AMD host uses a restart-stable CPU ONNX Runtime override for
+  pose/detection while diffusion and SAM2 remain on PyTorch ROCm.
 
 ## Hardware acceptance status
 
@@ -84,8 +92,10 @@ selection, Prompt execution, I2V execution, output encoding, structured
 provenance, full-duration decoding, OOM recovery, and user visual review are
 complete.
 
-First/last, Animate, and Replace require later compatible model families
-because TI2V-5B does not advertise those modes.
+First/last execution is hardware-valid on the installed Wan2.1 FLF2V family;
+its visual quality decision remains pending. Animate and Replace have
+executable workflows and live preprocessors but still require the pinned
+Animate transformer before their hardware runs.
 Mannequin-guided and adapter-routed multi-character handoff, identity
 correction, batch face repair, long continuation, and final export also remain
 hardware gates.
