@@ -1,6 +1,6 @@
 # Wan2.2 sequential extension hardware acceptance
 
-Status recorded on 2026-07-23.
+Status: hardware-valid on 2026-07-23 and project-owner approved on 2026-07-24.
 
 ## Result
 
@@ -80,9 +80,8 @@ the approved raised-hand boundary, lower their hands, and the orange
 mannequin turns toward the blue mannequin while the camera and studio remain
 stable.
 
-This is a technically accepted review candidate. Wan2Lab must not mark it
-approved or assemble it into the final long video until the project owner
-accepts its visual quality.
+The project owner reviewed and approved this continuation on 2026-07-24. It is
+therefore eligible for the final long-video assembly path.
 
 ## Acceleration and resource evidence
 
@@ -101,4 +100,3 @@ Raw telemetry:
 The run completed without a GPU OOM, host OOM, or storage error. Tiled VAE
 decode used 128-pixel tiles with 64-pixel strides and completed 45 tiles in
 5:43.
-

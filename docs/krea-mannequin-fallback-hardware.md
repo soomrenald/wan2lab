@@ -1,6 +1,6 @@
 # Krea mannequin fallback hardware acceptance
 
-Status recorded on 2026-07-23.
+Status: hardware-valid on 2026-07-23 and project-owner approved on 2026-07-24.
 
 ## Result
 
@@ -84,3 +84,5 @@ The runner probes the runtime, renders all guide kinds, resolves the
 capability-gated conditioning plan, executes Krea only when the fallback is
 selected, releases the model, and prints exact evidence.
 
+The project owner reviewed and approved the fallback candidate's pose fidelity
+on 2026-07-24.

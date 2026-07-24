@@ -147,13 +147,12 @@ an RTX 5090, including a clean remote bootstrap, GPU text encoding, accelerated
 full-duration execution, telemetry capture, output validation, evidence
 preservation, safe Pod stop, and project-owner visual approval.
 
-First/last execution is hardware-valid on the installed Wan2.1 FLF2V family;
-its visual quality decision remains pending. Animate and Replace are both
-hardware-valid; their fine visual-quality decisions remain human review tasks.
-The mannequin-guided i2i fallback is hardware-valid; its exact pose-fidelity
-decision remains pending. Adapter-routed multi-character handoff is
-hardware-valid. Identity correction approval, batch face repair, and genuinely
-generated continuation approval and long assembly remain hardware gates.
+First/last execution, Animate, Replace, mannequin-guided i2i fallback,
+single-frame correction, and the genuinely generated continuation are
+hardware-valid and were project-owner approved on 2026-07-24. Adapter-routed
+multi-character handoff is hardware-valid. Face candidate 0 was also confirmed
+without manual correction, unlocking batch face repair and genuinely generated
+long assembly as the remaining execution gates.
 
 The project owner approved the EasyCache hardware candidate after reviewing its
 output and contact sheet on 2026-07-23.

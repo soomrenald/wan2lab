@@ -1,6 +1,6 @@
 # Krea face-detection hardware acceptance
 
-Status recorded on 2026-07-23.
+Status: candidate 0 confirmed by the project owner on 2026-07-24.
 
 ## Scope
 
@@ -42,6 +42,6 @@ The annotated evidence is
 The box encloses the synthetic character's visible face.
 
 Detection, threshold routing, model discovery, CPU provider selection, typed
-candidate output, and model release pass. Batch refinement remains paused at
-the required confirmation boundary: candidate 0 has not been approved by the
-project owner.
+candidate output, and model release pass. The project owner confirmed candidate
+0 without a manual box correction on 2026-07-24, unlocking the batch refinement
+execution gate.

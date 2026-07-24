@@ -1,6 +1,6 @@
 # Wan2.2 Replace hardware acceptance
 
-Status recorded on 2026-07-23.
+Status: hardware-valid on 2026-07-23 and project-owner approved on 2026-07-24.
 
 ## Result
 
@@ -80,3 +80,4 @@ PYTHONPATH=packages/wan2core/src:apps/desktop/src:../k2core/src \
 python scripts/wan2_2_animate_smoke.py --mode replace --release
 ```
 
+The project owner reviewed and approved the Replace candidate on 2026-07-24.

@@ -1,6 +1,6 @@
 # Krea single-frame correction hardware acceptance
 
-Status recorded on 2026-07-23.
+Status: hardware-valid on 2026-07-23 and project-owner approved on 2026-07-24.
 
 ## Scope
 
@@ -66,4 +66,5 @@ The comparison preserves the blue/orange subjects, studio, lighting, framing,
 and most pixels while changing the middle arm contour. It does not
 unambiguously achieve the prompt's requested fully separated outer arms.
 Semantic correction quality therefore remains a human review decision and is
-not inferred from successful execution.
+not inferred from successful execution. The project owner reviewed and
+approved the correction candidate on 2026-07-24.

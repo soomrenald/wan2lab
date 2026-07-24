@@ -1,6 +1,6 @@
 # Wan2.1 FLF2V hardware acceptance
 
-Status recorded on 2026-07-23.
+Status: hardware-valid on 2026-07-23 and project-owner approved on 2026-07-24.
 
 ## Scope
 
@@ -130,4 +130,5 @@ The sampled frames preserve the blue/orange subjects and studio composition
 while moving from lowered arms to raised hands. The middle transition includes
 arm/hand overlap between the subjects. File, pipeline, endpoint-conditioning,
 and resource acceptance pass; semantic and visual quality remain an explicit
-human review decision.
+human review decision. The project owner reviewed and approved this remaining
+candidate on 2026-07-24.
