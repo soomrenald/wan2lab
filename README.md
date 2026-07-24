@@ -69,3 +69,5 @@ The completed SAM2-conditioned Wan2.2 Replace ROCm hardware run is recorded in
 The genuine full-duration sequential continuation and its pending review gate
 are recorded in
 [docs/wan2.2-sequential-extension-hardware.md](docs/wan2.2-sequential-extension-hardware.md).
+The guarded, SSH-first CUDA fast track for remote hardware validation is in
+[docs/runpod-cli-lab.md](docs/runpod-cli-lab.md).
