@@ -1,7 +1,9 @@
 # Standalone RunPod SSH/CLI lab
 
-Status: implementation prepared on 2026-07-24; live provisioning awaits local
-RunPod API authentication.
+Status: RTX 5090 provisioning, bootstrap, model verification, smoke testing,
+and the approved 121-frame benchmark passed on 2026-07-24. The Pod is stopped
+with its regular volume preserved. Exact results are recorded in
+`docs/runpod-rtx5090-ti2v-benchmark.md`.
 
 This is the accelerated path to CUDA hardware validation before the Product
 Phase 2 browser application is complete. It is a dedicated Wan2Lab Pod and does
@@ -172,9 +174,11 @@ export PYTHONPATH=/workspace/wan2lab/apps/desktop/src:/workspace/wan2lab/package
   --output-prefix wan2lab/remote/ti2v_5b_prompt_5f
 ```
 
-The next benchmark is the approved 121-frame, 30-step workload with automatic
-balanced acceleration, recording wall time, sample time, VAE time, VRAM, GPU
-utilization, output SHA-256, and exact runtime revisions.
+The approved 121-frame, 30-step workload with automatic balanced acceleration
+completed in 414.65 seconds of ComfyUI execution time. It peaked at 12,153 MiB
+VRAM and produced a valid 5.041667-second H.264 result. See
+`docs/runpod-rtx5090-ti2v-benchmark.md` for the complete provenance,
+measurements, output hashes, and visual gate.
 
 ## Lifecycle
 

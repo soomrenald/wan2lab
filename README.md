@@ -71,3 +71,6 @@ are recorded in
 [docs/wan2.2-sequential-extension-hardware.md](docs/wan2.2-sequential-extension-hardware.md).
 The guarded, SSH-first CUDA fast track for remote hardware validation is in
 [docs/runpod-cli-lab.md](docs/runpod-cli-lab.md).
+The completed RTX 5090 Wan2.2 TI2V-5B benchmark, telemetry, provenance, and
+preserved evidence are recorded in
+[docs/runpod-rtx5090-ti2v-benchmark.md](docs/runpod-rtx5090-ti2v-benchmark.md).
