@@ -41,3 +41,6 @@ The constrained-VRAM Krea keyframe to Wan I2V transition is recorded in
 Installed Wan cache discovery, binding, provenance, and the first EasyCache
 hardware comparison are recorded in
 [docs/wan-cache-acceleration.md](docs/wan-cache-acceleration.md).
+Pinned Wan2.2 Animate/Replace nodes, preprocessors, artifacts, official test
+inputs, and executable pipeline contracts are recorded in
+[docs/wan2.2-animate-installation.md](docs/wan2.2-animate-installation.md).
