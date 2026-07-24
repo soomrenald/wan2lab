@@ -40,8 +40,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--prompt",
         default=(
-            "干净明亮的摄影棚里，蓝色木制艺术人体模型平稳地抬起右臂挥手，"
-            "橙色木制人体模型安静地站在旁边。镜头固定，全身广角，动作连贯自然。"
+            "干净明亮的摄影棚里，蓝色和橙色木制艺术人体模型分别平稳地抬起"
+            "一只手挥手。镜头固定，全身广角，动作连贯自然。"
         ),
     )
     parser.add_argument(
