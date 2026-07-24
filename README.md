@@ -66,3 +66,6 @@ The completed Wan2.2 Animate ROCm hardware run is recorded in
 [docs/wan2.2-animate-hardware.md](docs/wan2.2-animate-hardware.md).
 The completed SAM2-conditioned Wan2.2 Replace ROCm hardware run is recorded in
 [docs/wan2.2-replace-hardware.md](docs/wan2.2-replace-hardware.md).
+The genuine full-duration sequential continuation and its pending review gate
+are recorded in
+[docs/wan2.2-sequential-extension-hardware.md](docs/wan2.2-sequential-extension-hardware.md).

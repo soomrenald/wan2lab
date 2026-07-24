@@ -122,6 +122,12 @@ after a segment becomes stale.
   reference-character replacement, and source-audio muxing. The result fully
   decodes and preserves the sampled background composition. Evidence is
   recorded in [wan2.2-replace-hardware.md](wan2.2-replace-hardware.md).
+- A genuine 121-frame continuation was generated from the exact last frame of
+  the owner-approved five-second segment. It fully decodes, has a 40.26 dB
+  boundary match, preserves both subjects and the studio, and performs the
+  prompted wave completion and turn. It remains review-gated before approval
+  or long assembly. Evidence is recorded in
+  [wan2.2-sequential-extension-hardware.md](wan2.2-sequential-extension-hardware.md).
 
 ## Hardware acceptance status
 
@@ -136,7 +142,7 @@ hardware-valid; their fine visual-quality decisions remain human review tasks.
 The mannequin-guided i2i fallback is hardware-valid; its exact pose-fidelity
 decision remains pending. Adapter-routed multi-character handoff is
 hardware-valid. Identity correction approval, batch face repair, and genuinely
-generated long continuation with visual review remain hardware gates.
+generated continuation approval and long assembly remain hardware gates.
 
 The project owner approved the EasyCache hardware candidate after reviewing its
 output and contact sheet on 2026-07-23.
