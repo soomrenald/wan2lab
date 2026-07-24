@@ -146,7 +146,7 @@ def main() -> int:
             "shift": 5.0,
             "force_offload": True,
             "enable_vae_tiling": True,
-            "tiled_vae": True,
+            "tiled_vae": False,
             "tile_x": 128,
             "tile_y": 128,
             "tile_stride_x": 64,
