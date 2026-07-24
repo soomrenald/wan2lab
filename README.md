@@ -62,3 +62,5 @@ recorded in
 Pinned Wan2.2 Animate/Replace nodes, preprocessors, artifacts, official test
 inputs, and executable pipeline contracts are recorded in
 [docs/wan2.2-animate-installation.md](docs/wan2.2-animate-installation.md).
+The completed Wan2.2 Animate ROCm hardware run is recorded in
+[docs/wan2.2-animate-hardware.md](docs/wan2.2-animate-hardware.md).

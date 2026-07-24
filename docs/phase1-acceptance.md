@@ -112,6 +112,11 @@ after a segment becomes stale.
   accepted two-subject PNG was staged byte-for-byte and completed an accelerated
   Wan2.2 I2V handoff whose five frames fully decode. Evidence is recorded in
   [krea-adapter-handoff-hardware.md](krea-adapter-handoff-hardware.md).
+- The pinned Wan2.2 Animate transformer passed three complete SHA-256 reads.
+  CPU ONNX pose/face preprocessing, reference CLIP conditioning, safe 25/40
+  block swapping, EasyCache sampling, tiled VAE decode, and audio muxing
+  completed on ROCm. The 17-frame result fully decodes. Evidence is recorded in
+  [wan2.2-animate-hardware.md](wan2.2-animate-hardware.md).
 
 ## Hardware acceptance status
 
@@ -121,9 +126,8 @@ provenance, full-duration decoding, OOM recovery, and user visual review are
 complete.
 
 First/last execution is hardware-valid on the installed Wan2.1 FLF2V family;
-its visual quality decision remains pending. Animate and Replace have
-executable workflows and live preprocessors but still require the pinned
-Animate transformer before their hardware runs.
+its visual quality decision remains pending. Animate is hardware-valid, while
+Replace remains a separate execution gate.
 The mannequin-guided i2i fallback is hardware-valid; its exact pose-fidelity
 decision remains pending. Adapter-routed multi-character handoff is
 hardware-valid. Identity correction approval, batch face repair, and genuinely

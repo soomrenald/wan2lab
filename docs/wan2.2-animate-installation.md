@@ -80,6 +80,8 @@ Inputs come from
 | Replace reference | `wan2lab/official/replace-reference.jpeg` | 143,318 | `412591418fbb133bd46c41b3376b810bd7e3eb59b916bf9693da337a08ca1b0d` |
 | Replace source video | `wan2lab/official/replace-source.mp4` | 754,294 | `db6da60e5fcb0fda0bff151bfbdbb7085d5a86a78508743cce2a25709de86a19` |
 
-The committed runner is `scripts/wan2_2_animate_smoke.py`. ComfyUI has been
-restarted and exposes the installed preprocessing nodes; hardware execution
-now requires only the transformer installation.
+The committed runner is `scripts/wan2_2_animate_smoke.py`. ComfyUI exposes the
+installed preprocessing nodes and transformer. The Animate hardware gate is
+complete; exact execution evidence is recorded in
+[wan2.2-animate-hardware.md](wan2.2-animate-hardware.md). Replace remains the
+next separate execution gate.
