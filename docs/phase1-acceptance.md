@@ -141,6 +141,10 @@ after a segment becomes stale.
   with its regular volume preserved. The project owner reviewed and approved
   the output on 2026-07-24, and exact evidence is recorded in
   [runpod-rtx5090-ti2v-benchmark.md](runpod-rtx5090-ti2v-benchmark.md).
+- The same RunPod workspace subsequently passed stop/start durability: all
+  model and prior-output hashes survived, ComfyUI restarted, and a distinct
+  persisted-asset I2V job completed and fully decoded before the Pod was safely
+  stopped again.
 
 ## Hardware acceptance status
 

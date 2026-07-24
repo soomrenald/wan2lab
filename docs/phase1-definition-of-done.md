@@ -41,10 +41,10 @@ execute and pass its technical validation before Phase 1 is complete. Its
 confirmed synthetic character has no associated compatible identity adapter;
 the runtime correctly refuses to substitute an unrelated installed identity.
 
-The RunPod stop/start persistence test is additionally pending because the
-original RTX 5090 host currently has no free GPU slot. The regular volume
-remains preserved and the restart verifier is ready; this is an external
-capacity condition rather than a Phase 1 desktop implementation gap.
+The independent RunPod stop/start persistence test passed on 2026-07-24 after
+the original host regained capacity. The regular volume preserved all pinned
+models and prior evidence, and a distinct continuation job succeeded after
+service restart. The Pod was safely stopped again.
 
 Product Phase 2 UI work remains behind these Phase 1 acceptance gates under the
 approved implementation sequence.

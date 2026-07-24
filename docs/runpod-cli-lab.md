@@ -1,8 +1,9 @@
 # Standalone RunPod SSH/CLI lab
 
 Status: RTX 5090 provisioning, bootstrap, model verification, smoke testing,
-and the approved 121-frame benchmark passed on 2026-07-24. The Pod is stopped
-with its regular volume preserved. Exact results are recorded in
+the approved 121-frame benchmark, stop/start hash verification and durable
+post-restart continuation passed on 2026-07-24. The Pod is stopped with its
+regular volume preserved. Exact results are recorded in
 `docs/runpod-rtx5090-ti2v-benchmark.md`.
 
 This is the accelerated path to CUDA hardware validation before the Product

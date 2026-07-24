@@ -29,9 +29,10 @@ application.
 | WanVideoWrapper | `088128b224242e110d3906c6750e9a3a348a659b` |
 | VideoHelperSuite | `4ee72c065db22c9d96c2427954dc69e7b908444b` |
 
-The reservation ran for approximately 40.5 minutes before it was stopped, an
-upper-bound GPU charge estimate of $0.67 at the quoted hourly rate. Regular
-volume storage continues to exist while the Pod is stopped.
+The initial reservation ran for approximately 40.5 minutes before it was
+stopped, an upper-bound GPU charge estimate of $0.67 at the quoted hourly rate.
+The later persistence test ran for approximately 5.5 minutes, adding about
+$0.09. Regular volume storage continues to exist while the Pod is stopped.
 
 The direct container-image reservation path did not become SSH-ready. Replacing
 it with RunPod's official PyTorch template produced a healthy Pod; the failed
@@ -132,10 +133,42 @@ wall timer, exact runtime revisions, all verifier reports, and the filtered
 ComfyUI history record. The stopped Pod retains the original copies under
 `/workspace`.
 
+## Stop/start durability
+
+The original Pod restarted successfully on 2026-07-24 after its host regained
+capacity. The post-restart verifier passed 20/20 checks:
+
+- all pinned repository revisions remained exact;
+- the Python, PyTorch, CUDA, driver and RTX 5090 runtime remained healthy;
+- all three model files retained their exact accepted SHA-256 values;
+- the prior full benchmark retained SHA-256
+  `3424a56c29a1532025068f3bcfcbd491652a129aa437e704586371c575f78ebd`.
+
+ComfyUI then restarted from the persistent workspace and generated a distinct
+five-frame I2V result from the preserved conditioning asset:
+
+| Item | Value |
+| --- | --- |
+| Seed | `20260730` |
+| Prompt ID | `2ecdf941-720a-433c-a640-4c1b9f34c46b` |
+| Text encoder | GPU |
+| Acceleration | EasyCache auto/balanced, active |
+| Output | `restart_i2v_5f_00001.mp4` |
+| Media | H.264/yuv420p, 1280x704, 24 FPS, 5 frames |
+| Duration | 0.208333 seconds |
+| Bytes | 65,713 |
+| SHA-256 | `6159bda69b396f533cbac66ceb2a7c4f4b1b030e504fd74c4a7f24d0c9aa590d` |
+
+The MP4 passed a complete FFmpeg decode. The output, exact ComfyUI history and
+20-check restart report were copied into the local evidence directory before
+the Pod was stopped again. This passes remote asset persistence, reconnect,
+model persistence, service restart, durable continuation and safe re-stop.
+
 ## Result and next comparison
 
-The SSH/CLI fast track is complete for RTX 5090 and Wan2.2 TI2V-5B. The RTX
-5090 is now the measured speed-first default for this family. An RTX 6000 Ada
-48 GB run remains useful as a value/VRAM comparison, but it should reuse a
-deliberately portable model cache or budget a second model transfer before
-reservation; the current regular volume is tied to this stopped Pod.
+The SSH/CLI fast track and stop/start lifecycle gate are complete for RTX 5090
+and Wan2.2 TI2V-5B. The RTX 5090 is now the measured speed-first default for
+this family. An RTX 6000 Ada 48 GB run remains useful as a value/VRAM
+comparison, but it should reuse a deliberately portable model cache or budget
+a second model transfer before reservation; the current regular volume is tied
+to this stopped Pod.
