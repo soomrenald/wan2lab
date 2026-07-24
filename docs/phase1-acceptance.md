@@ -125,9 +125,14 @@ after a segment becomes stale.
 - A genuine 121-frame continuation was generated from the exact last frame of
   the owner-approved five-second segment. It fully decodes, has a 40.26 dB
   boundary match, preserves both subjects and the studio, and performs the
-  prompted wave completion and turn. It remains review-gated before approval
-  or long assembly. Evidence is recorded in
+  prompted wave completion and turn. The project owner approved it on
+  2026-07-24. Evidence is recorded in
   [wan2.2-sequential-extension-hardware.md](wan2.2-sequential-extension-hardware.md).
+- After project-owner approval, the distinct base and continuation revisions
+  completed the production long-assembly path. Boundary de-duplication produced
+  exactly 240 decoded frames over 10.000000 seconds, and the final H.264 output
+  fully decodes. Evidence is recorded in
+  [phase1-genuine-continuation-export.md](phase1-genuine-continuation-export.md).
 - The SSH-first RunPod CUDA path passed clean-environment bootstrap, pinned
   model/hash verification, ComfyUI node verification, Prompt and I2V smoke
   execution, and an approved-workload 121-frame I2V benchmark on an RTX 5090.
@@ -151,14 +156,14 @@ First/last execution, Animate, Replace, mannequin-guided i2i fallback,
 single-frame correction, and the genuinely generated continuation are
 hardware-valid and were project-owner approved on 2026-07-24. Adapter-routed
 multi-character handoff is hardware-valid. Face candidate 0 was also confirmed
-without manual correction, unlocking batch face repair and genuinely generated
-long assembly as the remaining execution gates.
+without manual correction. The genuinely generated long assembly is complete;
+batch identity repair remains the final Phase 1 execution gate.
 
 The project owner approved the EasyCache hardware candidate after reviewing its
 output and contact sheet on 2026-07-23.
 
-Visual quality remains a human review decision and is never inferred from file
-existence.
+Visual quality decisions were made by the project owner and were not inferred
+from file existence.
 
 Product Phase 2 remains blocked by the fixed implementation sequence until all
 required Product Phase 1 acceptance work is complete.

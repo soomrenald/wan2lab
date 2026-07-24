@@ -28,7 +28,7 @@ local ROCm or remote CUDA path has produced and validated an artifact.
 | Confirm face detection and allow manual correction | Face workflow and controller confirmation tests | RetinaFace candidate 0 owner-confirmed | Passed |
 | Batch identity repair | Batch workflow, controller and one-pass assembly tests | Detector/preprocessor path validated and region confirmed | Hardware execution unlocked |
 | Keep boundary edits local or propagate | Boundary workflow and invalidation tests | Production frame replacement exercised | Passed |
-| Assemble approved segments with provenance | Export, invalidation and integrated acceptance tests | Two-revision export completed; genuine continuation approved | Genuine long assembly unlocked |
+| Assemble approved segments with provenance | Export, invalidation and integrated acceptance tests | Distinct approved base and genuine continuation assembled into an exact ten-second output | Passed |
 | NVIDIA/AMD handling and OOM protection | Worker preflight, diagnostics and recovery tests | ROCm OOM/recovery and CUDA RTX 5090 execution | Passed |
 
 ## Remaining execution
@@ -36,8 +36,8 @@ local ROCm or remote CUDA path has produced and validated an artifact.
 No known Phase 1 software implementation gap or owner-review decision remains
 in section 38.5. On 2026-07-24 the project owner approved every remaining
 candidate and confirmed face candidate 0 without a manual box correction. The
-now-unlocked batch identity repair and genuine long assembly must still execute
-and pass their technical validation before Phase 1 is complete.
+genuine long assembly passed on 2026-07-24. Batch identity repair must still
+execute and pass its technical validation before Phase 1 is complete.
 
 The RunPod stop/start persistence test is additionally pending because the
 original RTX 5090 host currently has no free GPU slot. The regular volume

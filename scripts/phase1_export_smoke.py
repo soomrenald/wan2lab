@@ -31,6 +31,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("source", type=Path, help="Approved 121-frame, 24 FPS source MP4")
     parser.add_argument("output", type=Path, help="Final assembled MP4")
     parser.add_argument(
+        "--continuation",
+        type=Path,
+        help=(
+            "Distinct approved 121-frame continuation; defaults to the source "
+            "to retain the original isolated assembly smoke"
+        ),
+    )
+    parser.add_argument(
         "--work-directory",
         type=Path,
         default=Path("/tmp/wan2lab-phase1-export"),
@@ -45,6 +53,7 @@ def approved_revision(
     end_ms: int,
     start_asset_id: str,
     end_frame_asset_id: str,
+    seed: int,
 ) -> tuple[Segment, SegmentRevision]:
     segment_id = f"phase1-export-segment-{number}"
     segment = Segment(
@@ -78,7 +87,7 @@ def approved_revision(
         segment,
         revision_id=f"phase1-export-revision-{number}",
         request=request,
-        seed=20260728 + number,
+        seed=seed,
     )
     segment, revision = start_generation(segment, revision)
     segment, revision = complete_generation(
@@ -103,10 +112,15 @@ def sha256(path: Path) -> str:
 def main() -> int:
     args = parse_args()
     source = args.source.resolve()
+    continuation = (
+        args.continuation.resolve() if args.continuation is not None else source
+    )
     output = args.output.resolve()
     work_directory = args.work_directory.resolve()
     if not source.is_file() or source.stat().st_size == 0:
         raise FileNotFoundError(source)
+    if not continuation.is_file() or continuation.stat().st_size == 0:
+        raise FileNotFoundError(continuation)
 
     first, first_revision = approved_revision(
         number=1,
@@ -114,6 +128,7 @@ def main() -> int:
         end_ms=5_000,
         start_asset_id="phase1-authored-anchor",
         end_frame_asset_id="phase1-shared-boundary",
+        seed=20260729,
     )
     second, second_revision = approved_revision(
         number=2,
@@ -121,6 +136,7 @@ def main() -> int:
         end_ms=10_000,
         start_asset_id="phase1-shared-boundary",
         end_frame_asset_id="phase1-final-boundary",
+        seed=20260806,
     )
     plan = build_export_plan(
         export_id="phase1-hardware-export",
@@ -128,7 +144,7 @@ def main() -> int:
         revisions=(first_revision, second_revision),
         source_paths={
             "phase1-export-video-1": str(source),
-            "phase1-export-video-2": str(source),
+            "phase1-export-video-2": str(continuation),
         },
         output_path=str(output),
         output_fps=24,
@@ -154,6 +170,18 @@ def main() -> int:
                 "output": str(result),
                 "bytes": result.stat().st_size,
                 "sha256": sha256(result),
+                "sources": [
+                    {
+                        "path": str(source),
+                        "sha256": sha256(source),
+                        "seed": first_revision.seed,
+                    },
+                    {
+                        "path": str(continuation),
+                        "sha256": sha256(continuation),
+                        "seed": second_revision.seed,
+                    },
+                ],
                 "output_fps": plan.output_fps,
                 "segment_count": len(plan.segment_inputs),
                 "drop_leading_boundary": [
