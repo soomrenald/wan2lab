@@ -29,14 +29,20 @@ Installed node revisions:
 | --- | --- |
 | `kijai/ComfyUI-WanVideoWrapper` | `088128b224242e110d3906c6750e9a3a348a659b` |
 | `kijai/ComfyUI-KJNodes` | `285a98944c397a4a81f15ac63d69fa3dbc0a27b9` |
-| `kijai/ComfyUI-WanAnimatePreprocess` | `0e0b6a2a555625acf4d4aefb780e27d06937132f` |
+| `kijai/ComfyUI-WanAnimatePreprocess` | upstream `0e0b6a2a555625acf4d4aefb780e27d06937132f`; local AMD dependency commit `46d6956` |
 | `kijai/ComfyUI-segment-anything-2` | `0c35fff5f382803e2310103357b5e985f5437f32` |
 
-The preprocessing package declares `onnxruntime-gpu`, but its installed CUDA
-13 wheel could not import on this AMD host. It was replaced with
-`onnxruntime==1.27.0`, whose verified execution providers are
-`AzureExecutionProvider` and `CPUExecutionProvider`. Wan sampling and SAM2
-still run through PyTorch ROCm; only ONNX pose/detection inference uses CPU.
+The preprocessing package declared `onnxruntime-gpu`, but its installed CUDA
+13 wheel could not import on this AMD host. The local dependency commit changes
+that declaration to `onnxruntime` and adds its undeclared `matplotlib`
+dependency. The separately installed Facefusion plugin also overwrote the
+environment with `onnxruntime-gpu` during every startup, so its dependency
+manifest and installer are pinned by local commit `900eab3` to the same CPU
+package. A restart verified that these overrides persist:
+`onnxruntime==1.27.0` imports with `AzureExecutionProvider` and
+`CPUExecutionProvider`, while both Wan preprocessing nodes are present in the
+live registry. Wan sampling and SAM2 still run through PyTorch ROCm; only ONNX
+pose/detection inference uses CPU.
 
 ## Checksum-pinned artifacts
 
@@ -74,6 +80,6 @@ Inputs come from
 | Replace reference | `wan2lab/official/replace-reference.jpeg` | 143,318 | `412591418fbb133bd46c41b3376b810bd7e3eb59b916bf9693da337a08ca1b0d` |
 | Replace source video | `wan2lab/official/replace-source.mp4` | 754,294 | `db6da60e5fcb0fda0bff151bfbdbb7085d5a86a78508743cce2a25709de86a19` |
 
-The committed runner is `scripts/wan2_2_animate_smoke.py`. Hardware execution
-requires the transformer installation and a ComfyUI restart so the two newly
-installed node packages enter the live registry.
+The committed runner is `scripts/wan2_2_animate_smoke.py`. ComfyUI has been
+restarted and exposes the installed preprocessing nodes; hardware execution
+now requires only the transformer installation.
