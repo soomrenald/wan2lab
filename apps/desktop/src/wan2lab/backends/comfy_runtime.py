@@ -49,6 +49,9 @@ class ComfyExecutionResult:
 class ResidentWanModel:
     model_id: str
     model_filename: str
+    vae_filename: str
+    text_encoder_filename: str
+    clip_vision_filename: str | None
     precision: str
     quantization: str
     load_device: str
@@ -64,6 +67,9 @@ class ModelResidencyManager:
         desired = ResidentWanModel(
             model_id=selection.model_id,
             model_filename=selection.model_filename,
+            vae_filename=selection.vae_filename,
+            text_encoder_filename=selection.text_encoder_filename,
+            clip_vision_filename=selection.clip_vision_filename,
             precision=selection.precision,
             quantization=selection.quantization,
             load_device=selection.load_device,
@@ -88,6 +94,9 @@ class ModelResidencyManager:
                 else {
                     "model_id": self.resident.model_id,
                     "model_filename": self.resident.model_filename,
+                    "vae_filename": self.resident.vae_filename,
+                    "text_encoder_filename": self.resident.text_encoder_filename,
+                    "clip_vision_filename": self.resident.clip_vision_filename,
                     "precision": self.resident.precision,
                     "quantization": self.resident.quantization,
                     "load_device": self.resident.load_device,

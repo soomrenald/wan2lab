@@ -118,15 +118,25 @@ class ComfyRuntimeTests(unittest.TestCase):
         self.assertEqual(client.frees, 0)
         residency.retain(
             first.__class__(
+                model_id=first.model_id,
+                model_filename=first.model_filename,
+                vae_filename=first.vae_filename,
+                text_encoder_filename=first.text_encoder_filename,
+                clip_vision_filename="different-clip.safetensors",
+            )
+        )
+        self.assertEqual(client.frees, 1)
+        residency.retain(
+            first.__class__(
                 model_id="different-model",
                 model_filename="different.safetensors",
                 vae_filename=first.vae_filename,
                 text_encoder_filename=first.text_encoder_filename,
             )
         )
-        self.assertEqual(client.frees, 1)
-        residency.release()
         self.assertEqual(client.frees, 2)
+        residency.release()
+        self.assertEqual(client.frees, 3)
 
 
 if __name__ == "__main__":

@@ -260,6 +260,22 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
 
         self.assertEqual(ti2v.supported_modes, frozenset({WanMode.PROMPT}))
 
+    def test_first_last_requires_an_installed_clip_vision_component(self) -> None:
+        info = object_info()
+        info["CLIPVisionLoader"] = node({"clip_name": [[]]})
+
+        capabilities = inspect_comfyui_wan(
+            info,
+            {"devices": [{"name": "AMD Radeon", "type": "rocm"}]},
+        )
+        flf2v = next(
+            model
+            for model in capabilities.model_variants
+            if "flf2v" in model.display_name
+        )
+
+        self.assertEqual(flf2v.supported_modes, frozenset({WanMode.I2V}))
+
     def test_unified_i2v_requires_the_core_image_scaler(self) -> None:
         info = object_info()
         info.pop("ImageScale")
