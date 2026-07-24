@@ -37,7 +37,9 @@ No known Phase 1 software implementation gap or owner-review decision remains
 in section 38.5. On 2026-07-24 the project owner approved every remaining
 candidate and confirmed face candidate 0 without a manual box correction. The
 genuine long assembly passed on 2026-07-24. Batch identity repair must still
-execute and pass its technical validation before Phase 1 is complete.
+execute and pass its technical validation before Phase 1 is complete. Its
+confirmed synthetic character has no associated compatible identity adapter;
+the runtime correctly refuses to substitute an unrelated installed identity.
 
 The RunPod stop/start persistence test is additionally pending because the
 original RTX 5090 host currently has no free GPU slot. The regular volume

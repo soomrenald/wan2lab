@@ -45,3 +45,39 @@ Detection, threshold routing, model discovery, CPU provider selection, typed
 candidate output, and model release pass. The project owner confirmed candidate
 0 without a manual box correction on 2026-07-24, unlocking the batch refinement
 execution gate.
+
+## Refinement preflight result
+
+The first post-confirmation execution normalized the immutable JPEG to a
+1280x720 RGB PNG and passed the exact confirmed box through the production
+typed batch request. The shared runtime returned:
+
+```text
+status: no_regional_lora_faces
+detection_count: 1
+selected_count: 1
+refined_count: 0
+```
+
+The returned image was pixel-identical to the normalized source. This is
+recorded as a failed preflight, not a refinement pass. The official synthetic
+Animate reference is not associated with either installed character identity
+adapter, and substituting the unrelated `lface` or `sface` adapter would change
+the selected identity.
+
+The preflight exposed and fixed a separate production defect: Wan2Lab retained
+the adapter ID and strength but dropped its asset, region, trigger, routing
+mode, and model-family metadata before the Krea worker. Face repair now carries
+a fully resolved character-identity route and fails closed when no compatible
+route exists. The committed `scripts/krea_face_refinement_smoke.py` runner also
+requires an explicit compatible adapter and treats any result other than one
+completed refined face as failure.
+
+Batch identity repair therefore remains blocked on associating a compatible
+Krea identity LoRA/LoKr with this confirmed character, or selecting and
+confirming a face belonging to an already configured identity. The no-op
+artifact is retained only as diagnostic evidence under:
+
+```text
+/home/wolfhard/.cache/wan2lab/krea-face-refinement/
+```
