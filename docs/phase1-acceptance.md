@@ -90,8 +90,8 @@ Mannequin-guided and adapter-routed multi-character handoff, identity
 correction, batch face repair, long continuation, and final export also remain
 hardware gates.
 
-The EasyCache candidate has no gross corruption in its sampled contact sheet,
-but its semantic/visual quality remains a separate user review decision.
+The project owner approved the EasyCache hardware candidate after reviewing its
+output and contact sheet on 2026-07-23.
 
 Visual quality remains a human review decision and is never inferred from file
 existence.

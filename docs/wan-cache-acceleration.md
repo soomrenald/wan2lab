@@ -72,8 +72,8 @@ The five-frame contact sheet is stored at
 The sampled frames retain the stable studio, subject colors, and limb
 structure. The blue mannequin raises one hand while the orange mannequin
 remains mostly stationary. No gross cache-specific visual corruption is
-visible in the sampled frames. Semantic and visual approval remains a human
-review decision.
+visible in the sampled frames. The project owner approved this accelerated
+hardware result on 2026-07-23.
 
 ## Provenance result
 
