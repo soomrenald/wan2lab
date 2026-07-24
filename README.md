@@ -50,6 +50,9 @@ is recorded in
 The real Krea single-frame correction and immutable video-revision hardware
 gate is recorded in
 [docs/krea-frame-correction-hardware.md](docs/krea-frame-correction-hardware.md).
+The production face-detection result and its required pre-refinement approval
+boundary are recorded in
+[docs/krea-face-detection-hardware.md](docs/krea-face-detection-hardware.md).
 Pinned Wan2.2 Animate/Replace nodes, preprocessors, artifacts, official test
 inputs, and executable pipeline contracts are recorded in
 [docs/wan2.2-animate-installation.md](docs/wan2.2-animate-installation.md).

@@ -96,6 +96,11 @@ after a segment becomes stale.
   complete FFmpeg decode. Technical evidence and the still-pending semantic
   correction decision are recorded in
   [krea-frame-correction-hardware.md](krea-frame-correction-hardware.md).
+- Production face detection returned one typed candidate from the official
+  synthetic Animate reference using the installed RetinaFace model and CPU
+  ONNX provider. Detection passes, but refinement is correctly paused before
+  the required user confirmation. Evidence is recorded in
+  [krea-face-detection-hardware.md](krea-face-detection-hardware.md).
 
 ## Hardware acceptance status
 
