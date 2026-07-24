@@ -55,7 +55,11 @@ class WorkerClient:
         return self.info
 
     def system_stats(self):
-        device = {"name": "NVIDIA RTX", "type": "cuda"}
+        device = {
+            "name": "NVIDIA RTX",
+            "type": "cuda",
+            "vram_total": 16 * 1024**3,
+        }
         if self.free_vram_gib is not None:
             device["vram_free"] = round(self.free_vram_gib * 1024**3)
         return {"devices": [device]}
@@ -167,6 +171,7 @@ class WorkerServiceTests(unittest.TestCase):
             "sam2.1_hiera_base_plus.safetensors",
         )
         self.assertEqual(selection.onnx_device, "CUDAExecutionProvider")
+        self.assertEqual(selection.blocks_to_swap, 25)
 
     def test_model_load_rejects_missing_gpu_before_materialization(self) -> None:
         class CpuWorkerClient(WorkerClient):

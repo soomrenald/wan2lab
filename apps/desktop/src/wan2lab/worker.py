@@ -540,6 +540,11 @@ def _recommended_blocks_to_swap(
     device = devices[0] if isinstance(devices, list) and devices else {}
     total = device.get("vram_total") if isinstance(device, Mapping) else None
     if isinstance(total, (int, float)) and 0 < total <= 18 * 1024**3:
+        if any(
+            token in model_filename.casefold()
+            for token in ("animate", "replace")
+        ):
+            return 25
         return 20
     return 0
 
