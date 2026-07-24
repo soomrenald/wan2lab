@@ -241,6 +241,11 @@ class MediaExecutionTests(unittest.TestCase):
             )
             execute_export_plan(export, cancellation=Token())
             self.assertGreater(exported.stat().st_size, 0)
+            self.assertEqual(
+                (root / "export-work" / "segments.txt").read_text(encoding="utf-8"),
+                f"file '{root / 'export-work' / 'segment-0001.mp4'}'\n"
+                "duration 0.25\n",
+            )
 
 
 if __name__ == "__main__":

@@ -84,6 +84,12 @@ after a segment becomes stale.
 - Live ComfyUI now exposes the installed Wan Animate/Replace preprocessing and
   SAM2 nodes. The AMD host uses a restart-stable CPU ONNX Runtime override for
   pose/detection while diffusion and SAM2 remain on PyTorch ROCm.
+- Two real approved Wan revisions completed the production FPS-normalization,
+  boundary-frame de-duplication, manifest, and FFmpeg export path. The recovered
+  stream-copy timestamp defect is regression-tested; the accepted output is
+  exactly 240 decoded frames over 10.000000 seconds and fully decodes without
+  warnings. Evidence is recorded in
+  [phase1-export-hardware.md](phase1-export-hardware.md).
 
 ## Hardware acceptance status
 
@@ -97,8 +103,8 @@ its visual quality decision remains pending. Animate and Replace have
 executable workflows and live preprocessors but still require the pinned
 Animate transformer before their hardware runs.
 Mannequin-guided and adapter-routed multi-character handoff, identity
-correction, batch face repair, long continuation, and final export also remain
-hardware gates.
+correction, batch face repair, and genuinely generated long continuation with
+visual review remain hardware gates.
 
 The project owner approved the EasyCache hardware candidate after reviewing its
 output and contact sheet on 2026-07-23.

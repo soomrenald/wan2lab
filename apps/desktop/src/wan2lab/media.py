@@ -75,9 +75,19 @@ def execute_export_plan(
         manifest_path = Path(concat.arguments[concat.arguments.index("-i") + 1])
     except (ValueError, IndexError) as error:
         raise ValueError("concat command does not identify its manifest") from error
+    if len(plan.concat_manifest_entries) != len(plan.segment_inputs):
+        raise ValueError("concat manifest and segment inputs differ in length")
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(
-        "".join(f"file '{_concat_escape(path)}'\n" for path in plan.concat_manifest_entries),
+        "".join(
+            f"file '{_concat_escape(path)}'\n"
+            f"duration {segment.duration_ms / 1000:.9g}\n"
+            for path, segment in zip(
+                plan.concat_manifest_entries,
+                plan.segment_inputs,
+                strict=True,
+            )
+        ),
         encoding="utf-8",
     )
     total = len(plan.commands)
