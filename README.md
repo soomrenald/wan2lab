@@ -53,6 +53,9 @@ gate is recorded in
 The production face-detection result and its required pre-refinement approval
 boundary are recorded in
 [docs/krea-face-detection-hardware.md](docs/krea-face-detection-hardware.md).
+The capability-gated mannequin guide to Krea i2i fallback hardware result is
+recorded in
+[docs/krea-mannequin-fallback-hardware.md](docs/krea-mannequin-fallback-hardware.md).
 Pinned Wan2.2 Animate/Replace nodes, preprocessors, artifacts, official test
 inputs, and executable pipeline contracts are recorded in
 [docs/wan2.2-animate-installation.md](docs/wan2.2-animate-installation.md).

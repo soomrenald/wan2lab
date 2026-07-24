@@ -101,6 +101,12 @@ after a segment becomes stale.
   ONNX provider. Detection passes, but refinement is correctly paused before
   the required user confirmation. Evidence is recorded in
   [krea-face-detection-hardware.md](krea-face-detection-hardware.md).
+- The production mannequin renderer created shaded, silhouette, and normalized
+  depth guides. Because this Krea runtime advertises no compatible depth-control
+  model, the capability resolver correctly selected the shaded i2i scaffold and
+  completed a real ROCm Krea edit without warnings. Exact pose fidelity remains
+  a visual decision. Evidence is recorded in
+  [krea-mannequin-fallback-hardware.md](krea-mannequin-fallback-hardware.md).
 
 ## Hardware acceptance status
 
@@ -113,7 +119,8 @@ First/last execution is hardware-valid on the installed Wan2.1 FLF2V family;
 its visual quality decision remains pending. Animate and Replace have
 executable workflows and live preprocessors but still require the pinned
 Animate transformer before their hardware runs.
-Mannequin-guided and adapter-routed multi-character handoff, identity
+The mannequin-guided i2i fallback is hardware-valid; its exact pose-fidelity
+decision remains pending. Adapter-routed multi-character handoff, identity
 correction approval, batch face repair, and genuinely generated long
 continuation with visual review remain hardware gates.
 
