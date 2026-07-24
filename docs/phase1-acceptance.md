@@ -133,7 +133,8 @@ after a segment becomes stale.
   execution, and an approved-workload 121-frame I2V benchmark on an RTX 5090.
   The five-second H.264 result fully decodes; the 30-step accelerated workload
   completed in 414.65 seconds and peaked at 12,153 MiB VRAM. The Pod is stopped
-  with its regular volume preserved, and exact evidence is recorded in
+  with its regular volume preserved. The project owner reviewed and approved
+  the output on 2026-07-24, and exact evidence is recorded in
   [runpod-rtx5090-ti2v-benchmark.md](runpod-rtx5090-ti2v-benchmark.md).
 
 ## Hardware acceptance status
@@ -144,7 +145,7 @@ provenance, full-duration decoding, OOM recovery, and user visual review are
 complete. The matching first-family CUDA execution gate is hardware-valid on
 an RTX 5090, including a clean remote bootstrap, GPU text encoding, accelerated
 full-duration execution, telemetry capture, output validation, evidence
-preservation, and safe Pod stop.
+preservation, safe Pod stop, and project-owner visual approval.
 
 First/last execution is hardware-valid on the installed Wan2.1 FLF2V family;
 its visual quality decision remains pending. Animate and Replace are both

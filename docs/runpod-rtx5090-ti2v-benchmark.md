@@ -1,7 +1,7 @@
 # RunPod RTX 5090 Wan2.2 TI2V-5B benchmark
 
-Status: passed on 2026-07-24. The Pod is stopped and its regular volume is
-preserved for restart.
+Status: passed and project-owner approved on 2026-07-24. The Pod is stopped and
+its regular volume is preserved for restart.
 
 This is the first SSH-first CUDA validation described in
 `docs/runpod-cli-lab.md`. It proves that a clean RunPod reservation can install
@@ -114,9 +114,9 @@ VAE tiling.
 
 Full FFmpeg decoding completed without errors. Contact-sheet review showed
 both mannequins raising their hands, a stable studio background and camera, and
-no gross temporal corruption. The result therefore passes the technical and
-coarse visual hardware gate; detailed creative acceptance remains a human
-review decision.
+no gross temporal corruption. The project owner reviewed the locally preserved
+output and approved it on 2026-07-24. The result therefore passes both the
+technical and visual hardware gates.
 
 ## Preserved evidence
 
