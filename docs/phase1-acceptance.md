@@ -107,6 +107,11 @@ after a segment becomes stale.
   completed a real ROCm Krea edit without warnings. Exact pose fidelity remains
   a visual decision. Evidence is recorded in
   [krea-mannequin-fallback-hardware.md](krea-mannequin-fallback-hardware.md).
+- A Krea identity LoKr matched all 256 model targets and was applied only to
+  the left of two character regions with zero measured outside-gate delta. The
+  accepted two-subject PNG was staged byte-for-byte and completed an accelerated
+  Wan2.2 I2V handoff whose five frames fully decode. Evidence is recorded in
+  [krea-adapter-handoff-hardware.md](krea-adapter-handoff-hardware.md).
 
 ## Hardware acceptance status
 
@@ -120,9 +125,9 @@ its visual quality decision remains pending. Animate and Replace have
 executable workflows and live preprocessors but still require the pinned
 Animate transformer before their hardware runs.
 The mannequin-guided i2i fallback is hardware-valid; its exact pose-fidelity
-decision remains pending. Adapter-routed multi-character handoff, identity
-correction approval, batch face repair, and genuinely generated long
-continuation with visual review remain hardware gates.
+decision remains pending. Adapter-routed multi-character handoff is
+hardware-valid. Identity correction approval, batch face repair, and genuinely
+generated long continuation with visual review remain hardware gates.
 
 The project owner approved the EasyCache hardware candidate after reviewing its
 output and contact sheet on 2026-07-23.

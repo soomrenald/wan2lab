@@ -56,6 +56,9 @@ boundary are recorded in
 The capability-gated mannequin guide to Krea i2i fallback hardware result is
 recorded in
 [docs/krea-mannequin-fallback-hardware.md](docs/krea-mannequin-fallback-hardware.md).
+The region-routed identity LoKr keyframe and accelerated Wan I2V handoff are
+recorded in
+[docs/krea-adapter-handoff-hardware.md](docs/krea-adapter-handoff-hardware.md).
 Pinned Wan2.2 Animate/Replace nodes, preprocessors, artifacts, official test
 inputs, and executable pipeline contracts are recorded in
 [docs/wan2.2-animate-installation.md](docs/wan2.2-animate-installation.md).
