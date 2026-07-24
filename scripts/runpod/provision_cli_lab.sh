@@ -7,9 +7,9 @@ set -euo pipefail
 RUNPODCTL="${RUNPODCTL:-runpodctl}"
 GPU_ID="NVIDIA GeForce RTX 5090"
 POD_NAME="wan2lab-cli"
-IMAGE="runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404"
+TEMPLATE_ID="runpod-torch-v280"
 CLOUD_TYPE="SECURE"
-VOLUME_GIB=250
+VOLUME_GIB=100
 CONTAINER_DISK_GIB=40
 STOP_HOURS=8
 CREATE=false
@@ -23,7 +23,7 @@ Options:
   --gpu-id ID               Exact RunPod GPU ID (default: NVIDIA GeForce RTX 5090)
   --name NAME               Pod name (default: wan2lab-cli)
   --cloud-type TYPE         SECURE or COMMUNITY (default: SECURE)
-  --volume-gib N            Persistent /workspace volume size (default: 250)
+  --volume-gib N            Persistent /workspace volume size (default: 100)
   --container-disk-gib N    Ephemeral container disk size (default: 40)
   --stop-hours N            Automatic stop interval (default: 8)
   --create                  Execute the printed reservation
@@ -99,7 +99,7 @@ STOP_AFTER="$(date -u -d "+${STOP_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
 COMMAND=(
   "${RUNPODCTL}" pod create
   --name "${POD_NAME}"
-  --image "${IMAGE}"
+  --template-id "${TEMPLATE_ID}"
   --gpu-id "${GPU_ID}"
   --gpu-count 1
   --cloud-type "${CLOUD_TYPE}"

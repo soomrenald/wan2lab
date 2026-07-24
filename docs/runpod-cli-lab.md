@@ -11,8 +11,9 @@ not use or modify `k2lab_runpod`.
 
 - The first target is one RTX 5090 32 GB for TI2V-5B speed validation.
 - RTX 6000 Ada 48 GB is the next value comparison when extra VRAM is useful.
-- The Pod uses RunPod's pinned CUDA 12.8/PyTorch 2.9.1 image.
-- `/workspace` is a 250 GiB regular Pod volume. It survives stop/start, but is
+- The Pod uses RunPod's official CUDA 12.8/PyTorch 2.8.0 template,
+  `runpod-torch-v280`.
+- `/workspace` is a 100 GiB regular Pod volume. It survives stop/start, but is
   deleted when the Pod is terminated.
 - The container disk is ephemeral and contains no project or model assets.
 - The reservation automatically stops after eight hours.
@@ -23,7 +24,8 @@ not use or modify `k2lab_runpod`.
 
 A network volume is useful when moving the same assets between different GPU
 Pods, but a Pod attached to one cannot be stopped. For this first guarded
-benchmark, a regular volume plus automatic stop is the safer default.
+benchmark, a 100 GiB regular volume plus automatic stop is the safer default
+and leaves ample room after the 13.4 GB TI2V-5B installation.
 
 ## One-time workstation setup
 

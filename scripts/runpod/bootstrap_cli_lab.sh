@@ -67,6 +67,7 @@ sync_repo() {
   local url="$2"
   local revision="$3"
   local destination="$4"
+  local fresh_clone=false
 
   if [[ -e "${destination}" && ! -d "${destination}/.git" ]]; then
     printf '%s exists but is not a Git checkout: %s\n' "${name}" "${destination}" >&2
@@ -75,8 +76,10 @@ sync_repo() {
   if [[ ! -d "${destination}/.git" ]]; then
     log "Cloning ${name}"
     git clone --filter=blob:none --no-checkout "${url}" "${destination}"
+    fresh_clone=true
   fi
-  if [[ -n "$(git -C "${destination}" status --porcelain --untracked-files=no)" ]]; then
+  if [[ "${fresh_clone}" != true &&
+    -n "$(git -C "${destination}" status --porcelain --untracked-files=no)" ]]; then
     printf 'Refusing to replace modified tracked files in %s\n' "${destination}" >&2
     exit 2
   fi
@@ -168,4 +171,6 @@ main() {
     "${WORKSPACE_ROOT}" "${WORKSPACE_ROOT}"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
