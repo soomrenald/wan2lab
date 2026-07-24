@@ -32,6 +32,9 @@ Model weights are external assets and are never included in this repository.
 
 The current desktop software acceptance status and remaining hardware gates are
 tracked in [docs/phase1-acceptance.md](docs/phase1-acceptance.md).
+Requirement-by-requirement Product Phase 1 definition-of-done traceability is
+recorded in
+[docs/phase1-definition-of-done.md](docs/phase1-definition-of-done.md).
 
 The first local hardware family, Wan2.2 TI2V-5B, has a reproducible setup and
 Prompt/I2V smoke procedure in
