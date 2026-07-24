@@ -407,6 +407,7 @@ class ComfyWorkflowTests(unittest.TestCase):
 
         self.assertEqual(plan.workflow["1"]["inputs"]["block_swap_args"], ["13", 0])
         self.assertEqual(plan.workflow["13"]["inputs"]["blocks_to_swap"], 20)
+        self.assertFalse(plan.workflow["13"]["inputs"]["use_non_blocking"])
         self.assertEqual(plan.workflow["13"]["inputs"]["vace_blocks_to_swap"], 0)
         self.assertEqual(plan.workflow["13"]["inputs"]["prefetch_blocks"], 0)
 
@@ -514,6 +515,7 @@ class ComfyWorkflowTests(unittest.TestCase):
         self.assertEqual(animate_plan.workflow["13"]["inputs"]["pose_images"], ["12", 0])
         self.assertEqual(animate_plan.workflow["14"]["inputs"]["seed"], 47)
         self.assertEqual(animate_plan.workflow["17"]["inputs"]["blocks_to_swap"], 25)
+        self.assertFalse(animate_plan.workflow["17"]["inputs"]["use_non_blocking"])
         self.assertEqual(animate_plan.workflow["17"]["inputs"]["vace_blocks_to_swap"], 0)
         cache_node = next(
             key
