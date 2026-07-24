@@ -929,6 +929,16 @@ ApplicationWindow {
                     enabled: count > 0
                     displayText: count > 0 ? currentText : "Wan text encoder"
                 }
+                ComboBox {
+                    id: wanClipVision
+                    Layout.fillWidth: true
+                    model: studio.backendClipVisionModels
+                    enabled: studio.wanClipVisionRequired && count > 0
+                    visible: studio.wanClipVisionRequired
+                    displayText: count > 0
+                        ? currentText
+                        : "CLIP vision model required for first/last"
+                }
                 RowLayout {
                     ComboBox {
                         id: wanPrecision
@@ -955,6 +965,7 @@ ApplicationWindow {
                         enabled: wanModel.count > 0
                             && wanVae.count > 0
                             && wanTextEncoder.count > 0
+                            && (!studio.wanClipVisionRequired || wanClipVision.count > 0)
                             && wanPrecision.count > 0
                             && wanQuantization.count > 0
                             && wanOffload.count > 0
@@ -962,6 +973,7 @@ ApplicationWindow {
                             wanModel.currentIndex,
                             wanVae.currentText,
                             wanTextEncoder.currentText,
+                            studio.wanClipVisionRequired ? wanClipVision.currentText : "",
                             wanPrecision.currentText,
                             wanQuantization.currentText,
                             wanOffload.currentText

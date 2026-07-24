@@ -99,6 +99,9 @@ class ComfyWorkerService:
                     "model_name",
                 )
             ),
+            "clip_vision": list(
+                _node_choices(self.object_info, "CLIPVisionLoader", "clip_name")
+            ),
         }
         return CapabilitiesEvent(
             command_id=command_id,
@@ -145,6 +148,8 @@ class ComfyWorkerService:
             raise ValueError("selected offload mode is unsupported")
         _guard_memory_capacity(model.estimated_memory_profiles, self.system_stats, load_device)
         required_components = {"vae", "text_encoder"}
+        if WanMode.FIRST_LAST in model.supported_modes:
+            required_components.add("clip_vision")
         if missing := required_components - set(request.component_model_ids):
             raise ValueError(
                 "explicit component model selections are required: "
@@ -152,20 +157,34 @@ class ComfyWorkerService:
             )
         vae = request.component_model_ids["vae"]
         text_encoder = request.component_model_ids["text_encoder"]
+        clip_vision = request.component_model_ids.get("clip_vision")
         if vae not in _node_choices(self.object_info, "WanVideoVAELoader", "model_name"):
             raise ValueError("selected Wan VAE is not installed")
         if text_encoder not in _node_choices(
             self.object_info, "LoadWanVideoT5TextEncoder", "model_name"
         ):
             raise ValueError("selected Wan text encoder is not installed")
+        if (
+            WanMode.FIRST_LAST in model.supported_modes
+            and clip_vision
+            not in _node_choices(self.object_info, "CLIPVisionLoader", "clip_name")
+        ):
+            raise ValueError("selected CLIP vision model is not installed")
+        blocks_to_swap = _recommended_blocks_to_swap(
+            model.display_name,
+            self.system_stats,
+            load_device,
+        )
         selection = ComfyModelSelection(
             model_id=model.model_id,
             model_filename=model.display_name,
             vae_filename=vae,
             text_encoder_filename=text_encoder,
+            clip_vision_filename=clip_vision,
             precision=request.precision,
             quantization=quantization,
             load_device=load_device,
+            blocks_to_swap=blocks_to_swap,
         )
         self.selections[model.model_id] = selection
         self.residency.retain(selection)
@@ -256,11 +275,13 @@ class ComfyWorkerService:
                     "model_filename": plan.model_selection.model_filename,
                     "vae_filename": plan.model_selection.vae_filename,
                     "text_encoder_filename": plan.model_selection.text_encoder_filename,
+                    "clip_vision_filename": plan.model_selection.clip_vision_filename,
                     "precision": plan.model_selection.precision,
                     "vae_precision": plan.model_selection.vae_precision,
                     "text_encoder_precision": plan.model_selection.text_encoder_precision,
                     "quantization": plan.model_selection.quantization,
                     "load_device": plan.model_selection.load_device,
+                    "blocks_to_swap": plan.model_selection.blocks_to_swap,
                     "accelerator_vendors": sorted(
                         self.capabilities.accelerator_vendors
                     ),
@@ -429,6 +450,21 @@ def _guard_memory_capacity(
             f"only {free_gib:.1f} GiB VRAM is free; {load_device} requires approximately "
             f"{required_gib:.1f} GiB. Select offload or release another model."
         )
+
+
+def _recommended_blocks_to_swap(
+    model_filename: str,
+    system_stats: Mapping[str, object],
+    load_device: str,
+) -> int:
+    if load_device != "offload_device" or "14b" not in model_filename.casefold():
+        return 0
+    devices = system_stats.get("devices", ())
+    device = devices[0] if isinstance(devices, list) and devices else {}
+    total = device.get("vram_total") if isinstance(device, Mapping) else None
+    if isinstance(total, (int, float)) and 0 < total <= 18 * 1024**3:
+        return 20
+    return 0
 
 
 def _is_out_of_memory(error: BaseException) -> bool:

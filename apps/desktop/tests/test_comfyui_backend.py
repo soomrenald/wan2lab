@@ -85,6 +85,11 @@ def object_info() -> dict[str, object]:
                 ],
             },
         ),
+        "WanVideoClipVisionEncode": node(),
+        "CLIPVisionLoader": node(
+            {"clip_name": [["clip_vision_h.safetensors"]]}
+        ),
+        "WanVideoBlockSwap": node(),
         "WanVideoAnimateEmbeds": node(),
         "WanVideoMiniMaxRemoverEmbeds": node(),
     }

@@ -39,6 +39,9 @@ class WorkerClient:
                 ),
                 "LoadImage": node(),
                 "VHS_VideoCombine": node(),
+                "CLIPVisionLoader": node(
+                    {"clip_name": [["clip_vision_h.safetensors"]]}
+                ),
             }
         )
         self.info["WanVideoVAELoader"] = node(
@@ -297,6 +300,7 @@ class WorkerServiceTests(unittest.TestCase):
             {
                 "vae": ["wan_2.1_vae.safetensors"],
                 "text_encoder": ["umt5_xxl_fp16.safetensors"],
+                "clip_vision": ["clip_vision_h.safetensors"],
             },
         )
         self.assertTrue(result.result.result_asset_id.startswith("comfy-video-"))

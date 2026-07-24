@@ -56,6 +56,7 @@ def builder(
             model_filename=model.display_name,
             vae_filename="wan_2.1_vae.safetensors",
             text_encoder_filename="umt5_xxl_fp16.safetensors",
+            clip_vision_filename="clip_vision_h.safetensors",
         )
         for model in capabilities.model_variants
     }
@@ -332,9 +333,71 @@ class ComfyWorkflowTests(unittest.TestCase):
         self.assertEqual(plan.workflow["9"]["inputs"]["image"], "input/first.png")
         self.assertEqual(plan.workflow["10"]["inputs"]["image"], "input/last.png")
         self.assertEqual(plan.workflow["5"]["inputs"]["end_image"], ["10", 0])
+        self.assertEqual(plan.workflow["11"]["inputs"]["clip_name"], "clip_vision_h.safetensors")
+        self.assertEqual(plan.workflow["12"]["inputs"]["image_1"], ["9", 0])
+        self.assertEqual(plan.workflow["12"]["inputs"]["image_2"], ["10", 0])
+        self.assertEqual(plan.workflow["12"]["inputs"]["combine_embeds"], "concat")
+        self.assertEqual(plan.workflow["5"]["inputs"]["clip_embeds"], ["12", 0])
         self.assertEqual(plan.workflow["5"]["inputs"]["noise_aug_strength"], 0.25)
         self.assertFalse(plan.workflow["7"]["inputs"]["enable_vae_tiling"])
         self.assertEqual(plan.workflow["7"]["inputs"]["tile_x"], 384)
+
+    def test_first_last_requires_explicit_clip_vision_selection(self) -> None:
+        workflow_builder = builder()
+        flf_model_id = model_id(workflow_builder, "flf2v")
+        selection = workflow_builder.model_selections[flf_model_id]
+        workflow_builder.model_selections = {
+            **workflow_builder.model_selections,
+            flf_model_id: selection.__class__(
+                model_id=selection.model_id,
+                model_filename=selection.model_filename,
+                vae_filename=selection.vae_filename,
+                text_encoder_filename=selection.text_encoder_filename,
+            ),
+        }
+        segment_request = request(
+            workflow_builder,
+            WanMode.FIRST_LAST,
+            "flf2v",
+            start_image_asset_id="first-frame",
+            end_image_asset_id="last-frame",
+        )
+
+        with self.assertRaisesRegex(WorkflowBindingError, "CLIP vision"):
+            workflow_builder.build(
+                segment_request,
+                asset_inputs={
+                    "first-frame": "input/first.png",
+                    "last-frame": "input/last.png",
+                },
+                filename_prefix="segment-1",
+                seed=1,
+            )
+
+    def test_constrained_14b_selection_binds_block_swap_to_loader(self) -> None:
+        workflow_builder = builder()
+        prompt_model_id = model_id(workflow_builder, "t2v")
+        selection = workflow_builder.model_selections[prompt_model_id]
+        workflow_builder.model_selections = {
+            **workflow_builder.model_selections,
+            prompt_model_id: selection.__class__(
+                model_id=selection.model_id,
+                model_filename=selection.model_filename,
+                vae_filename=selection.vae_filename,
+                text_encoder_filename=selection.text_encoder_filename,
+                blocks_to_swap=20,
+            ),
+        }
+
+        plan = workflow_builder.build(
+            request(workflow_builder, WanMode.PROMPT, "t2v"),
+            asset_inputs={},
+            filename_prefix="segment-1",
+            seed=1,
+        )
+
+        self.assertEqual(plan.workflow["1"]["inputs"]["block_swap_args"], ["13", 0])
+        self.assertEqual(plan.workflow["13"]["inputs"]["blocks_to_swap"], 20)
 
     def test_animate_and_replace_use_explicit_versioned_templates(self) -> None:
         workflow_builder = builder()

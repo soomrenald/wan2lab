@@ -21,11 +21,13 @@ class ComfyModelSelection:
     model_filename: str
     vae_filename: str
     text_encoder_filename: str
+    clip_vision_filename: str | None = None
     precision: str = "bf16"
     vae_precision: str = "bf16"
     text_encoder_precision: str = "bf16"
     quantization: str = "disabled"
     load_device: str = "offload_device"
+    blocks_to_swap: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,6 +324,17 @@ class ComfyWanWorkflowBuilder:
                 },
             },
         }
+        if selection.blocks_to_swap:
+            workflow["13"] = {
+                "class_type": "WanVideoBlockSwap",
+                "inputs": {
+                    "blocks_to_swap": selection.blocks_to_swap,
+                    "offload_img_emb": False,
+                    "offload_txt_emb": False,
+                    "use_non_blocking": True,
+                },
+            }
+            workflow["1"]["inputs"]["block_swap_args"] = ["13", 0]
         _bind_optional_parameters(
             workflow["4"]["inputs"],
             parameters,
@@ -412,11 +425,35 @@ class ComfyWanWorkflowBuilder:
                 }
                 inputs["start_image"] = ["9", 0]
             if request.mode is WanMode.FIRST_LAST:
+                if not selection.clip_vision_filename:
+                    raise WorkflowBindingError(
+                        "first/last-frame generation requires an explicit CLIP vision model"
+                    )
                 workflow["10"] = {
                     "class_type": "LoadImage",
                     "inputs": {"image": asset_inputs[request.end_image_asset_id]},
                 }
+                workflow["11"] = {
+                    "class_type": "CLIPVisionLoader",
+                    "inputs": {"clip_name": selection.clip_vision_filename},
+                }
+                workflow["12"] = {
+                    "class_type": "WanVideoClipVisionEncode",
+                    "inputs": {
+                        "clip_vision": ["11", 0],
+                        "image_1": ["9", 0],
+                        "image_2": ["10", 0],
+                        "strength_1": 1.0,
+                        "strength_2": 1.0,
+                        "crop": "center",
+                        "combine_embeds": "concat",
+                        "force_offload": True,
+                        "tiles": 0,
+                        "ratio": 0.5,
+                    },
+                }
                 inputs["end_image"] = ["10", 0]
+                inputs["clip_embeds"] = ["12", 0]
                 inputs["fun_or_fl2v_model"] = True
             _bind_optional_parameters(
                 inputs,
@@ -483,11 +520,13 @@ def _template_context(
         "model.filename": selection.model_filename,
         "model.vae_filename": selection.vae_filename,
         "model.text_encoder_filename": selection.text_encoder_filename,
+        "model.clip_vision_filename": selection.clip_vision_filename,
         "model.precision": selection.precision,
         "model.vae_precision": selection.vae_precision,
         "model.text_encoder_precision": selection.text_encoder_precision,
         "model.quantization": selection.quantization,
         "model.load_device": selection.load_device,
+        "model.blocks_to_swap": selection.blocks_to_swap,
         "asset.start_image": (
             asset_inputs.get(request.start_image_asset_id)
             if request.start_image_asset_id is not None

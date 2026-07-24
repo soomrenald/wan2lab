@@ -103,6 +103,9 @@ class WrapperNodes:
     decoder: str = "WanVideoDecode"
     prompt_embeds: str = "WanVideoEmptyEmbeds"
     image_embeds: str = "WanVideoImageToVideoEncode"
+    clip_vision_encoder: str = "WanVideoClipVisionEncode"
+    clip_vision_loader: str = "CLIPVisionLoader"
+    block_swap: str = "WanVideoBlockSwap"
     latent_encoder: str = "WanVideoEncode"
     image_scaler: str = "ImageScale"
     animate_embeds: str = "WanVideoAnimateEmbeds"
@@ -135,7 +138,12 @@ def inspect_comfyui_wan(
     if nodes.prompt_embeds in available:
         wrapper_modes.add(WanMode.PROMPT)
     if nodes.image_embeds in available:
-        wrapper_modes.update((WanMode.I2V, WanMode.FIRST_LAST))
+        wrapper_modes.add(WanMode.I2V)
+        if {
+            nodes.clip_vision_encoder,
+            nodes.clip_vision_loader,
+        }.issubset(available):
+            wrapper_modes.add(WanMode.FIRST_LAST)
     if nodes.animate_embeds in available:
         wrapper_modes.add(WanMode.ANIMATE)
     if nodes.replace_embeds in available:

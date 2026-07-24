@@ -1282,7 +1282,7 @@ class DesktopControllerTests(unittest.TestCase):
         )
         controller._wan_worker.send = Mock()  # type: ignore[method-assign]  # noqa: SLF001
 
-        controller.loadLocalWanModel(0, "vae", "text", "mock", "", "")
+        controller.loadLocalWanModel(0, "vae", "text", "", "mock", "", "")
 
         controller._wan_worker.send.assert_not_called()  # type: ignore[union-attr]  # noqa: SLF001
         self.assertIn("project canvas 640x480 is unsupported", controller.status)
@@ -1335,6 +1335,7 @@ class DesktopControllerTests(unittest.TestCase):
         payload["component_models"] = {
             "vae": ["wan.vae"],
             "text_encoder": ["umt5.safetensors"],
+            "clip_vision": ["clip.safetensors"],
         }
         controller._handle_worker_event(  # noqa: SLF001
             CapabilitiesEvent(command_id="inspect", capabilities=payload)
@@ -1344,6 +1345,7 @@ class DesktopControllerTests(unittest.TestCase):
             0,
             "wan.vae",
             "umt5.safetensors",
+            "clip.safetensors",
             "bf16",
             "disabled",
             "offload_device",
@@ -1355,6 +1357,7 @@ class DesktopControllerTests(unittest.TestCase):
         )
         self.assertEqual(request.component_model_ids["vae"], "wan.vae")
         self.assertEqual(request.component_model_ids["text_encoder"], "umt5.safetensors")
+        self.assertEqual(request.component_model_ids["clip_vision"], "clip.safetensors")
         self.assertEqual(
             controller.session.project.project_settings.default_wan_backend_id,
             "comfy-wan",
@@ -1384,6 +1387,7 @@ class DesktopControllerTests(unittest.TestCase):
             payload["component_models"] = {
                 "vae": ["wan.vae"],
                 "text_encoder": ["umt5.safetensors"],
+                "clip_vision": ["clip.safetensors"],
             }
             controller._handle_worker_event(  # noqa: SLF001
                 CapabilitiesEvent(command_id="inspect", capabilities=payload)
@@ -1392,6 +1396,7 @@ class DesktopControllerTests(unittest.TestCase):
                 0,
                 "wan.vae",
                 "umt5.safetensors",
+                "clip.safetensors",
                 "bf16",
                 "disabled",
                 "offload_device",

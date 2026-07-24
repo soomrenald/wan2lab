@@ -219,6 +219,7 @@ class DesktopController(QObject):
         self._backend_parameter_descriptors: list[dict[str, object]] = []
         self._backend_vae_models: list[str] = []
         self._backend_text_encoder_models: list[str] = []
+        self._backend_clip_vision_models: list[str] = []
         self._inspected_capabilities: BackendCapabilities | None = None
         self._selected_wan_model_id: str | None = None
         self._pending_model_command_id: str | None = None
@@ -920,6 +921,10 @@ class DesktopController(QObject):
         return list(self._backend_text_encoder_models)
 
     @Property("QStringList", notify=statusChanged)
+    def backendClipVisionModels(self) -> list[str]:  # noqa: N802
+        return list(self._backend_clip_vision_models)
+
+    @Property("QStringList", notify=statusChanged)
     def backendParameters(self) -> list[str]:  # noqa: N802
         return list(self._backend_parameters)
 
@@ -1071,6 +1076,11 @@ class DesktopController(QObject):
     def wanOffloadOptions(self) -> list[str]:  # noqa: N802
         model = self._wan_model_control()
         return list(model.supported_offload_modes) if model is not None else []
+
+    @Property(bool, notify=projectChanged)
+    def wanClipVisionRequired(self) -> bool:  # noqa: N802
+        model = self._wan_model_control()
+        return model is not None and WanMode.FIRST_LAST in model.supported_modes
 
     @Property(str, notify=projectChanged)
     def wanModelCompatibility(self) -> str:  # noqa: N802
@@ -1394,12 +1404,13 @@ class DesktopController(QObject):
             "input_asset_ids": (entry.image_asset_id,),
         }
 
-    @Slot(int, str, str, str, str, str)
+    @Slot(int, str, str, str, str, str, str)
     def loadLocalWanModel(  # noqa: N802
         self,
         model_index: int,
         vae: str,
         text_encoder: str,
+        clip_vision: str,
         precision: str,
         quantization: str,
         offload_mode: str,
@@ -1425,12 +1436,20 @@ class DesktopController(QObject):
                 raise ValueError("select an installed Wan VAE")
             if text_encoder not in self._backend_text_encoder_models:
                 raise ValueError("select an installed Wan text encoder")
+            if (
+                WanMode.FIRST_LAST in model.supported_modes
+                and clip_vision not in self._backend_clip_vision_models
+            ):
+                raise ValueError("select an installed CLIP vision model")
             if precision not in model.supported_precisions:
                 raise ValueError("selected precision is unsupported")
             if quantization not in model.supported_quantizations:
                 raise ValueError("selected quantization is unsupported")
             if offload_mode not in model.supported_offload_modes:
                 raise ValueError("selected offload mode is unsupported")
+            components = {"vae": vae, "text_encoder": text_encoder}
+            if clip_vision:
+                components["clip_vision"] = clip_vision
             request = LoadModelRequest(
                 command_id=f"load-{uuid4().hex}",
                 backend_id=self._inspected_capabilities.backend_id,
@@ -1438,7 +1457,7 @@ class DesktopController(QObject):
                 precision=precision,
                 quantization=quantization,
                 offload_mode=offload_mode,
-                component_model_ids={"vae": vae, "text_encoder": text_encoder},
+                component_model_ids=components,
             )
         except Exception as error:
             self._set_status(f"Wan model selection failed: {error}")
@@ -4989,6 +5008,9 @@ class DesktopController(QObject):
             ]
             self._backend_text_encoder_models = [
                 str(item) for item in component_mapping.get("text_encoder", ())
+            ]
+            self._backend_clip_vision_models = [
+                str(item) for item in component_mapping.get("clip_vision", ())
             ]
             vendor = ", ".join(event.capabilities.get("accelerator_vendors", ()))
             wrapper = event.capabilities.get("wrapper_version", "unknown")

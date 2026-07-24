@@ -52,6 +52,7 @@ class ResidentWanModel:
     precision: str
     quantization: str
     load_device: str
+    blocks_to_swap: int
 
 
 @dataclass(slots=True)
@@ -66,6 +67,7 @@ class ModelResidencyManager:
             precision=selection.precision,
             quantization=selection.quantization,
             load_device=selection.load_device,
+            blocks_to_swap=selection.blocks_to_swap,
         )
         if self.resident is not None and self.resident != desired:
             self.client.free_models()
@@ -89,6 +91,7 @@ class ModelResidencyManager:
                     "precision": self.resident.precision,
                     "quantization": self.resident.quantization,
                     "load_device": self.resident.load_device,
+                    "blocks_to_swap": self.resident.blocks_to_swap,
                 }
             ),
         }
