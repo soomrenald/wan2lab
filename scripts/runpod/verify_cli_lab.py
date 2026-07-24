@@ -51,6 +51,12 @@ class Check:
     detail: str
 
 
+@dataclass(frozen=True)
+class ExpectedFile:
+    relative_path: Path
+    sha256: str
+
+
 def run(command: list[str], *, timeout: float = 30) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -174,6 +180,46 @@ def check_models(root: Path, verify_hashes: bool) -> list[Check]:
     return checks
 
 
+def parse_expected_file(value: str) -> ExpectedFile:
+    relative_text, separator, expected_hash = value.rpartition("=")
+    relative_path = Path(relative_text)
+    if (
+        not separator
+        or not relative_text
+        or relative_path.is_absolute()
+        or ".." in relative_path.parts
+    ):
+        raise argparse.ArgumentTypeError(
+            "expected RELATIVE_PATH=SHA256 with a workspace-relative path"
+        )
+    normalized_hash = expected_hash.lower()
+    if len(normalized_hash) != 64 or any(
+        character not in "0123456789abcdef" for character in normalized_hash
+    ):
+        raise argparse.ArgumentTypeError("SHA256 must contain exactly 64 hex characters")
+    return ExpectedFile(relative_path=relative_path, sha256=normalized_hash)
+
+
+def check_expected_file(root: Path, expected: ExpectedFile) -> Check:
+    path = (root / expected.relative_path).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return Check(
+            f"persisted.{expected.relative_path}",
+            False,
+            "resolved path escapes workspace",
+        )
+    if not path.is_file():
+        return Check(f"persisted.{expected.relative_path}", False, "not found")
+    actual_hash = sha256(path)
+    return Check(
+        f"persisted.{expected.relative_path}",
+        actual_hash == expected.sha256,
+        f"sha256={actual_hash}",
+    )
+
+
 def check_comfy(base_url: str) -> Check:
     url = f"{base_url.rstrip('/')}/object_info"
     try:
@@ -220,6 +266,17 @@ def parse_args() -> argparse.Namespace:
         help="Also query a running ComfyUI server, for example http://127.0.0.1:8188",
     )
     parser.add_argument(
+        "--require-sha256",
+        action="append",
+        default=[],
+        metavar="RELATIVE_PATH=SHA256",
+        type=parse_expected_file,
+        help=(
+            "Require a persisted workspace file to retain an exact SHA-256; "
+            "repeat for multiple files"
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         help="Write the same JSON evidence to this path",
@@ -251,6 +308,7 @@ def main() -> int:
     checks.append(check_import("wan2core"))
     if args.require_models or args.verify_model_hashes:
         checks.extend(check_models(root, args.verify_model_hashes))
+    checks.extend(check_expected_file(root, expected) for expected in args.require_sha256)
     if args.comfy_url:
         checks.append(check_comfy(args.comfy_url))
 

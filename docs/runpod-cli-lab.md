@@ -195,6 +195,42 @@ Restart the same Pod and volume:
 runpodctl pod start POD_ID
 ```
 
+After a stop/start, prove that both immutable model assets and a known output
+survived before submitting a continuation job:
+
+```bash
+/workspace/wan2lab-venv/bin/python \
+  /workspace/wan2lab/scripts/runpod/verify_cli_lab.py \
+  --require-models \
+  --verify-model-hashes \
+  --require-sha256 \
+  'ComfyUI/output/wan2lab/remote/krea_to_wan2_2_i2v_121f_30step_seed20260729_rtx5090_00001.mp4=3424a56c29a1532025068f3bcfcbd491652a129aa437e704586371c575f78ebd' \
+  --output /workspace/wan2lab-runtime/restart-verification.json
+```
+
+Then start ComfyUI and submit a five-frame I2V smoke with a new seed from the
+persisted conditioning asset. A successful distinct output demonstrates
+continuation from durable state rather than merely revalidating the filesystem:
+
+```bash
+cd /workspace/wan2lab
+scripts/runpod/start_comfy.sh
+export PYTHONPATH=/workspace/wan2lab/apps/desktop/src:/workspace/wan2lab/packages/wan2core/src
+/workspace/wan2lab-venv/bin/python scripts/wan2_2_smoke.py \
+  --mode i2v \
+  --start-image wan2lab/krea-wan-handoff.png \
+  --frames 5 \
+  --steps 4 \
+  --seed 20260730 \
+  --text-encoder-device gpu \
+  --output-prefix wan2lab/remote/restart_i2v_5f
+```
+
+Copy `restart-verification.json`, the new MP4, and its ComfyUI history off the
+Pod, then stop it again. If the original host has no free GPU, RunPod may refuse
+to restart a stopped regular-volume Pod; leave it stopped and retry later
+instead of deleting the volume or silently provisioning a second billable Pod.
+
 Only terminate after copying every required result elsewhere. Termination
 deletes the regular Pod volume:
 
