@@ -148,7 +148,7 @@ def inspect_comfyui_wan(
         ):
             wrapper_modes.add(WanMode.FIRST_LAST)
     if nodes.animate_embeds in available:
-        wrapper_modes.add(WanMode.ANIMATE)
+        wrapper_modes.update((WanMode.ANIMATE, WanMode.REPLACE))
     if nodes.replace_embeds in available:
         wrapper_modes.add(WanMode.REPLACE)
     if not wrapper_modes:
@@ -468,7 +468,7 @@ def _modes_for_model(
     name = filename.casefold()
     modes: set[WanMode] = set()
     if "animate" in name:
-        modes.add(WanMode.ANIMATE)
+        modes.update((WanMode.ANIMATE, WanMode.REPLACE))
     if any(token in name for token in ("replace", "remover")):
         modes.add(WanMode.REPLACE)
     if any(token in name for token in ("ti2v", "ti-2-v", "text-image-to-video")):

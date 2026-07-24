@@ -127,7 +127,7 @@ class ComfyUIBackendDiscoveryTests(unittest.TestCase):
         )
         self.assertEqual(
             by_name["wan2.2_animate_14B_fp16.safetensors"].supported_modes,
-            frozenset({WanMode.ANIMATE}),
+            frozenset({WanMode.ANIMATE, WanMode.REPLACE}),
         )
         ti2v = by_name["Wan2_2-TI2V-5B_fp8_e4m3fn_scaled_KJ.safetensors"]
         self.assertEqual(
