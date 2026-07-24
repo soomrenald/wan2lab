@@ -47,6 +47,9 @@ failures, accelerated hardware run, and visual-review candidate are recorded in
 The real approved-revision FPS, boundary, and final FFmpeg export hardware gate
 is recorded in
 [docs/phase1-export-hardware.md](docs/phase1-export-hardware.md).
+The real Krea single-frame correction and immutable video-revision hardware
+gate is recorded in
+[docs/krea-frame-correction-hardware.md](docs/krea-frame-correction-hardware.md).
 Pinned Wan2.2 Animate/Replace nodes, preprocessors, artifacts, official test
 inputs, and executable pipeline contracts are recorded in
 [docs/wan2.2-animate-installation.md](docs/wan2.2-animate-installation.md).

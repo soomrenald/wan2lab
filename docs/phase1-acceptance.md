@@ -90,6 +90,12 @@ after a segment becomes stale.
   exactly 240 decoded frames over 10.000000 seconds and fully decodes without
   warnings. Evidence is recorded in
   [phase1-export-hardware.md](phase1-export-hardware.md).
+- A real FLF middle frame completed production extraction, conservative
+  identity-preserving Krea edit, immutable replacement, and one-pass revision
+  reassembly. The corrected 17-frame video passed exact media inspection and a
+  complete FFmpeg decode. Technical evidence and the still-pending semantic
+  correction decision are recorded in
+  [krea-frame-correction-hardware.md](krea-frame-correction-hardware.md).
 
 ## Hardware acceptance status
 
@@ -103,8 +109,8 @@ its visual quality decision remains pending. Animate and Replace have
 executable workflows and live preprocessors but still require the pinned
 Animate transformer before their hardware runs.
 Mannequin-guided and adapter-routed multi-character handoff, identity
-correction, batch face repair, and genuinely generated long continuation with
-visual review remain hardware gates.
+correction approval, batch face repair, and genuinely generated long
+continuation with visual review remain hardware gates.
 
 The project owner approved the EasyCache hardware candidate after reviewing its
 output and contact sheet on 2026-07-23.
