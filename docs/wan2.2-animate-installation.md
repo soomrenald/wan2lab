@@ -83,5 +83,6 @@ Inputs come from
 The committed runner is `scripts/wan2_2_animate_smoke.py`. ComfyUI exposes the
 installed preprocessing nodes and transformer. The Animate hardware gate is
 complete; exact execution evidence is recorded in
-[wan2.2-animate-hardware.md](wan2.2-animate-hardware.md). Replace remains the
-next separate execution gate.
+[wan2.2-animate-hardware.md](wan2.2-animate-hardware.md). The separate Replace
+gate is also complete and recorded in
+[wan2.2-replace-hardware.md](wan2.2-replace-hardware.md).

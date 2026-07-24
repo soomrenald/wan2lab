@@ -64,3 +64,5 @@ inputs, and executable pipeline contracts are recorded in
 [docs/wan2.2-animate-installation.md](docs/wan2.2-animate-installation.md).
 The completed Wan2.2 Animate ROCm hardware run is recorded in
 [docs/wan2.2-animate-hardware.md](docs/wan2.2-animate-hardware.md).
+The completed SAM2-conditioned Wan2.2 Replace ROCm hardware run is recorded in
+[docs/wan2.2-replace-hardware.md](docs/wan2.2-replace-hardware.md).

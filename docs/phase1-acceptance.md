@@ -117,6 +117,11 @@ after a segment becomes stale.
   block swapping, EasyCache sampling, tiled VAE decode, and audio muxing
   completed on ROCm. The 17-frame result fully decodes. Evidence is recorded in
   [wan2.2-animate-hardware.md](wan2.2-animate-hardware.md).
+- Wan2.2 Replace additionally completed SAM2 source-person segmentation and
+  mask propagation across all 17 frames, masked background conditioning,
+  reference-character replacement, and source-audio muxing. The result fully
+  decodes and preserves the sampled background composition. Evidence is
+  recorded in [wan2.2-replace-hardware.md](wan2.2-replace-hardware.md).
 
 ## Hardware acceptance status
 
@@ -126,8 +131,8 @@ provenance, full-duration decoding, OOM recovery, and user visual review are
 complete.
 
 First/last execution is hardware-valid on the installed Wan2.1 FLF2V family;
-its visual quality decision remains pending. Animate is hardware-valid, while
-Replace remains a separate execution gate.
+its visual quality decision remains pending. Animate and Replace are both
+hardware-valid; their fine visual-quality decisions remain human review tasks.
 The mannequin-guided i2i fallback is hardware-valid; its exact pose-fidelity
 decision remains pending. Adapter-routed multi-character handoff is
 hardware-valid. Identity correction approval, batch face repair, and genuinely
